@@ -12,7 +12,10 @@ Pojmy:
 """
 from __future__ import annotations
 
+import json
 import math
+import os
+import time
 from contextlib import closing
 
 from fastapi import APIRouter, HTTPException, Query
@@ -155,6 +158,7 @@ class RuleIn(BaseModel):
 class OdometerIn(BaseModel):
     year: int
     km: float
+    plate: str = ""
 
 
 def _row(r) -> dict:
@@ -164,15 +168,38 @@ def _row(r) -> dict:
     return d
 
 
+def _plate_sql(plate: str | None) -> tuple[str, tuple]:
+    """Volitelný filtr vozidla (prázdné = všechna)."""
+    if plate:
+        return " AND LOWER(TRIM(COALESCE(plate,''))) = ?", (plate.strip().lower(),)
+    return "", ()
+
+
+TRIP_COLS = ("id", "start_ts", "end_ts", "km", "origin", "destination",
+             "purpose", "driver", "plate", "private", "activity_ts", "excluded")
+
+
+def _save_undo(conn, op: str, rows=(), created=()):
+    """Uloží podklad pro vrácení poslední hromadné akce (drží se jen jedna)."""
+    payload = json.dumps(
+        {"rows": [dict(r) for r in rows], "created": [int(c) for c in created]},
+        ensure_ascii=False)
+    conn.execute("DELETE FROM undo_log")
+    conn.execute("INSERT INTO undo_log(created, op, data) VALUES(?,?,?)",
+                 (int(time.time()), op, payload))
+
+
 # --------------------------------------------------------------- jízdy
 
 @router.get("")
-def list_trips(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+def list_trips(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+               plate: str | None = Query(None)):
     lo, hi = ts_range(from_ts, to_ts)
+    psql, pargs = _plate_sql(plate)
     with closing(db.connect()) as conn:
         rows = conn.execute(
-            "SELECT * FROM trips WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts",
-            (lo, hi)).fetchall()
+            f"SELECT * FROM trips WHERE start_ts BETWEEN ? AND ?{psql} ORDER BY start_ts",
+            (lo, hi, *pargs)).fetchall()
     return {"trips": [_row(r) for r in rows],
             "total_km": round(sum(r["km"] for r in rows if not r["excluded"]), 1)}
 
@@ -190,6 +217,11 @@ def generate(p: GenerateParams):
             (lo, hi, *CAR_TYPES)).fetchall()
         namer = PlaceNamer(conn)
         rules = _load_rules(conn)
+        # ochrana proti duplicitám: intervaly už existujících jízd + nově přijatých
+        covered = [(r["start_ts"], r["end_ts"]) for r in conn.execute(
+            "SELECT start_ts, end_ts FROM trips WHERE start_ts BETWEEN ? AND ?", (lo, hi))]
+        created_ids: list[int] = []
+        skipped_dup = 0
         for a in acts:
             km = (a["distance_m"] or 0) / 1000
             if km < p.min_km:
@@ -198,6 +230,11 @@ def generate(p: GenerateParams):
             if p.workdays_only and local.weekday() >= 5:
                 continue
             if not (p.hour_from <= local.hour < p.hour_to):
+                continue
+            dur = max(a["end_ts"] - a["start_ts"], 1)
+            if any(min(e, a["end_ts"]) - max(s, a["start_ts"]) > 0.5 * dur
+                   for s, e in covered):
+                skipped_dup += 1   # stejná cesta už v knize je (např. z druhého exportu)
                 continue
             origin = namer.name(a["start_lat"], a["start_lon"])
             destination = namer.name(a["end_lat"], a["end_lon"])
@@ -209,9 +246,14 @@ def generate(p: GenerateParams):
                 " VALUES(?,?,?,?,?,?,?,?,0,?)",
                 (a["start_ts"], a["end_ts"], km_final, origin, destination,
                  p.purpose, p.driver, p.plate, a["start_ts"]))
-            created += cur.rowcount
+            if cur.rowcount:
+                created += 1
+                created_ids.append(cur.lastrowid)
+                covered.append((a["start_ts"], a["end_ts"]))
+        if created_ids:
+            _save_undo(conn, "generate", created=created_ids)
         conn.commit()
-    return {"created": created, "scanned": len(acts)}
+    return {"created": created, "scanned": len(acts), "skipped_duplicates": skipped_dup}
 
 
 @router.post("")
@@ -240,6 +282,12 @@ def propagate(p: PropagateParams):
         if not d and not o:
             raise HTTPException(400, "Jízda nemá vyplněné odkud/kam")
         km = _round_km(p.km, p.round_up)
+        affected = conn.execute(
+            "SELECT * FROM trips WHERE start_ts BETWEEN ? AND ? AND excluded=0 "
+            "AND ((LOWER(TRIM(COALESCE(origin,'')))=? AND LOWER(TRIM(COALESCE(destination,'')))=?) "
+            " OR  (LOWER(TRIM(COALESCE(origin,'')))=? AND LOWER(TRIM(COALESCE(destination,'')))=?))",
+            (lo, hi, o, d, d, o)).fetchall()
+        _save_undo(conn, "propagate", rows=affected)
         cur = conn.execute(
             "UPDATE trips SET km=? WHERE start_ts BETWEEN ? AND ? AND excluded=0 "
             "AND ((LOWER(TRIM(COALESCE(origin,'')))=? AND LOWER(TRIM(COALESCE(destination,'')))=?) "
@@ -269,8 +317,9 @@ def apply_rules(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
     with closing(db.connect()) as conn:
         rules = _load_rules(conn)
         rows = conn.execute(
-            "SELECT id, origin, destination, km FROM trips "
+            "SELECT * FROM trips "
             "WHERE start_ts BETWEEN ? AND ? AND excluded=0", (lo, hi)).fetchall()
+        _save_undo(conn, "apply_rules", rows=rows)
         for r in rows:
             rule_km = _rule_km(rules, r["origin"] or "", r["destination"] or "")
             if rule_km is None:
@@ -313,13 +362,55 @@ def delete_trip(trip_id: int):
 
 
 @router.delete("")
-def delete_range(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+def delete_range(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                 plate: str | None = Query(None)):
     """Smaže všechny jízdy ve zvoleném období (např. před novým generováním)."""
     lo, hi = ts_range(from_ts, to_ts)
+    psql, pargs = _plate_sql(plate)
     with closing(db.connect()) as conn:
-        cur = conn.execute("DELETE FROM trips WHERE start_ts BETWEEN ? AND ?", (lo, hi))
+        rows = conn.execute(
+            f"SELECT * FROM trips WHERE start_ts BETWEEN ? AND ?{psql}",
+            (lo, hi, *pargs)).fetchall()
+        _save_undo(conn, "delete_range", rows=rows)
+        cur = conn.execute(
+            f"DELETE FROM trips WHERE start_ts BETWEEN ? AND ?{psql}", (lo, hi, *pargs))
         conn.commit()
     return {"deleted": cur.rowcount}
+
+
+@router.get("/undo")
+def undo_info():
+    with closing(db.connect()) as conn:
+        row = conn.execute("SELECT created, op, data FROM undo_log "
+                           "ORDER BY id DESC LIMIT 1").fetchone()
+    if row is None:
+        return {"available": False}
+    data = json.loads(row["data"])
+    return {"available": True, "op": row["op"], "created": row["created"],
+            "affected": len(data["rows"]) + len(data["created"])}
+
+
+@router.post("/undo")
+def undo_last():
+    """Vrátí poslední hromadnou akci (generování, propagaci km, použití
+    pravidel nebo smazání období)."""
+    with closing(db.connect()) as conn:
+        row = conn.execute("SELECT id, op, data FROM undo_log "
+                           "ORDER BY id DESC LIMIT 1").fetchone()
+        if row is None:
+            raise HTTPException(404, "Není co vracet")
+        data = json.loads(row["data"])
+        for cid in data["created"]:
+            conn.execute("DELETE FROM trips WHERE id=?", (cid,))
+        for r in data["rows"]:
+            conn.execute(
+                "INSERT OR REPLACE INTO trips(%s) VALUES(%s)"
+                % (",".join(TRIP_COLS), ",".join("?" * len(TRIP_COLS))),
+                tuple(r.get(c) for c in TRIP_COLS))
+        conn.execute("DELETE FROM undo_log WHERE id=?", (row["id"],))
+        conn.commit()
+    return {"op": row["op"], "restored": len(data["rows"]),
+            "removed": len(data["created"])}
 
 
 @router.get("/missing_days")
@@ -410,16 +501,20 @@ def delete_rule(rule_id: int):
 # ------------------------------------------------------------ tachometr
 
 @router.get("/odometer")
-def get_odometer(year: int = Query(...)):
-    """Roční nájezd dle tachometru vs. kilometry vykázané v knize jízd."""
+def get_odometer(year: int = Query(...), plate: str = Query("")):
+    """Roční nájezd dle tachometru vs. kilometry vykázané v knize jízd.
+    Tachometr je vedený zvlášť pro každé vozidlo (SPZ; prázdná = společný)."""
+    plate = plate.strip()
+    psql, pargs = _plate_sql(plate)
     with closing(db.connect()) as conn:
-        row = conn.execute("SELECT km FROM odometer WHERE year=?", (year,)).fetchone()
+        row = conn.execute("SELECT km FROM odometer WHERE year=? AND plate=?",
+                           (year, plate)).fetchone()
         booked = conn.execute(
-            "SELECT COALESCE(SUM(km),0) s FROM trips WHERE excluded=0 "
-            "AND strftime('%Y', start_ts, 'unixepoch', 'localtime') = ?",
-            (str(year),)).fetchone()["s"]
+            f"SELECT COALESCE(SUM(km),0) s FROM trips WHERE excluded=0 "
+            f"AND strftime('%Y', start_ts, 'unixepoch', 'localtime') = ?{psql}",
+            (str(year), *pargs)).fetchone()["s"]
     odo = row["km"] if row else None
-    return {"year": year, "odometer_km": odo,
+    return {"year": year, "plate": plate, "odometer_km": odo,
             "booked_km": round(booked, 1),
             "remaining_km": round(odo - booked, 1) if odo is not None else None}
 
@@ -428,24 +523,31 @@ def get_odometer(year: int = Query(...)):
 def set_odometer(o: OdometerIn):
     with closing(db.connect()) as conn:
         conn.execute(
-            "INSERT INTO odometer(year, km) VALUES(?,?) "
-            "ON CONFLICT(year) DO UPDATE SET km=excluded.km", (o.year, o.km))
+            "INSERT INTO odometer(year, plate, km) VALUES(?,?,?) "
+            "ON CONFLICT(year, plate) DO UPDATE SET km=excluded.km",
+            (o.year, o.plate.strip(), o.km))
         conn.commit()
-    return get_odometer(year=o.year)
+    return get_odometer(year=o.year, plate=o.plate)
 
 
 # --------------------------------------------------------------- export
 
+def _book_rows(from_ts, to_ts, plate):
+    lo, hi = ts_range(from_ts, to_ts)
+    psql, pargs = _plate_sql(plate)
+    with closing(db.connect()) as conn:
+        return conn.execute(
+            f"SELECT * FROM trips WHERE start_ts BETWEEN ? AND ? AND excluded=0{psql} "
+            f"ORDER BY start_ts", (lo, hi, *pargs)).fetchall()
+
+
 @router.get("/export.xlsx")
-def export_spz(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+def export_spz(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+               plate: str | None = Query(None)):
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
-    lo, hi = ts_range(from_ts, to_ts)
-    with closing(db.connect()) as conn:
-        rows = conn.execute(
-            "SELECT * FROM trips WHERE start_ts BETWEEN ? AND ? AND excluded=0 "
-            "ORDER BY start_ts", (lo, hi)).fetchall()
+    rows = _book_rows(from_ts, to_ts, plate)
 
     wb = Workbook()
     ws = wb.active
@@ -471,3 +573,111 @@ def export_spz(from_ts: int | None = Query(None), to_ts: int | None = Query(None
     ws.cell(row=total, column=8,
             value=round(sum(r["km"] for r in rows), 1)).font = Font(bold=True)
     return xlsx_response(wb, "kniha-jizd-spz.xlsx")
+
+
+_FONT_DIRS = ("/usr/share/fonts/truetype/dejavu", "/usr/share/fonts/dejavu")
+
+
+def _pdf_fonts() -> tuple[str, str]:
+    """Zaregistruje TTF s českou diakritikou; fallback na Helveticu."""
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    for d in _FONT_DIRS:
+        reg = os.path.join(d, "DejaVuSans.ttf")
+        bold = os.path.join(d, "DejaVuSans-Bold.ttf")
+        if os.path.exists(reg) and os.path.exists(bold):
+            pdfmetrics.registerFont(TTFont("Deja", reg))
+            pdfmetrics.registerFont(TTFont("DejaB", bold))
+            return "Deja", "DejaB"
+    return "Helvetica", "Helvetica-Bold"
+
+
+@router.get("/export.pdf")
+def export_pdf(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+               plate: str | None = Query(None), driver: str = Query("")):
+    """Kniha jízd jako PDF – pro tisk a předání účetní."""
+    import io
+    from fastapi.responses import Response as FResponse
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
+                                    Table, TableStyle)
+    from reportlab.lib.styles import ParagraphStyle
+
+    rows = _book_rows(from_ts, to_ts, plate)
+    font, font_b = _pdf_fonts()
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=14 * mm, rightMargin=14 * mm,
+                            topMargin=12 * mm, bottomMargin=12 * mm,
+                            title="Kniha jízd")
+    h1 = ParagraphStyle("h1", fontName=font_b, fontSize=15, spaceAfter=2)
+    meta = ParagraphStyle("meta", fontName=font, fontSize=9.5, textColor=colors.grey)
+
+    period = ""
+    if rows:
+        period = (f"{fmt_dt(rows[0]['start_ts']):%d.%m.%Y} – "
+                  f"{fmt_dt(rows[-1]['start_ts']):%d.%m.%Y}")
+    plates = sorted({(r["plate"] or "").strip() for r in rows} - {""})
+    drivers = sorted({(r["driver"] or "").strip() for r in rows} - {""})
+    story = [
+        Paragraph("Kniha jízd", h1),
+        Paragraph(" · ".join(filter(None, [
+            f"Vozidlo: {', '.join(plates) or '–'}",
+            f"Řidič: {driver or ', '.join(drivers) or '–'}",
+            f"Období: {period or '–'}"])), meta),
+        Spacer(0, 5 * mm),
+    ]
+
+    header = ["Datum", "Odjezd", "Příjezd", "Odkud", "Kam", "Účel jízdy",
+              "Km", "SPZ", "Soukr."]
+    data = [header]
+    style = [
+        ("FONTNAME", (0, 0), (-1, -1), font),
+        ("FONTNAME", (0, 0), (-1, 0), font_b),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("ALIGN", (6, 0), (6, -1), "RIGHT"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.black),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.Color(0.96, 0.96, 0.95)]),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+    ]
+    month = None
+    month_km = 0.0
+    total_km = 0.0
+
+    def close_month():
+        nonlocal month_km
+        if month is not None:
+            data.append(["", "", "", "", "", f"Součet {month}",
+                         f"{month_km:g}", "", ""])
+            r = len(data) - 1
+            style.append(("FONTNAME", (0, r), (-1, r), font_b))
+            style.append(("LINEABOVE", (0, r), (-1, r), 0.4, colors.grey))
+            month_km = 0.0
+
+    for r in rows:
+        s, e = fmt_dt(r["start_ts"]), fmt_dt(r["end_ts"])
+        m = s.strftime("%m/%Y")
+        if month is not None and m != month:
+            close_month()
+        month = m
+        data.append([s.strftime("%d.%m.%Y"), s.strftime("%H:%M"), e.strftime("%H:%M"),
+                     r["origin"] or "", r["destination"] or "", r["purpose"] or "",
+                     f"{r['km']:g}", r["plate"] or "", "ano" if r["private"] else ""])
+        month_km += r["km"]
+        total_km += r["km"]
+    close_month()
+    data.append(["", "", "", "", "", "CELKEM", f"{round(total_km, 1):g}", "", ""])
+    style.append(("FONTNAME", (0, len(data) - 1), (-1, len(data) - 1), font_b))
+    style.append(("LINEABOVE", (0, len(data) - 1), (-1, len(data) - 1), 0.9, colors.black))
+
+    table = Table(data, repeatRows=1, colWidths=[
+        22 * mm, 15 * mm, 15 * mm, 52 * mm, 52 * mm, 52 * mm, 14 * mm, 24 * mm, 14 * mm])
+    table.setStyle(TableStyle(style))
+    story.append(table)
+    doc.build(story)
+    return FResponse(buf.getvalue(), media_type="application/pdf",
+                     headers={"Content-Disposition": 'attachment; filename="kniha-jizd.pdf"'})

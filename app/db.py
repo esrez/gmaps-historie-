@@ -71,18 +71,45 @@ CREATE TABLE IF NOT EXISTS km_rules (
 );
 
 CREATE TABLE IF NOT EXISTS odometer (
-    year INTEGER PRIMARY KEY,
-    km   REAL NOT NULL
+    year  INTEGER NOT NULL,
+    plate TEXT NOT NULL DEFAULT '',
+    km    REAL NOT NULL,
+    PRIMARY KEY (year, plate)
+);
+
+CREATE TABLE IF NOT EXISTS undo_log (
+    id      INTEGER PRIMARY KEY,
+    created INTEGER NOT NULL,
+    op      TEXT NOT NULL,
+    data    TEXT NOT NULL
 );
 """
 
-# migrace pro databáze založené staršími verzemi schématu
-MIGRATIONS = {
-    "trips": {"excluded": "ALTER TABLE trips ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0"},
-}
-
 _schema_lock = threading.Lock()
 _schema_done = False
+
+
+def _migrate(conn: sqlite3.Connection):
+    """Migrace databází založených staršími verzemi schématu."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(trips)")}
+    if cols and "excluded" not in cols:
+        conn.execute("ALTER TABLE trips ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0")
+
+    # tachometr: dříve jen (year, km), nyní per vozidlo (year, plate, km)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(odometer)")}
+    if cols and "plate" not in cols:
+        conn.executescript("""
+            ALTER TABLE odometer RENAME TO odometer_old;
+            CREATE TABLE odometer (
+                year  INTEGER NOT NULL,
+                plate TEXT NOT NULL DEFAULT '',
+                km    REAL NOT NULL,
+                PRIMARY KEY (year, plate)
+            );
+            INSERT INTO odometer(year, plate, km)
+                SELECT year, '', km FROM odometer_old;
+            DROP TABLE odometer_old;
+        """)
 
 
 def _ensure_schema(conn: sqlite3.Connection):
@@ -92,12 +119,8 @@ def _ensure_schema(conn: sqlite3.Connection):
     with _schema_lock:
         if _schema_done:
             return
+        _migrate(conn)
         conn.executescript(SCHEMA)
-        for table, cols in MIGRATIONS.items():
-            existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
-            for col, ddl in cols.items():
-                if col not in existing:
-                    conn.execute(ddl)
         conn.commit()
         _schema_done = True
 

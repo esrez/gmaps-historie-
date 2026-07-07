@@ -8,7 +8,14 @@ let rules = [];
 // ------------------------------------------------------------ nastavení
 
 const SETTINGS = ["setPlate", "setDriver", "setPurpose", "setWorkdays",
-                  "setHourFrom", "setHourTo", "setMinKm", "setRoundUp", "setAutoFill"];
+                  "setHourFrom", "setHourTo", "setMinKm", "setRoundUp", "setAutoFill",
+                  "setFilterPlate"];
+
+// aktivní filtr vozidla (prázdný objekt = všechna vozidla)
+function plateFilter() {
+  const plate = $("setPlate").value.trim();
+  return $("setFilterPlate").checked && plate ? { plate } : {};
+}
 
 function loadSettings() {
   for (const id of SETTINGS) {
@@ -43,16 +50,18 @@ function setMonthPreset(which) {
 document.querySelectorAll(".presets button").forEach((b) =>
   b.addEventListener("click", () => setMonthPreset(b.dataset.preset)));
 ["dateFrom", "dateTo"].forEach((id) => $(id).addEventListener("change", loadTrips));
+["setFilterPlate", "setPlate"].forEach((id) => $(id).addEventListener("change", loadTrips));
 
 // -------------------------------------------------------------- tabulka
 
 async function loadTrips() {
   try {
-    const data = await api("/api/trips", { params: currentRange() });
+    const data = await api("/api/trips", { params: { ...currentRange(), ...plateFilter() } });
     trips = data.trips;
     renderTable(data.total_km);
     refreshOdometer(odoYear()); // rok podle zvoleného období
     refreshAlerts();
+    refreshUndo();
   } catch (e) {
     $("tripsSummary").textContent = "Načtení jízd selhalo: " + e.message;
   }
@@ -222,18 +231,21 @@ function odoYear() {
 async function refreshOdometer(explicitYear) {
   const year = explicitYear ?? (Number($("odoYear").value) || odoYear());
   $("odoYear").value = year;
+  const plate = $("setPlate").value.trim();
   try {
-    const o = await api("/api/trips/odometer", { params: { year } });
+    const o = await api("/api/trips/odometer", { params: { year, plate } });
+    const label = plate ? `${plate} ${year}` : String(year);
     if (o.odometer_km !== null) {
       $("odoKm").value = o.odometer_km;
       const fmt = (v) => v.toLocaleString("cs", { maximumFractionDigits: 1 });
       $("odoInfo").innerHTML =
-        `Tachometr ${year}: <b>${fmt(o.odometer_km)} km</b> · ` +
+        `Tachometr ${label}: <b>${fmt(o.odometer_km)} km</b> · ` +
         `v knize ${fmt(o.booked_km)} km · ` +
         `zbývá <b>${fmt(o.remaining_km)} km</b>`;
     } else {
+      $("odoKm").value = "";
       $("odoInfo").textContent =
-        `Pro rok ${year} není stav tachometru zadán (v knize ${o.booked_km.toLocaleString("cs")} km).`;
+        `Pro ${label} není stav tachometru zadán (v knize ${o.booked_km.toLocaleString("cs")} km).`;
     }
   } catch (e) {
     $("odoInfo").textContent = "";
@@ -244,8 +256,13 @@ $("odoSaveBtn").addEventListener("click", async () => {
   const year = Number($("odoYear").value);
   const km = parseFloat(String($("odoKm").value).replace(",", "."));
   if (!year || isNaN(km)) { toast("Vyplňte rok a km.", "error"); return; }
-  await api("/api/trips/odometer", { method: "PUT", body: { year, km } });
+  await api("/api/trips/odometer", {
+    method: "PUT",
+    body: { year, km, plate: $("setPlate").value.trim() },
+  });
+  toast("Stav tachometru uložen.", "success");
   refreshOdometer();
+  refreshAlerts();
 });
 $("odoYear").addEventListener("change", refreshOdometer);
 
@@ -314,7 +331,9 @@ $("generateBtn").addEventListener("click", async () => {
       },
     });
     $("genStatus").textContent =
-      `Vytvořeno ${res.created} nových jízd (prohledáno ${res.scanned} cest autem).`;
+      `Vytvořeno ${res.created} nových jízd (prohledáno ${res.scanned} cest autem` +
+      (res.skipped_duplicates ? `, ${res.skipped_duplicates} duplicit přeskočeno` : "") + ").";
+    if (res.created) toast(`Vytvořeno ${res.created} jízd (lze vrátit tlačítkem Zpět).`, "success");
     loadTrips();
   } catch (e) {
     $("genStatus").textContent = "Generování selhalo: " + e.message;
@@ -345,7 +364,12 @@ $("addBtn").addEventListener("click", async () => {
 });
 
 $("exportBtn").addEventListener("click", () => {
-  location.href = buildUrl("/api/trips/export.xlsx", currentRange());
+  location.href = buildUrl("/api/trips/export.xlsx", { ...currentRange(), ...plateFilter() });
+});
+
+$("exportPdfBtn").addEventListener("click", () => {
+  location.href = buildUrl("/api/trips/export.pdf",
+    { ...currentRange(), ...plateFilter(), driver: $("setDriver").value.trim() });
 });
 
 $("clearBtn").addEventListener("click", async () => {
@@ -354,10 +378,35 @@ $("clearBtn").addEventListener("click", async () => {
     toast("Nejdřív zvolte období (od–do).", "error");
     return;
   }
-  if (!confirm("Opravdu smazat VŠECHNY jízdy ve zvoleném období?")) return;
-  const res = await api("/api/trips", { method: "DELETE", params: r });
-  $("genStatus").textContent = `Smazáno ${res.deleted} jízd.`;
+  if (!confirm("Opravdu smazat VŠECHNY jízdy ve zvoleném období?"
+    + ($("setFilterPlate").checked ? " (jen filtrované vozidlo)" : ""))) return;
+  const res = await api("/api/trips", { method: "DELETE", params: { ...r, ...plateFilter() } });
+  toast(`Smazáno ${res.deleted} jízd (lze vrátit tlačítkem Zpět).`, "success");
   loadTrips();
+});
+
+// ------------------------------------------------------- vrácení akce
+
+async function refreshUndo() {
+  try {
+    const u = await api("/api/trips/undo");
+    $("undoBtn").hidden = !u.available;
+    if (u.available) {
+      const OPS = { generate: "generování", propagate: "propagaci km",
+                    apply_rules: "použití pravidel", delete_range: "smazání období" };
+      $("undoBtn").textContent = `↩ Vrátit ${OPS[u.op] || u.op} (${u.affected} jízd)`;
+    }
+  } catch (e) { $("undoBtn").hidden = true; }
+}
+
+$("undoBtn").addEventListener("click", async () => {
+  try {
+    const res = await api("/api/trips/undo", { method: "POST" });
+    toast(`Akce vrácena (${res.restored + res.removed} jízd).`, "success");
+    loadTrips();
+  } catch (e) {
+    toast("Vrácení selhalo: " + e.message, "error");
+  }
 });
 
 // ---------------------------------------------------------------- start

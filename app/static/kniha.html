@@ -33,6 +33,10 @@
       <label>SPZ vozidla <input type="text" id="setPlate" placeholder="1AB 2345"></label>
       <label>Řidič <input type="text" id="setDriver" placeholder="Jméno Příjmení"></label>
       <label>Výchozí účel <input type="text" id="setPurpose" value="Služební jízda"></label>
+      <label class="check"><input type="checkbox" id="setFilterPlate">
+        Zobrazovat jen jízdy tohoto vozidla</label>
+      <p class="muted">Tachometr a při zapnutém filtru i tabulka a exporty se
+         vztahují k zadané SPZ – lze tak vést víc vozidel vedle sebe.</p>
     </details>
 
     <details class="sec" open>
@@ -79,7 +83,9 @@
     <details class="sec" open>
       <summary>Akce</summary>
       <button id="addBtn">＋ Přidat jízdu ručně</button>
+      <button id="undoBtn" hidden>↩ Vrátit poslední hromadnou akci</button>
       <button id="exportBtn">📊 Export XLSX pro SPZ</button>
+      <button id="exportPdfBtn">📄 Export PDF (pro tisk)</button>
       <button id="clearBtn" class="danger">🗑 Smazat jízdy v období</button>
       <p class="muted">Export je xlsx pro univerzální import knihy jízd v programu
          SPZ (Milk Computers): SPZ, Datum, Odjezd, Příjezd, Odkud, Kam, Účel, Km,
