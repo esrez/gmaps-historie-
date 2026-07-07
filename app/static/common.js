@@ -1,29 +1,28 @@
-/* Sdílené pomocné funkce pro obě stránky (mapa i kniha jízd). */
-"use strict";
+/* Sdílené pomocné funkce pro obě stránky (mapa i kniha jízd) – ES modul. */
 
-const $ = (id) => document.getElementById(id);
+export const $ = (id) => document.getElementById(id);
 
-function toDateStr(d) {
+export function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function toTimeStr(d) {
+export function toTimeStr(d) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-function partsToTs(dateStr, timeStr) {
+export function partsToTs(dateStr, timeStr) {
   const [y, m, d] = dateStr.split("-").map(Number);
   const [hh, mm] = (timeStr || "0:0").split(":").map(Number);
   return Math.floor(new Date(y, m - 1, d, hh, mm).getTime() / 1000);
 }
 
-function dateToTs(value, endOfDay) {
+export function dateToTs(value, endOfDay) {
   return partsToTs(value, "0:0") + (endOfDay ? 86400 : 0);
 }
 
 /* Rozsah z polí #dateFrom / #dateTo (obě stránky používají stejná id).
    Obrácené období (od > do) se automaticky prohodí, aby nešlo udělat chybu. */
-function currentRange() {
+export function currentRange() {
   let f = $("dateFrom").value, t = $("dateTo").value;
   if (f && t && f > t) {
     [f, t] = [t, f];
@@ -39,7 +38,7 @@ function currentRange() {
 
 /* Nenápadné oznámení v rohu obrazovky (náhrada za alert). */
 let _toastTimer = null;
-function toast(msg, type = "info") {
+export function toast(msg, type = "info") {
   let el = $("toast");
   if (!el) {
     el = document.createElement("div");
@@ -52,16 +51,17 @@ function toast(msg, type = "info") {
   _toastTimer = setTimeout(() => { el.className = ""; }, 4000);
 }
 
-function buildUrl(path, params) {
+export function buildUrl(path, params) {
   const url = new URL(path, location.origin);
   for (const [k, v] of Object.entries(params || {}))
     if (v !== null && v !== undefined) url.searchParams.set(k, v);
   return url.toString();
 }
 
-async function apiFetch(path, { method = "GET", params, body } = {}) {
+export async function apiFetch(path, { method = "GET", params, body, signal } = {}) {
   const res = await fetch(buildUrl(path, params), {
     method,
+    signal,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -73,7 +73,7 @@ async function apiFetch(path, { method = "GET", params, body } = {}) {
   return res.json();
 }
 
-function escapeHtml(s) {
+export function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (m) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }

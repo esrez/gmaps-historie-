@@ -150,13 +150,29 @@ domácí síti. Doporučujeme v `docker-compose.yml` odkomentovat
 Pokud ji vystavujete do internetu, přidejte navíc reverse proxy s HTTPS
 (např. nginx, Caddy, Tailscale…). Jde o citlivá osobní data.
 
+## Dokumentace
+
+- **[Uživatelský návod](docs/NAVOD.md)** – průvodce všemi funkcemi krok za
+  krokem, provoz, řešení potíží
+- **[API reference](docs/API.md)** – přehled všech endpointů; interaktivně
+  na `http://server:8000/api/docs` (Swagger UI)
+
 ## Architektura
 
 | Vrstva | Technologie |
 |---|---|
-| Backend | Python, FastAPI, SQLite (WAL) |
-| Import | autodetekce formátu, streamované čtení přes `ijson` |
-| Frontend | Leaflet + leaflet.heat, vanilla JS, bez build kroku |
-| Nasazení | Docker / docker-compose |
+| Backend | Python 3.11+ (type hints, zoneinfo), FastAPI + Pydantic v2, SQLite (WAL) |
+| Import | autodetekce formátu, streamované čtení přes `ijson`, běh na pozadí |
+| Frontend | ES moduly (vanilla JS, bez build kroku), Leaflet s canvas renderingem, leaflet.heat, markercluster |
+| Zobrazování | data podle výřezu mapy s rušením rozpracovaných dotazů (AbortController), gzip API |
+| Kvalita | pytest (25 testů) + ruff lint v GitHub Actions |
+| Nasazení | Docker / docker-compose, healthcheck, denní zálohy |
 
-API je popsané na `http://server:8000/api/docs` (Swagger UI).
+## Vývoj
+
+```bash
+pip install -r requirements.txt pytest httpx ruff
+ruff check app/ tests/   # lint
+pytest -q                # testy
+uvicorn app.main:app --reload
+```

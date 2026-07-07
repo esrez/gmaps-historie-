@@ -1,9 +1,9 @@
 """API mapové stránky: statistiky, body, kvalita dat, opravy."""
 from contextlib import closing
 
-from app import importer
-
 from conftest import make_timeline_android
+
+from app import importer
 
 
 def seed(test_db, tmp_path):

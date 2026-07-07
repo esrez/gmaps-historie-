@@ -1,5 +1,6 @@
-/* Kniha jízd – logika stránky (sdílené helpery v common.js) */
-"use strict";
+/* Kniha jízd – logika stránky (ES modul, sdílené helpery v common.js) */
+import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
+         buildUrl, apiFetch, escapeHtml, toast } from "./common.js";
 
 const api = apiFetch;
 let trips = [];

@@ -1,9 +1,14 @@
-/* GMaps Historie – frontendová logika (sdílené helpery v common.js) */
-"use strict";
+/* GMaps Historie – frontendová logika (ES modul, sdílené helpery v common.js) */
+import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
+         buildUrl, apiFetch, escapeHtml, toast } from "./common.js";
 
 const tooltip = $("tooltip");
 
-const map = L.map("map", { zoomControl: true }).setView([49.8, 15.5], 7); // ČR
+// preferCanvas: všechny vektory (trasy, body, značky) se kreslí do canvasu –
+// řádově rychlejší než tisíce SVG/DOM elementů
+const map = L.map("map", { zoomControl: true, preferCanvas: true })
+  .setView([49.8, 15.5], 7); // ČR
+window.map = map;   // pro ladění v konzoli
 
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 const CARTO_ATTR = OSM_ATTR + ' &copy; <a href="https://carto.com/attributions">CARTO</a>';
@@ -93,18 +98,19 @@ function viewportParams() {
   };
 }
 
-let mapLoadSeq = 0;
+let mapAbort = null;
 
 async function loadMapData() {
+  mapAbort?.abort();   // rozpracovaný starší dotaz rovnou zrušit (šetří server)
+  const ctrl = new AbortController();
+  mapAbort = ctrl;
   const r = { ...currentRange(), ...viewportParams() };
-  const seq = ++mapLoadSeq;
   $("mapLoading").hidden = false;
   try {
     const [pts, heat] = await Promise.all([
-      api("/api/points", r),
-      api("/api/heatmap", r),
+      apiFetch("/api/points", { params: r, signal: ctrl.signal }),
+      apiFetch("/api/heatmap", { params: r, signal: ctrl.signal }),
     ]);
-    if (seq !== mapLoadSeq) return null;   // mezitím odstartoval novější dotaz
     state.points = pts.points;
     state.heatCells = heat.cells;
     renderTracks();
@@ -114,8 +120,14 @@ async function loadMapData() {
       `Zobrazeno ${pts.sampled.toLocaleString("cs")} z ${pts.total.toLocaleString("cs")} bodů` +
       (pts.step > 1 ? ` (vzorkování 1:${pts.step})` : "");
     return pts;
+  } catch (e) {
+    if (e.name === "AbortError") return null;   // nahradil ho novější dotaz
+    throw e;
   } finally {
-    if (seq === mapLoadSeq) $("mapLoading").hidden = true;
+    if (mapAbort === ctrl) {
+      mapAbort = null;
+      $("mapLoading").hidden = true;
+    }
   }
 }
 
@@ -235,18 +247,20 @@ function renderPoints() {
   if (!$("layerPoints").checked) return;
   const pts = state.points;
   const step = Math.max(1, Math.ceil(pts.length / 20000)); // strop kvůli plynulosti
+  const shown = Math.ceil(pts.length / step);
+  const withTooltips = shown <= 3000; // tooltip na každém bodu je drahý – jen při detailu
   for (let i = 0; i < pts.length; i += step) {
     const p = pts[i];
-    L.circleMarker([p[1], p[2]], {
+    const m = L.circleMarker([p[1], p[2]], {
       renderer: canvasRenderer,
       radius: 3.5,
       color: css("--series-1"),
       weight: 1,
       fillColor: css("--series-1"),
       fillOpacity: 0.55,
-    }).bindTooltip(new Date(p[0] * 1000).toLocaleString("cs"))
-      .on("click", () => whenIWasHere(p[1], p[2]))
-      .addTo(pointLayer);
+    }).on("click", () => whenIWasHere(p[1], p[2]));
+    if (withTooltips) m.bindTooltip(new Date(p[0] * 1000).toLocaleString("cs"));
+    m.addTo(pointLayer);
   }
 }
 
@@ -545,6 +559,7 @@ $("exportGpx").addEventListener("click", () => {
 // -------------------------------------------------------- přehrávání dne
 
 const play = { points: [], timer: null, t: 0, marker: null, trail: null, idx: 1 };
+window.play = play;   // pro ladění v konzoli
 
 async function playDay() {
   stopPlayback();

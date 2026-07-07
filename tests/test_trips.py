@@ -1,9 +1,9 @@
 """Kniha jízd: generování, pravidla, propagace, tachometr, undo, exporty."""
 from contextlib import closing
 
-from app import importer
-
 from conftest import make_timeline_android
+
+from app import importer
 
 RANGE = {"from_ts": 1748728800, "to_ts": 1750629600}
 

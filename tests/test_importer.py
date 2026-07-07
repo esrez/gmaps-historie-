@@ -1,10 +1,9 @@
 """Importér: všechny formáty, autodetekce, deduplikace."""
 from contextlib import closing
 
-from app import importer
+from conftest import make_records, make_semantic, make_takeout_zip, make_timeline_android
 
-from conftest import (make_records, make_semantic, make_takeout_zip,
-                      make_timeline_android)
+from app import importer
 
 
 def counts(test_db):

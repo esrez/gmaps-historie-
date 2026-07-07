@@ -21,7 +21,7 @@ import os
 import re
 import sys
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from . import db
 
@@ -62,7 +62,7 @@ def parse_ts(val) -> int | None:
     try:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return int(dt.timestamp())
     except ValueError:
         return None

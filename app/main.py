@@ -13,7 +13,7 @@ import threading
 import uuid
 from collections import defaultdict
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
@@ -497,7 +497,7 @@ def api_export_gpx(from_ts: int | None = Query(None), to_ts: int | None = Query(
              '<gpx version="1.1" creator="gmaps-historie" '
              'xmlns="http://www.topografix.com/GPX/1/1">\n<trk><trkseg>\n']
     for ts, lat, lon in pts["points"]:
-        t = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        t = datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         parts.append(f'<trkpt lat="{lat}" lon="{lon}"><time>{t}</time></trkpt>\n')
     parts.append("</trkseg></trk>\n</gpx>\n")
     return Response("".join(parts), media_type="application/gpx+xml",
@@ -525,7 +525,6 @@ def _find_outliers(conn, lo: int, hi: int, limit_ids: int | None = None):
             continue
         if cand is not None:
             # je návrat k prev reálný, zatímco skok na cand nebyl?
-            dt2 = ts - cand[1]
             d_prev = haversine_m(prev[2], prev[3], lat, lon)
             dt_prev = ts - prev[1]
             if dt_prev > 0 and d_prev / dt_prev <= OUTLIER_SPEED:
@@ -537,7 +536,7 @@ def _find_outliers(conn, lo: int, hi: int, limit_ids: int | None = None):
                 break
         dt = ts - prev[1]
         d = haversine_m(prev[2], prev[3], lat, lon)
-        if 0 < dt and d / dt > OUTLIER_SPEED:
+        if dt > 0 and d / dt > OUTLIER_SPEED:
             cand = (pid, ts, lat, lon)
         else:
             prev = (pid, ts, lat, lon)
@@ -653,7 +652,7 @@ def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
                 for i in range(0, len(ids), 900):
                     chunk = ids[i:i + 900]
                     conn.execute(
-                        "DELETE FROM points WHERE id IN (%s)" % ",".join("?" * len(chunk)),
+                        f"DELETE FROM points WHERE id IN ({','.join('?' * len(chunk))})",
                         chunk)
         if remove_bad_visits:
             if dry_run:
@@ -671,7 +670,7 @@ def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
                 for i in range(0, len(dup_ids), 900):
                     chunk = dup_ids[i:i + 900]
                     conn.execute(
-                        "DELETE FROM activities WHERE id IN (%s)" % ",".join("?" * len(chunk)),
+                        f"DELETE FROM activities WHERE id IN ({','.join('?' * len(chunk))})",
                         chunk)
         if not dry_run:
             conn.commit()
@@ -706,7 +705,7 @@ def api_analysis(from_ts: int | None = Query(None), to_ts: int | None = Query(No
         # 0=neděle ve strftime → přeskládat na Po..Ne
         "weekday_km": [{"day": d, "km": wk.get(w, 0)}
                        for d, w in zip(["Po", "Út", "St", "Čt", "Pá", "So", "Ne"],
-                                       [1, 2, 3, 4, 5, 6, 0])],
+                                       [1, 2, 3, 4, 5, 6, 0], strict=True)],
         "hourly_points": [{"hour": h, "count": hr.get(h, 0)} for h in range(24)],
         "yearly_km": [{"year": r["y"], "km": round(r["km"], 1), "trips": r["n"]}
                       for r in yearly],
