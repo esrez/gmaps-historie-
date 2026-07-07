@@ -26,6 +26,7 @@ def test_db(tmp_path, monkeypatch):
 @pytest.fixture
 def client(test_db):
     from fastapi.testclient import TestClient
+
     from app.main import app
     with TestClient(app) as c:
         yield c

@@ -212,8 +212,8 @@ def generate(p: GenerateParams):
         acts = conn.execute(
             "SELECT start_ts, end_ts, distance_m, start_lat, start_lon, end_lat, end_lon "
             "FROM activities WHERE start_ts BETWEEN ? AND ? "
-            "AND REPLACE(UPPER(type), ' ', '_') IN (%s) ORDER BY start_ts"
-            % ",".join("?" * len(CAR_TYPES)),
+            f"AND REPLACE(UPPER(type), ' ', '_') IN ({','.join('?' * len(CAR_TYPES))}) "
+            "ORDER BY start_ts",
             (lo, hi, *CAR_TYPES)).fetchall()
         namer = PlaceNamer(conn)
         rules = _load_rules(conn)
@@ -404,8 +404,8 @@ def undo_last():
             conn.execute("DELETE FROM trips WHERE id=?", (cid,))
         for r in data["rows"]:
             conn.execute(
-                "INSERT OR REPLACE INTO trips(%s) VALUES(%s)"
-                % (",".join(TRIP_COLS), ",".join("?" * len(TRIP_COLS))),
+                f"INSERT OR REPLACE INTO trips({','.join(TRIP_COLS)}) "
+                f"VALUES({','.join('?' * len(TRIP_COLS))})",
                 tuple(r.get(c) for c in TRIP_COLS))
         conn.execute("DELETE FROM undo_log WHERE id=?", (row["id"],))
         conn.commit()
@@ -424,8 +424,7 @@ def missing_days(from_ts: int | None = Query(None), to_ts: int | None = Query(No
             "SELECT a.start_ts, a.distance_m FROM activities a "
             "LEFT JOIN trips t ON t.activity_ts = a.start_ts "
             "WHERE a.start_ts BETWEEN ? AND ? AND t.id IS NULL "
-            "AND REPLACE(UPPER(a.type), ' ', '_') IN (%s)"
-            % ",".join("?" * len(CAR_TYPES)),
+            f"AND REPLACE(UPPER(a.type), ' ', '_') IN ({','.join('?' * len(CAR_TYPES))})",
             (lo, hi, *CAR_TYPES)).fetchall()
         trip_days = {r["d"] for r in conn.execute(
             "SELECT DISTINCT date(start_ts,'unixepoch','localtime') d FROM trips "
@@ -562,7 +561,7 @@ def export_spz(from_ts: int | None = Query(None), to_ts: int | None = Query(None
         ws.append([r["plate"], s.date(), s.strftime("%H:%M"), e.strftime("%H:%M"),
                    r["origin"], r["destination"], r["purpose"], r["km"],
                    r["driver"], "ano" if r["private"] else "ne"])
-    for col, w in zip("ABCDEFGHIJ", [12, 11, 8, 8, 26, 26, 22, 7, 16, 9]):
+    for col, w in zip("ABCDEFGHIJ", [12, 11, 8, 8, 26, 26, 22, 7, 16, 9], strict=True):
         ws.column_dimensions[col].width = w
     for row in ws.iter_rows(min_row=2, min_col=2, max_col=2):
         row[0].number_format = "DD.MM.YYYY"
@@ -597,13 +596,13 @@ def export_pdf(from_ts: int | None = Query(None), to_ts: int | None = Query(None
                plate: str | None = Query(None), driver: str = Query("")):
     """Kniha jízd jako PDF – pro tisk a předání účetní."""
     import io
+
     from fastapi.responses import Response as FResponse
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.units import mm
-    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
-                                    Table, TableStyle)
     from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
     rows = _book_rows(from_ts, to_ts, plate)
     font, font_b = _pdf_fonts()
