@@ -39,6 +39,11 @@ minuty), nebo z příkazové řádky
   top místa; km podle dne v týdnu, aktivita podle hodiny, km po letech.
 - **Přehrávání dne** – ◀ ▶ listování, rychlost přehrávání, stopa obarvená
   rychlostí (světlá = pomalu), aktuální km/h, chronologická osa dne.
+- **Vlastní názvy míst** – nový export z telefonu jména míst nenese, proto
+  lze každé místo pojmenovat (zákazník, adresa…): tužkou ✏️ u top míst,
+  odkazem v bublině místa na mapě, nebo v panelu „Kdy jsem tu byl?".
+  Název platí pro okruh 250 m, použije se všude včetně knihy jízd
+  a stejnou cestou ho lze změnit; prázdný název ho smaže.
 - Pohled i období se drží v adrese – funguje záložkování a obnovení stránky.
 
 ## 3. Kniha jízd (`/kniha`)

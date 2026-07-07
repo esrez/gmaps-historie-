@@ -335,11 +335,21 @@ function renderVisits() {
   for (const v of state.visits) {
     const from = new Date(v.start_ts * 1000), to = new Date(v.end_ts * 1000);
     const hours = ((v.end_ts - v.start_ts) / 3600).toFixed(1);
-    visitMarker(v).bindPopup(
-      `<b>${escapeHtml(v.name || v.semantic || "Místo")}</b><br>` +
+    const label = v.label || v.name || v.semantic || "Místo";
+    const m = visitMarker(v).bindPopup(
+      `<b>${escapeHtml(label)}</b><br>` +
       (v.address ? escapeHtml(v.address) + "<br>" : "") +
-      `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>${hours} h`
+      `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>${hours} h<br>` +
+      `<a href="#" class="renameLink">✏️ Pojmenovat místo</a>`
     ).addTo(visitLayer);
+    m.on("popupopen", (ev) => {
+      ev.popup.getElement().querySelector(".renameLink")
+        ?.addEventListener("click", (e) => {
+          e.preventDefault();
+          map.closePopup();
+          renamePlace(v.lat, v.lon, label);
+        });
+    });
   }
 }
 
@@ -391,13 +401,43 @@ function renderStats(s, pts) {
 
   $("topPlaces").innerHTML = s.top_places
     .map((p, i) =>
-      `<li><a data-i="${i}">${escapeHtml(p.label)}</a> — ${p.count}×, ${p.hours.toLocaleString("cs")} h</li>`)
+      `<li><a data-i="${i}">${escapeHtml(p.label)}</a> — ${p.count}×, ${p.hours.toLocaleString("cs")} h ` +
+      `<button class="renameBtn" data-i="${i}" title="Pojmenovat místo (zákazník, adresa…)">✏️</button></li>`)
     .join("");
   $("topPlaces").querySelectorAll("a").forEach((a) =>
     a.addEventListener("click", () => {
       const p = s.top_places[Number(a.dataset.i)];
       map.setView([p.lat, p.lon], 15);
     }));
+  $("topPlaces").querySelectorAll(".renameBtn").forEach((b) =>
+    b.addEventListener("click", () => {
+      const p = s.top_places[Number(b.dataset.i)];
+      renamePlace(p.lat, p.lon, p.label);
+    }));
+}
+
+/* Pojmenování místa – název (zákazník, adresa…) se použije všude
+   místo souřadnic a lze ho kdykoli změnit stejnou cestou. */
+async function renamePlace(lat, lon, currentLabel) {
+  const suggestion = /\d+\.\d+/.test(currentLabel || "") ? "" : (currentLabel || "");
+  const name = prompt(
+    "Název místa (např. Zákazník Novák nebo adresa).\nPrázdný název = zrušit vlastní pojmenování.",
+    suggestion);
+  if (name === null) return;
+  if (name.trim() === "") {
+    // smazat případný vlastní název v okolí
+    const { places: all } = await api("/api/places");
+    const near = all.find((p) => distKm([0, lat, lon], [0, p.lat, p.lon]) < 0.15);
+    if (near) {
+      await apiFetch(`/api/places/${near.id}`, { method: "DELETE" });
+      toast("Vlastní název odstraněn.", "success");
+      loadAll();
+    }
+    return;
+  }
+  await apiFetch("/api/places", { method: "POST", body: { lat, lon, name: name.trim() } });
+  toast(`Místo pojmenováno: ${name.trim()}`, "success");
+  loadAll();
 }
 
 // Obecný sloupcový graf – SVG, jedna řada (modrá), tooltip na hover.
@@ -575,7 +615,8 @@ async function doSearch() {
   if (mine.results.length) {
     html += "<h3>Moje místa</h3><ul class=\"resultList\">" + mine.results.map((r, i) =>
       `<li><a data-kind="mine" data-i="${i}">${escapeHtml(r.label)}</a>` +
-      `<span class="muted"> — ${r.count}×, ${r.hours.toLocaleString("cs")} h</span></li>`).join("") + "</ul>";
+      `<span class="muted"> — ${r.custom ? "vlastní název"
+        : `${r.count}×, ${r.hours.toLocaleString("cs")} h`}</span></li>`).join("") + "</ul>";
   }
   if (world.length) {
     html += "<h3>Mapa (OpenStreetMap)</h3><ul class=\"resultList\">" + world.map((r, i) =>
@@ -621,6 +662,10 @@ async function whenIWasHere(lat, lon, label) {
 
   try {
     const res = await api("/api/at_location", { lat, lon, radius_m: radius, ...r });
+    if (!label && res.place_name) {
+      loc.label = res.place_name;
+      $("locTitle").textContent = res.place_name;
+    }
     const hrs = (res.total_s / 3600).toLocaleString("cs", { maximumFractionDigits: 1 });
     $("locSummary").textContent = res.count
       ? `${res.count}× ve zvoleném období, celkem ${hrs} h`
@@ -653,6 +698,11 @@ $("locRadius").addEventListener("change", () => {
 $("locCloseBtn").addEventListener("click", () => {
   $("locPanel").hidden = true;
   locLayer.clearLayers();
+});
+$("locRenameBtn").addEventListener("click", async () => {
+  if (loc.lat === null) return;
+  await renamePlace(loc.lat, loc.lon, loc.label);
+  whenIWasHere(loc.lat, loc.lon);
 });
 $("locExportBtn").addEventListener("click", () => {
   if (loc.lat === null) return;

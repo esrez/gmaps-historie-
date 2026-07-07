@@ -122,3 +122,32 @@ def test_backup(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     r = client.get("/api/backup")
     assert r.status_code == 200 and r.content[:15] == b"SQLite format 3"
+
+
+def test_place_names(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    # pojmenovat místo práce
+    r = client.post("/api/places",
+                    json={"lat": 50.1, "lon": 14.39, "name": "Zákazník Novák"}).json()
+    assert len(r["places"]) == 1
+    # top místa i návštěvy používají vlastní název
+    stats = client.get("/api/stats").json()
+    assert stats["top_places"][0]["label"] == "Zákazník Novák"
+    visits = client.get("/api/visits").json()["visits"]
+    assert any(v["label"] == "Zákazník Novák" for v in visits)
+    # blízké pojmenování jen přejmenuje (žádný duplikát)
+    r2 = client.post("/api/places",
+                     json={"lat": 50.1004, "lon": 14.3904, "name": "Firma s.r.o."}).json()
+    assert len(r2["places"]) == 1 and r2["places"][0]["name"] == "Firma s.r.o."
+    # hledání najde vlastní název; smazání vrátí původní popisky
+    res = client.get("/api/search_visits?q=firma").json()["results"]
+    assert res and res[0]["custom"] is True
+    client.delete(f"/api/places/{r2['places'][0]['id']}")
+    stats = client.get("/api/stats").json()
+    assert stats["top_places"][0]["label"] != "Firma s.r.o."
+
+
+def test_semantic_translated(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    stats = client.get("/api/stats").json()
+    assert stats["top_places"][0]["label"] == "Práce"   # Work → Práce

@@ -21,7 +21,7 @@ from contextlib import closing
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from . import db
+from . import db, places
 from .common import fmt_dt, haversine_m, local_dt, ts_range, xlsx_response
 
 router = APIRouter(prefix="/api/trips")
@@ -29,8 +29,7 @@ router = APIRouter(prefix="/api/trips")
 # typy aktivit považované za jízdu autem (normalizované)
 CAR_TYPES = {"IN_PASSENGER_VEHICLE", "DRIVING", "MOTORCYCLING", "IN_VEHICLE"}
 
-SEMANTIC_CZ = {"HOME": "Domov", "WORK": "Práce", "INFERRED_HOME": "Domov",
-               "INFERRED_WORK": "Práce", "SEARCHED_ADDRESS": ""}
+SEMANTIC_CZ = places.SEMANTIC_CZ   # sdílený překlad Home/Work → Domov/Práce
 
 
 def _norm(s: str | None) -> str:
@@ -51,6 +50,7 @@ class PlaceNamer:
     def __init__(self, conn, radius_m: float = 350):
         self.radius_m = radius_m
         self.cache: dict = {}
+        self.custom = places.load_places(conn)   # vlastní názvy mají přednost
         self.places = conn.execute(
             "SELECT COALESCE(NULLIF(name,''), semantic, address) label, semantic, "
             "       AVG(lat) lat, AVG(lon) lon "
@@ -64,6 +64,10 @@ class PlaceNamer:
         key = (round(lat, 4), round(lon, 4))
         if key in self.cache:
             return self.cache[key]
+        custom = places.custom_label(self.custom, lat, lon)
+        if custom:
+            self.cache[key] = custom
+            return custom
         best, best_d = None, self.radius_m + 1
         for p in self.places:
             if abs(p["lat"] - lat) > 0.01 or abs(p["lon"] - lon) > 0.02:
