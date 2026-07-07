@@ -1,0 +1,125 @@
+body.kniha {
+  height: auto;
+  min-height: 100vh;
+  background: var(--page);
+}
+
+#knihaHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+#knihaHeader h1 { margin: 0; font-size: 18px; }
+.navlink { color: var(--series-1); text-decoration: none; font-size: 13px; }
+.navlink:hover { text-decoration: underline; }
+
+#knihaLayout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+}
+#knihaSettings {
+  width: 300px;
+  min-width: 300px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px 16px 16px;
+}
+#knihaSettings label { display: block; margin: 6px 0; }
+#knihaSettings input[type="text"], #knihaSettings input[type="number"] {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+#knihaSettings .row label { flex: 1; }
+#knihaSettings button { width: 100%; margin: 4px 0; }
+button.danger:hover { border-color: var(--accent-red); color: var(--accent-red); }
+
+#knihaMain { flex: 1; min-width: 0; }
+#tripsSummary { margin: 0 0 8px 2px; }
+
+#tableWrap {
+  overflow-x: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+#tripsTable { border-collapse: collapse; width: 100%; font-size: 13px; }
+#tripsTable th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid var(--baseline);
+  white-space: nowrap;
+}
+#tripsTable td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: middle;
+}
+#tripsTable tfoot td { padding: 8px; border-bottom: none; }
+.num { text-align: right; }
+.right { text-align: right; }
+
+#tripsTable input, #tripsTable select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 6px;
+  width: 100%;
+  min-width: 0;
+}
+#tripsTable input:hover { border-color: var(--grid); }
+#tripsTable input:focus {
+  outline: none;
+  border-color: var(--series-1);
+  background: var(--page);
+}
+#tripsTable input[type="date"] { width: 130px; }
+#tripsTable input[type="time"] { width: 96px; }
+#tripsTable input.km { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+#tripsTable input[type="checkbox"] { width: auto; accent-color: var(--series-1); }
+#tripsTable .del {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+#tripsTable .del:hover { color: var(--accent-red); }
+#tripsTable tr.monthStart td { border-top: 2px solid var(--baseline); }
+#tripsTable tr.excludedRow { opacity: 0.45; }
+#tripsTable tr.excludedRow input:not([data-f="excluded"]) { text-decoration: line-through; }
+
+#rulesList { margin: 4px 0 8px; padding-left: 16px; font-size: 12px; }
+#rulesList li { margin: 3px 0; color: var(--text-secondary); }
+#rulesList .del {
+  border: none; background: none; color: var(--muted);
+  cursor: pointer; padding: 0 4px;
+}
+#rulesList .del:hover { color: var(--accent-red); }
+#knihaSettings .row input[type="text"], #knihaSettings .row input[type="number"] {
+  flex: 1; min-width: 60px;
+}
+
+@media (max-width: 900px) {
+  #knihaLayout { flex-direction: column; }
+  #knihaSettings { width: 100%; min-width: 0; }
+}

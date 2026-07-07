@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kniha jízd – GMaps Historie</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/kniha.css">
+</head>
+<body class="kniha">
+<header id="knihaHeader">
+  <h1>🚗 Kniha jízd</h1>
+  <a href="/" class="navlink">← Mapa a statistiky</a>
+</header>
+
+<div id="knihaLayout">
+  <aside id="knihaSettings">
+    <section>
+      <h2>Období</h2>
+      <div class="row">
+        <label>Od <input type="date" id="dateFrom"></label>
+        <label>Do <input type="date" id="dateTo"></label>
+      </div>
+      <div class="presets">
+        <button data-preset="thisMonth">Tento měsíc</button>
+        <button data-preset="lastMonth">Minulý měsíc</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Vozidlo a řidič</h2>
+      <label>SPZ vozidla <input type="text" id="setPlate" placeholder="1AB 2345"></label>
+      <label>Řidič <input type="text" id="setDriver" placeholder="Jméno Příjmení"></label>
+      <label>Výchozí účel <input type="text" id="setPurpose" value="Služební jízda"></label>
+    </section>
+
+    <section>
+      <h2>Generování z historie</h2>
+      <label class="check"><input type="checkbox" id="setWorkdays" checked> Jen pracovní dny (po–pá)</label>
+      <div class="row">
+        <label>Od hod. <input type="number" id="setHourFrom" min="0" max="23" value="6"></label>
+        <label>Do hod. <input type="number" id="setHourTo" min="1" max="24" value="18"></label>
+      </div>
+      <label>Ignorovat jízdy pod (km) <input type="number" id="setMinKm" min="0" step="0.1" value="0.5"></label>
+      <label class="check"><input type="checkbox" id="setRoundUp" checked> Zaokrouhlovat km nahoru</label>
+      <label class="check"><input type="checkbox" id="setAutoFill" checked> Po zadání km doplnit stejnou trasu</label>
+      <button id="generateBtn" class="primary">⚙ Generovat jízdy</button>
+      <p class="muted">Vytvoří jízdy z rozpoznaných cest autem ve zvoleném období.
+         Už vytvořené jízdy se nepřepíšou – ruční úpravy zůstanou zachované.</p>
+      <div id="genStatus" class="muted"></div>
+    </section>
+
+    <section>
+      <h2>Pravidla kilometrů</h2>
+      <p class="muted">Pevné km pro trasu či místo (např. Kancelář = 12 km).
+         Platí obousměrně; bez „odkud" pro všechny jízdy na dané místo.
+         Pravidlo vznikne i automaticky při zadání km v tabulce.</p>
+      <ul id="rulesList"></ul>
+      <div class="row">
+        <input type="text" id="ruleOrigin" placeholder="Odkud (nepovinné)">
+        <input type="text" id="ruleDest" placeholder="Kam">
+        <input type="number" id="ruleKm" placeholder="km" min="0" step="1">
+      </div>
+      <button id="ruleAddBtn">＋ Přidat pravidlo</button>
+      <button id="applyRulesBtn">⟳ Použít pravidla na období</button>
+    </section>
+
+    <section>
+      <h2>Tachometr</h2>
+      <div class="row">
+        <label>Rok <input type="number" id="odoYear" min="2000" max="2100"></label>
+        <label>Najeto za rok (km) <input type="number" id="odoKm" min="0" step="1"></label>
+      </div>
+      <button id="odoSaveBtn">Uložit stav tachometru</button>
+      <div id="odoInfo" class="muted"></div>
+    </section>
+
+    <section>
+      <h2>Akce</h2>
+      <button id="addBtn">＋ Přidat jízdu ručně</button>
+      <button id="exportBtn">📊 Export XLSX pro SPZ</button>
+      <button id="clearBtn" class="danger">🗑 Smazat jízdy v období</button>
+      <p class="muted">Export je xlsx pro univerzální import knihy jízd v programu
+         SPZ (Milk Computers): SPZ, Datum, Odjezd, Příjezd, Odkud, Kam, Účel, Km,
+         Řidič. Vozidlo s touto SPZ musí být v programu SPZ založené.</p>
+    </section>
+  </aside>
+
+  <main id="knihaMain">
+    <div id="tripsSummary" class="muted"></div>
+    <div id="tableWrap">
+      <table id="tripsTable">
+        <thead>
+          <tr>
+            <th>Datum</th><th>Odjezd</th><th>Příjezd</th><th>Odkud</th><th>Kam</th>
+            <th class="num">Km</th><th>Účel</th>
+            <th title="Soukromá jízda firemním autem – v knize zůstává">Soukr.</th>
+            <th title="Jízda vlastním autem – v knize jízd nebude">Vl. auto</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tripsBody"></tbody>
+        <tfoot>
+          <tr><td colspan="5" class="right"><b>Celkem</b></td>
+              <td class="num"><b id="totalKm">0</b></td><td colspan="4"></td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/kniha.js"></script>
+</body>
+</html>
