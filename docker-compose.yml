@@ -9,6 +9,8 @@ services:
     environment:
       - TZ=Europe/Prague
       - DB_PATH=/data/history.db
+      # odkomentujte pro ochranu heslem (jméno při přihlášení libovolné):
+      # - AUTH_PASSWORD=zvolte-silne-heslo
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",

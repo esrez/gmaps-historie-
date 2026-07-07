@@ -111,6 +111,7 @@
       </div>
       <input type="range" id="playSlider" min="0" max="1000" value="0">
       <div id="playInfo" class="muted"></div>
+      <ol id="dayTimeline"></ol>
     </details>
 
     <details class="sec">
@@ -139,6 +140,10 @@
       </div>
       <div id="qualityReport"></div>
       <button id="cleanupBtn" hidden class="danger">🧹 Opravit (smazat vadné záznamy)</button>
+      <h3>Záloha</h3>
+      <button id="backupBtn">💾 Stáhnout zálohu (.db)</button>
+      <p class="muted">Záloha se navíc vytváří automaticky každý den do
+         <code>data/backups/</code> (drží se posledních 14).</p>
     </details>
 
     <details class="sec">
@@ -149,6 +154,9 @@
       <input type="file" id="importFile" accept=".json,.zip">
       <button id="importBtn">Importovat</button>
       <div id="importStatus" class="muted"></div>
+      <div id="autoImportLog" class="muted"></div>
+      <p class="muted">Tip: soubory nakopírované do <code>data/import/</code>
+         se importují samy (do minuty).</p>
       <div id="dbInfo" class="muted"></div>
     </details>
   </aside>

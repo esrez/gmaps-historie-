@@ -1,10 +1,16 @@
 """FastAPI server – API nad historií polohy + statický frontend."""
 from __future__ import annotations
 
+import asyncio
+import base64
 import math
 import os
+import secrets
 import shutil
+import sqlite3
 import tempfile
+import threading
+import uuid
 from collections import defaultdict
 from contextlib import closing
 from datetime import datetime, timezone
@@ -26,6 +32,130 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 MAX_TRACK_POINTS = 60_000
 MAX_HEAT_CELLS = 40_000
 MAX_DIST_ROWS = 3_000_000
+
+# ------------------------------------------------- volitelné přihlášení
+
+AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
+
+
+@app.middleware("http")
+async def basic_auth(request, call_next):
+    """Když je nastavené AUTH_PASSWORD, vyžaduje HTTP Basic (jméno libovolné)."""
+    if AUTH_PASSWORD:
+        header = request.headers.get("authorization", "")
+        ok = False
+        if header.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(header[6:]).decode("utf-8", "replace")
+                password = decoded.split(":", 1)[1] if ":" in decoded else ""
+                ok = secrets.compare_digest(password, AUTH_PASSWORD)
+            except Exception:
+                ok = False
+        if not ok:
+            return Response(status_code=401, content="Přihlaste se",
+                            headers={"WWW-Authenticate": 'Basic realm="GMaps Historie"'})
+    return await call_next(request)
+
+
+# --------------------------------------------- zálohy a auto-import složky
+
+BACKUP_KEEP = 14
+
+
+def _data_dir() -> str:
+    return os.path.dirname(db.DB_PATH) or "."
+
+
+def make_backup() -> str:
+    """Konzistentní kopie SQLite databáze (backup API) + rotace starých záloh."""
+    backup_dir = os.path.join(_data_dir(), "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    name = f"history-{datetime.now(tz=None):%Y%m%d-%H%M%S}.db"
+    dest = os.path.join(backup_dir, name)
+    src = sqlite3.connect(db.DB_PATH)
+    dst = sqlite3.connect(dest)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    files = sorted(f for f in os.listdir(backup_dir)
+                   if f.startswith("history-") and f.endswith(".db"))
+    for old in files[:-BACKUP_KEEP]:
+        os.unlink(os.path.join(backup_dir, old))
+    return dest
+
+
+def _auto_backup_if_due():
+    if not os.path.exists(db.DB_PATH):
+        return
+    backup_dir = os.path.join(_data_dir(), "backups")
+    newest = 0.0
+    if os.path.isdir(backup_dir):
+        for f in os.listdir(backup_dir):
+            if f.startswith("history-") and f.endswith(".db"):
+                newest = max(newest, os.path.getmtime(os.path.join(backup_dir, f)))
+    import time
+    if time.time() - newest >= 24 * 3600:
+        make_backup()
+        print("Automatická záloha databáze vytvořena.")
+
+
+AUTOIMPORT_LOG: list[dict] = []   # posledních pár zpracovaných souborů
+
+
+def _process_import_folder():
+    """Soubory nakopírované do data/import/ se samy naimportují."""
+    folder = os.path.join(_data_dir(), "import")
+    if not os.path.isdir(folder):
+        os.makedirs(folder, exist_ok=True)
+        return
+    for name in sorted(os.listdir(folder)):
+        if not name.lower().endswith((".json", ".zip")):
+            continue
+        path = os.path.join(folder, name)
+        entry = {"file": name, "when": datetime.now().strftime("%d.%m. %H:%M")}
+        try:
+            counters = importer.import_path(path)
+            entry.update(counters.as_dict())
+            entry["status"] = "ok"
+            os.rename(path, path + ".imported")
+        except Exception as exc:
+            entry["status"] = "error"
+            entry["error"] = str(exc)
+            os.rename(path, path + ".error")
+        AUTOIMPORT_LOG.append(entry)
+        del AUTOIMPORT_LOG[:-5]
+
+
+async def _background_loop():
+    while True:
+        try:
+            await asyncio.to_thread(_auto_backup_if_due)
+            await asyncio.to_thread(_process_import_folder)
+        except Exception as exc:      # noqa: BLE001 – smyčka nesmí umřít
+            print(f"Úloha na pozadí selhala: {exc}")
+        await asyncio.sleep(60)
+
+
+@app.on_event("startup")
+async def _startup():
+    if os.environ.get("DISABLE_BACKGROUND") != "1":
+        asyncio.create_task(_background_loop())
+
+
+@app.get("/api/backup")
+def api_backup():
+    """Stáhne čerstvou zálohu databáze."""
+    dest = make_backup()
+    return FileResponse(dest, filename=os.path.basename(dest),
+                        media_type="application/octet-stream")
+
+
+@app.get("/api/autoimport")
+def api_autoimport():
+    return {"log": AUTOIMPORT_LOG[-5:]}
 
 
 @app.get("/api/range")
@@ -390,6 +520,40 @@ def _find_outliers(conn, lo: int, hi: int, limit_ids: int | None = None):
     return ids
 
 
+def _find_duplicate_activities(conn, lo: int, hi: int) -> list[int]:
+    """Stejná cesta uložená dvakrát (typicky překryv starého Takeoutu
+    a nového exportu z telefonu): stejný druh pohybu a >50% časový překryv.
+    Ponechá se záznam s vyplněnou (delší) vzdáleností."""
+    car = {"IN_PASSENGER_VEHICLE", "DRIVING", "IN_VEHICLE"}   # různé názvy téhož
+    ids: list[int] = []
+    active: list[list] = []   # [id, start, end, type, dist]
+    cur = conn.execute(
+        "SELECT id, start_ts, end_ts, REPLACE(UPPER(type),' ','_') tn, "
+        "COALESCE(distance_m,0) dist FROM activities "
+        "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts", (lo, hi))
+    for pid, s, e, tn, dist in cur:
+        if tn in car:
+            tn = "CAR"
+        active = [a for a in active if a[2] > s]
+        dup_of = None
+        for a in active:
+            overlap = min(a[2], e) - max(a[1], s)
+            shorter = max(min(a[2] - a[1], e - s), 1)
+            if a[3] == tn and overlap > 0.5 * shorter:
+                dup_of = a
+                break
+        if dup_of is not None:
+            if dist > dup_of[4]:
+                ids.append(dup_of[0])
+                active.remove(dup_of)
+                active.append([pid, s, e, tn, dist])
+            else:
+                ids.append(pid)
+        else:
+            active.append([pid, s, e, tn, dist])
+    return ids
+
+
 @app.get("/api/quality")
 def api_quality(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                 accuracy_limit: float = Query(DEFAULT_ACC_LIMIT, ge=10)):
@@ -406,6 +570,7 @@ def api_quality(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
             "SELECT MIN(ts) a, MAX(ts) b, COUNT(*) n FROM points WHERE ts BETWEEN ? AND ?",
             (lo, hi)).fetchone()
         outliers = len(_find_outliers(conn, lo, hi)) if (bounds["n"] or 0) <= 3_000_000 else None
+        dup_acts = len(_find_duplicate_activities(conn, lo, hi))
 
         gaps: list[str] = []
         gap_count = 0
@@ -428,6 +593,7 @@ def api_quality(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
         "accuracy_limit": accuracy_limit,
         "outliers": outliers,
         "bad_visits": bad_visits,
+        "duplicate_activities": dup_acts,
         "gap_days": gap_count,
         "gap_samples": gaps,
     }
@@ -439,11 +605,13 @@ def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
                 accuracy_limit: float = Query(DEFAULT_ACC_LIMIT, ge=10),
                 remove_outliers: bool = Query(True),
                 remove_bad_visits: bool = Query(True),
+                remove_duplicate_activities: bool = Query(True),
                 dry_run: bool = Query(True)):
-    """Automatické opravy: smaže nepřesné body, GPS teleporty a vadné
-    návštěvy. S dry_run=true jen spočítá, co by se smazalo."""
+    """Automatické opravy: smaže nepřesné body, GPS teleporty, vadné návštěvy
+    a duplicitní cesty. S dry_run=true jen spočítá, co by se smazalo."""
     lo, hi = ts_range(from_ts, to_ts)
-    result = {"dry_run": dry_run, "low_accuracy": 0, "outliers": 0, "bad_visits": 0}
+    result = {"dry_run": dry_run, "low_accuracy": 0, "outliers": 0,
+              "bad_visits": 0, "duplicate_activities": 0}
     with closing(db.connect()) as conn:
         if remove_low_accuracy:
             if dry_run:
@@ -472,8 +640,19 @@ def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
                 result["bad_visits"] = conn.execute(
                     "DELETE FROM visits WHERE start_ts BETWEEN ? AND ? AND end_ts <= start_ts",
                     (lo, hi)).rowcount
+        if remove_duplicate_activities:
+            dup_ids = _find_duplicate_activities(conn, lo, hi)
+            result["duplicate_activities"] = len(dup_ids)
+            if not dry_run:
+                for i in range(0, len(dup_ids), 900):
+                    chunk = dup_ids[i:i + 900]
+                    conn.execute(
+                        "DELETE FROM activities WHERE id IN (%s)" % ",".join("?" * len(chunk)),
+                        chunk)
         if not dry_run:
             conn.commit()
+            if sum(v for k, v in result.items() if k != "dry_run") > 0:
+                conn.execute("VACUUM")   # uvolnit místo po smazaných záznamech
     return result
 
 
@@ -511,23 +690,47 @@ def api_analysis(from_ts: int | None = Query(None), to_ts: int | None = Query(No
     }
 
 
+IMPORT_JOBS: dict[str, dict] = {}
+
+
 @app.post("/api/import")
 async def api_import(file: UploadFile):
-    tmpdir = os.path.dirname(db.DB_PATH) or "."
+    """Uloží nahraný soubor a import spustí na pozadí – u velkých souborů
+    server zůstává použitelný a průběh jde sledovat přes /api/import/status."""
+    tmpdir = _data_dir()
     os.makedirs(tmpdir, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=tmpdir, suffix=".upload", delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
-    try:
-        counters = importer.import_path(tmp_path)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Import selhal: {exc} (část dat už mohla být uložena; "
-                   f"opakovaný import je bezpečný, duplicity se přeskočí)")
-    finally:
-        os.unlink(tmp_path)
-    return counters.as_dict()
+
+    job_id = uuid.uuid4().hex[:12]
+    counters = importer.Counters()
+    job = {"status": "running", "counters": counters, "error": None,
+           "filename": file.filename}
+    IMPORT_JOBS[job_id] = job
+
+    def run():
+        try:
+            importer.import_path(tmp_path, counters=counters)
+            job["status"] = "done"
+        except Exception as exc:      # noqa: BLE001
+            job["status"] = "error"
+            job["error"] = (f"{exc} (část dat už mohla být uložena; opakovaný "
+                            f"import je bezpečný, duplicity se přeskočí)")
+        finally:
+            os.unlink(tmp_path)
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/import/status/{job_id}")
+def api_import_status(job_id: str):
+    job = IMPORT_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(404, "Neznámý import")
+    return {"status": job["status"], "error": job["error"],
+            "filename": job["filename"], **job["counters"].as_dict()}
 
 
 @app.get("/")

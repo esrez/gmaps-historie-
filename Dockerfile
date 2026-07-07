@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+# DejaVu kvůli české diakritice v PDF exportu knihy jízd
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /srv
 
 COPY requirements.txt .

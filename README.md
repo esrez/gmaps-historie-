@@ -38,6 +38,25 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 - **Intuitivní ovládání** – sbalovací sekce, nenápadná oznámení místo
   vyskakovacích oken, obrácené období se samo prohodí, potvrzení uložení
   přímo v řádku tabulky, navádění k importu při prázdné databázi
+- **Zálohování** – automatická denní záloha databáze do `data/backups/`
+  (rotace 14 dní) + tlačítko pro okamžité stažení zálohy
+- **Volitelné heslo** – nastavením `AUTH_PASSWORD` v docker-compose se celá
+  aplikace schová za přihlášení (HTTP Basic)
+- **Import na pozadí** – i vícegigabajtový Records.json se zpracovává na
+  pozadí s průběžným ukazatelem; server zůstává použitelný
+- **Auto-import ze složky** – soubory nakopírované do `data/import/` se samy
+  naimportují do minuty (po zpracování dostanou příponu `.imported`)
+- **Ochrana proti duplicitám** – při kombinaci starého Takeoutu a nového
+  exportu se stejná cesta nezapočítá dvakrát (kontrola kvality je umí najít
+  a odstranit, generování knihy jízd je přeskakuje)
+- **Časová osa dne** – u přehrávání se zobrazí chronologický přehled
+  „odjezd → místo (hodiny) → přesun (km)" s prokliky na mapu
+- **Kniha jízd navíc**: více vozidel (filtr dle SPZ, tachometr pro každé
+  vozidlo zvlášť), **export do PDF** pro tisk (měsíční součty, česká
+  diakritika) a **vrácení poslední hromadné akce** (generování, propagace km,
+  použití pravidel i smazání období)
+- **Automatické testy** – sada pytest testů (importér, API, kniha jízd)
+  spouštěná v GitHub Actions při každém push
 - **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen
     pracovní dny a pracovní doba (např. po–pá 6–18 h), s minimální délkou jízdy
@@ -117,9 +136,11 @@ Cestu k databázi lze změnit proměnnou prostředí `DB_PATH`
 
 ## Bezpečnost
 
-Aplikace nemá přihlašování – počítá s během v důvěryhodné síti. Pokud ji
-vystavujete do internetu, dejte ji za reverse proxy s autentizací
-(např. nginx + basic auth, Authelia, Tailscale…). Jde o citlivá osobní data.
+Ve výchozím stavu aplikace nemá přihlašování – počítá s během v důvěryhodné
+domácí síti. Doporučujeme v `docker-compose.yml` odkomentovat
+`AUTH_PASSWORD=...` – aplikace pak vyžaduje heslo (jméno je libovolné).
+Pokud ji vystavujete do internetu, přidejte navíc reverse proxy s HTTPS
+(např. nginx, Caddy, Tailscale…). Jde o citlivá osobní data.
 
 ## Architektura
 

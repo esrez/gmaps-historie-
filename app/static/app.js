@@ -523,6 +523,7 @@ function startPlayback(day) {
   $("playInfo").textContent =
     `${day.points.length} bodů, ${day.visits.length} návštěv` +
     (km ? `, ${km.toFixed(1)} km dle aktivit` : "");
+  renderDayTimeline(day);
 
   $("playBtn").textContent = "⏸ Zastavit";
   let last = performance.now();
@@ -534,6 +535,32 @@ function startPlayback(day) {
     renderPlayhead(play.t);
     play.timer = requestAnimationFrame(frame);
   });
+}
+
+// Chronologický přehled dne: návštěvy a přesuny pod přehrávačem.
+function renderDayTimeline(day) {
+  const hm = (ts) => new Date(ts * 1000)
+    .toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" });
+  const events = [
+    ...day.visits.map((v) => ({ ...v, kind: "visit" })),
+    ...day.activities.map((a) => ({ ...a, kind: "act" })),
+  ].sort((a, b) => a.start_ts - b.start_ts);
+  $("dayTimeline").innerHTML = events.map((ev, i) => {
+    if (ev.kind === "visit") {
+      const hrs = ((ev.end_ts - ev.start_ts) / 3600).toFixed(1);
+      return `<li>📍 ${hm(ev.start_ts)}–${hm(ev.end_ts)} ` +
+        `<a data-i="${i}">${escapeHtml(ev.name || ev.semantic || "Místo")}</a> ` +
+        `<span class="muted">(${hrs} h)</span></li>`;
+    }
+    const km = ((ev.distance_m || 0) / 1000).toFixed(1);
+    return `<li>➜ ${hm(ev.start_ts)}–${hm(ev.end_ts)} ${escapeHtml(typeLabel(ev.type))}` +
+      (km > 0 ? ` <b>${km} km</b>` : "") + "</li>";
+  }).join("");
+  $("dayTimeline").querySelectorAll("a").forEach((a) =>
+    a.addEventListener("click", () => {
+      const ev = events[Number(a.dataset.i)];
+      if (ev.lat) map.setView([ev.lat, ev.lon], 16);
+    }));
 }
 
 function renderPlayhead(t) {
@@ -595,13 +622,15 @@ $("qualityBtn").addEventListener("click", async () => {
     if (q.outliers) issues.push(`⚠️ ${fmt(q.outliers)} GPS „teleportů" (osamocené skoky)`);
     if (q.outliers === null) issues.push("ℹ️ Příliš mnoho bodů – teleporty se vyhodnotí až při opravě");
     if (q.bad_visits) issues.push(`⚠️ ${fmt(q.bad_visits)} vadných návštěv (konec před začátkem)`);
+    if (q.duplicate_activities) issues.push(
+      `⚠️ ${fmt(q.duplicate_activities)} duplicitních cest (překryv více exportů)`);
     if (q.gap_days) issues.push(
       `ℹ️ ${fmt(q.gap_days)} dní bez jakýchkoli dat` +
       (q.gap_samples.length ? ` (např. ${q.gap_samples.slice(0, 5).join(", ")}…)` : ""));
     $("qualityReport").innerHTML = issues.length
       ? `<ul class="issueList">${issues.map((i) => `<li>${i}</li>`).join("")}</ul>`
       : '<p class="muted">✅ Žádné problémy nenalezeny.</p>';
-    const fixable = q.low_accuracy + (q.outliers ?? 1) + q.bad_visits;
+    const fixable = q.low_accuracy + (q.outliers ?? 1) + q.bad_visits + q.duplicate_activities;
     $("cleanupBtn").hidden = fixable === 0;
   } catch (e) {
     $("qualityReport").innerHTML = `<p class="muted">Kontrola selhala: ${e.message}</p>`;
@@ -612,17 +641,19 @@ $("qualityBtn").addEventListener("click", async () => {
 
 $("cleanupBtn").addEventListener("click", async () => {
   const dry = await apiFetch("/api/cleanup", { method: "POST", params: { ...qualityParams(), dry_run: true } });
-  const total = dry.low_accuracy + dry.outliers + dry.bad_visits;
+  const total = dry.low_accuracy + dry.outliers + dry.bad_visits + dry.duplicate_activities;
   if (!total) { $("qualityReport").innerHTML = '<p class="muted">Není co opravovat.</p>'; return; }
   if (!confirm(`Smazat ${dry.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
-    + `${dry.outliers.toLocaleString("cs")} teleportů a ${dry.bad_visits.toLocaleString("cs")} vadných návštěv?\n`
+    + `${dry.outliers.toLocaleString("cs")} teleportů, ${dry.bad_visits.toLocaleString("cs")} vadných návštěv `
+    + `a ${dry.duplicate_activities.toLocaleString("cs")} duplicitních cest?\n`
     + "Doporučení: originální exporty od Googlu si nechte – kdykoli je lze naimportovat znovu.")) return;
   $("cleanupBtn").disabled = true;
   try {
     const res = await apiFetch("/api/cleanup", { method: "POST", params: { ...qualityParams(), dry_run: false } });
     $("qualityReport").innerHTML =
       `<p class="muted">🧹 Smazáno: ${res.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
-      + `${res.outliers.toLocaleString("cs")} teleportů, ${res.bad_visits.toLocaleString("cs")} návštěv.</p>`;
+      + `${res.outliers.toLocaleString("cs")} teleportů, ${res.bad_visits.toLocaleString("cs")} návštěv, `
+      + `${res.duplicate_activities.toLocaleString("cs")} duplicitních cest.</p>`;
     $("cleanupBtn").hidden = true;
     loadAll();
   } finally {
@@ -638,24 +669,63 @@ $("importBtn").addEventListener("click", async () => {
   const fd = new FormData();
   fd.append("file", f);
   $("importBtn").disabled = true;
-  $("importStatus").textContent = `Nahrávám a zpracovávám ${f.name} … (u velkých souborů to může trvat minuty)`;
+  $("importStatus").textContent = `Nahrávám ${f.name} …`;
   try {
     const res = await fetch("/api/import", { method: "POST", body: fd });
     const body = await res.json();
     if (!res.ok) throw new Error(body.detail || res.status);
-    $("importStatus").textContent =
-      `Hotovo: +${body.points.toLocaleString("cs")} bodů, +${body.visits.toLocaleString("cs")} návštěv, ` +
-      `+${body.activities.toLocaleString("cs")} aktivit (${body.files} souborů).`;
-    toast("Import dokončen ✓", "success");
-    state.fitted = false;
-    loadAll();
+    await watchImport(body.job_id);   // import běží na pozadí, sledujeme průběh
   } catch (e) {
     $("importStatus").textContent = "Import selhal: " + e.message;
     toast("Import selhal", "error");
-  } finally {
     $("importBtn").disabled = false;
   }
 });
+
+async function watchImport(jobId) {
+  const fmt = (v) => v.toLocaleString("cs");
+  while (true) {
+    let s;
+    try {
+      s = await api(`/api/import/status/${jobId}`);
+    } catch (e) {
+      $("importStatus").textContent = "Nelze zjistit stav importu: " + e.message;
+      break;
+    }
+    if (s.status === "running") {
+      $("importStatus").textContent =
+        `Zpracovávám… +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, +${fmt(s.activities)} aktivit`;
+      await new Promise((r) => setTimeout(r, 1500));
+      continue;
+    }
+    if (s.status === "done") {
+      $("importStatus").textContent =
+        `Hotovo: +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, ` +
+        `+${fmt(s.activities)} aktivit (${s.files} souborů).`;
+      toast("Import dokončen ✓", "success");
+      state.fitted = false;
+      loadAll();
+    } else {
+      $("importStatus").textContent = "Import selhal: " + s.error;
+      toast("Import selhal", "error");
+    }
+    break;
+  }
+  $("importBtn").disabled = false;
+}
+
+$("backupBtn").addEventListener("click", () => { location.href = "/api/backup"; });
+
+async function showAutoImportLog() {
+  try {
+    const { log } = await api("/api/autoimport");
+    $("autoImportLog").innerHTML = log.length
+      ? "Auto-import: " + log.map((l) =>
+          `${escapeHtml(l.file)} (${l.when}) ${l.status === "ok" ? "✓" : "✗ " + escapeHtml(l.error || "")}`
+        ).join("<br>")
+      : "";
+  } catch (e) { /* nedostupné */ }
+}
 
 // ------------------------------------------------------------------ start
 
@@ -672,5 +742,6 @@ $("importBtn").addEventListener("click", async () => {
       toast("Zatím nejsou žádná data – začněte importem exportu z Google Maps.");
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
+  showAutoImportLog();
   loadAll();
 })();
