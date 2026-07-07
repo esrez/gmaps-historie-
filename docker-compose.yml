@@ -1,0 +1,12 @@
+services:
+  gmaps-historie:
+    build: .
+    container_name: gmaps-historie
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=Europe/Prague
+      - DB_PATH=/data/history.db
+    restart: unless-stopped
