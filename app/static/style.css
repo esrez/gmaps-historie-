@@ -11,8 +11,10 @@
   --series-2: #1baf7a;
   --accent-red: #e34948;
 }
+/* tmavé hodnoty platí: (a) podle systému, pokud uživatel nevynutil světlý,
+   (b) vždy při ručně zvoleném tmavém režimu (data-theme nastavuje common.js) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --surface-1: #1a1a19;
     --page: #0d0d0d;
     --text-primary: #ffffff;
@@ -25,6 +27,19 @@
     --series-2: #199e70;
     --accent-red: #e66767;
   }
+}
+:root[data-theme="dark"] {
+  --surface-1: #1a1a19;
+  --page: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --accent-red: #e66767;
 }
 
 * { box-sizing: border-box; }
@@ -210,6 +225,28 @@ input[type="search"] {
 #locStays a:hover { text-decoration: underline; }
 #locStays b { color: var(--text-primary); }
 
+button.mini {
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.calNav { align-items: center; }
+.calNav b { min-width: 44px; text-align: center; }
+#calendar svg { display: block; width: 100%; height: auto; }
+#calendar text { fill: var(--muted); font-size: 8px; font-family: system-ui, sans-serif; }
+#calendar rect { cursor: pointer; }
+#calendar rect:hover { stroke: var(--text-primary); stroke-width: 1; }
+
+/* větší dotykové plochy na dotykových zařízeních */
+@media (pointer: coarse) {
+  button { padding: 9px 14px; }
+  .presets button { padding: 7px 12px; }
+  input[type="date"], select { padding: 8px 10px; }
+  .check { padding: 6px 0; }
+  #tripsTable .del { padding: 8px 12px; }
+}
+
 #dayTimeline {
   margin: 8px 0 0;
   padding-left: 4px;
@@ -277,6 +314,29 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
 
 @media (max-width: 800px) {
   #layout { flex-direction: column; }
-  #sidebar { width: 100%; min-width: 0; max-height: 45vh; order: 2; }
-  #map { height: 55vh; order: 1; }
+  /* mapa nahoře, panel jako vysouvací „bottom sheet" s úchytem */
+  #map { height: 58vh; order: 1; }
+  #sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 42vh;
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    margin-top: -14px;
+    z-index: 1100;
+    position: relative;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+  }
+  #sidebar::before {
+    content: "";
+    display: block;
+    width: 44px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--baseline);
+    margin: 2px auto 10px;
+  }
+  h1 { font-size: 16px; }
 }

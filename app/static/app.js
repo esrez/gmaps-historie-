@@ -1,6 +1,9 @@
 /* GMaps Historie – frontendová logika (ES modul, sdílené helpery v common.js) */
 import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
-         buildUrl, apiFetch, escapeHtml, toast } from "./common.js";
+         buildUrl, apiFetch, escapeHtml, toast,
+         isDarkTheme, initThemeToggle } from "./common.js";
+
+initThemeToggle($("themeBtn"));
 
 const tooltip = $("tooltip");
 
@@ -23,10 +26,27 @@ const baseLayers = {
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19, attribution: "Tiles &copy; Esri" }),
 };
-const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-baseLayers[prefersDark ? "Tmavá (Carto)" : "OpenStreetMap"].addTo(map);
-L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
+baseLayers[isDarkTheme() ? "Tmavá (Carto)" : "OpenStreetMap"].addTo(map);
+const layersControl = L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
 L.control.scale({ imperial: false }).addTo(map);
+
+/* Offline mapa (PMTiles): pokud na serveru leží data/map.pmtiles, přidá se
+   plně lokální podklad a rovnou se použije – žádná dlaždice neopustí síť. */
+(async function initOfflineBasemap() {
+  try {
+    const st = await apiFetch("/api/pmtiles/status");
+    if (!st.available || typeof protomapsL === "undefined") return;
+    const offline = protomapsL.leafletLayer({
+      url: new URL("/api/pmtiles", location.origin).toString(),
+      theme: isDarkTheme() ? "dark" : "light",
+      attribution: '<a href="https://protomaps.com">Protomaps</a> © OpenStreetMap',
+    });
+    baseLayers["Offline (PMTiles)"] = offline;
+    layersControl.addBaseLayer(offline, "Offline (PMTiles)");
+    Object.values(baseLayers).forEach((l) => { if (map.hasLayer(l) && l !== offline) map.removeLayer(l); });
+    offline.addTo(map);
+  } catch (e) { /* offline mapa není k dispozici */ }
+})();
 
 const trackLayer = L.layerGroup().addTo(map);
 const pointLayer = L.layerGroup().addTo(map);
@@ -242,10 +262,35 @@ function renderTracks() {
   }
 }
 
+let glifyLayer = null;
+
+function clearGlify() {
+  if (glifyLayer) {
+    glifyLayer.remove();
+    glifyLayer = null;
+  }
+}
+
 function renderPoints() {
   pointLayer.clearLayers();
+  clearGlify();
   if (!$("layerPoints").checked) return;
   const pts = state.points;
+
+  // nad ~20k bodů převezme kreslení WebGL (L.glify) – zvládne statisíce bodů
+  if (pts.length > 20000 && window.L?.glify) {
+    const hex = css("--series-1");
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    glifyLayer = L.glify.points({
+      map,
+      data: pts.map((p) => [p[1], p[2]]),
+      size: 6,
+      color: { r, g, b, a: 0.6 },
+      click: (e, point) => whenIWasHere(point[0], point[1]),
+    });
+    return;
+  }
+
   const step = Math.max(1, Math.ceil(pts.length / 20000)); // strop kvůli plynulosti
   const shown = Math.ceil(pts.length / step);
   const withTooltips = shown <= 3000; // tooltip na každém bodu je drahý – jen při detailu
@@ -438,6 +483,77 @@ function renderAnalysis(a) {
         `<b>${y.km.toLocaleString("cs")} km</b></div>`).join("")
     : '<p class="muted">Žádné rozpoznané cesty v období.</p>';
 }
+
+// -------------------------------------------------------- kalendář roku
+
+// sekvenční modrá pro km/den; šedá = data bez rozpoznané jízdy
+const CAL_STEPS = ["#9ec5f4", "#6da7ec", "#3987e5", "#1c5cab", "#0d366b"];
+let calYear = new Date().getFullYear();
+
+async function renderCalendar() {
+  $("calYear").textContent = calYear;
+  const el = $("calendar");
+  let data;
+  try {
+    data = await api("/api/calendar", { year: calYear });
+  } catch (e) {
+    el.innerHTML = "";
+    return;
+  }
+  const byDate = new Map(data.days.map((d) => [d.date, d]));
+  const maxKm = Math.max(...data.days.map((d) => d.km), 1);
+  const cell = 11, gap = 2;
+  const first = new Date(calYear, 0, 1);
+  const startCol = (first.getDay() + 6) % 7;   // pondělí = 0
+  const gridBg = css("--grid");
+
+  let svg = "";
+  const months = [];
+  for (let d = new Date(first); d.getFullYear() === calYear; d.setDate(d.getDate() + 1)) {
+    const dayIdx = Math.floor((d - first) / 86400000);
+    const col = Math.floor((dayIdx + startCol) / 7);
+    const row = (dayIdx + startCol) % 7;
+    const iso = toDateStr(d);
+    const info = byDate.get(iso);
+    let fill = "transparent", stroke = gridBg;
+    if (info) {
+      if (info.km > 0) {
+        const idx = Math.min(4, Math.floor((info.km / maxKm) * 5));
+        fill = CAL_STEPS[idx];
+        stroke = "none";
+      } else {
+        fill = css("--baseline");   // záznam polohy, ale žádná jízda
+        stroke = "none";
+      }
+    }
+    if (d.getDate() === 1) months.push([col, d.toLocaleDateString("cs", { month: "short" })]);
+    svg += `<rect x="${col * (cell + gap)}" y="${14 + row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="0.75" data-d="${iso}"><title>${d.toLocaleDateString("cs")}${info ? ` – ${info.km} km` : ""}</title></rect>`;
+  }
+  const weeks = Math.ceil((365 + startCol) / 7) + 1;
+  const width = weeks * (cell + gap);
+  const monthLabels = months.map(([c, name]) =>
+    `<text x="${c * (cell + gap)}" y="9">${name}</text>`).join("");
+  el.innerHTML =
+    `<svg viewBox="0 0 ${width} ${14 + 7 * (cell + gap)}" role="img" ` +
+    `aria-label="Kalendář najetých km v roce ${calYear}">${monthLabels}${svg}</svg>`;
+  el.querySelectorAll("rect[data-d]").forEach((r) =>
+    r.addEventListener("click", () => {
+      $("playDate").value = r.dataset.d;
+      playDay();
+    }));
+}
+
+$("calPrev").addEventListener("click", () => { calYear--; renderCalendar(); });
+$("calNext").addEventListener("click", () => { calYear++; renderCalendar(); });
+
+// ------------------------------------------------------ klávesové zkratky
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey) return;
+  if (e.key === "ArrowLeft") { shiftDay(-1); }
+  else if (e.key === "ArrowRight") { shiftDay(1); }
+  else if (e.code === "Space") { e.preventDefault(); $("playBtn").click(); }
+});
 
 // ------------------------------------------------- hledání a historie místa
 
@@ -854,7 +970,10 @@ async function showAutoImportLog() {
   $("playDate").value = toDateStr(new Date());
   try {
     const r = await api("/api/range");
-    if (r.max_ts) $("playDate").value = toDateStr(new Date(r.max_ts * 1000));
+    if (r.max_ts) {
+      $("playDate").value = toDateStr(new Date(r.max_ts * 1000));
+      calYear = new Date(r.max_ts * 1000).getFullYear();
+    }
     if (!r.points && !r.visits) {
       // prázdná databáze → navést uživatele rovnou k importu
       $("importFile").closest("details").open = true;
@@ -864,5 +983,6 @@ async function showAutoImportLog() {
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   showAutoImportLog();
+  renderCalendar();
   loadAll();
 })();

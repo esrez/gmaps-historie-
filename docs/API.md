@@ -17,6 +17,9 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/analysis` | GET | km podle dne v týdnu, aktivita po hodinách, km po letech, místa po měsících |
 | `/api/search_visits` | GET | fulltext ve vlastních místech (`q`) |
 | `/api/at_location` | GET | pobyty v okruhu (`lat`, `lon`, `radius_m`); slučuje GPS pobyty se záznamy návštěv |
+| `/api/calendar` | GET | denní km + počty bodů pro kalendář roku (`year`) |
+| `/api/pmtiles/status` | GET | dostupnost offline mapy `data/map.pmtiles` |
+| `/api/pmtiles` | GET | servíruje PMTiles s podporou HTTP Range |
 
 ## Import a údržba
 

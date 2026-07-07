@@ -83,7 +83,38 @@ si nechte – kdykoli je lze naimportovat znovu.
 ručně tlačítkem. Obnovení: zastavit kontejner, nahradit `data/history.db`
 souborem zálohy, spustit.
 
-## 5. Provoz
+## 5. Instalace jako aplikace (PWA) a offline mapy
+
+**Instalace na plochu:** v prohlížeči otevřete aplikaci a zvolte
+„Přidat na plochu" / „Instalovat aplikaci" (Chrome/Edge: ikona v adresním
+řádku). Poběží v samostatném okně a UI naběhne i bez připojení.
+Pozn.: service worker vyžaduje HTTPS, nebo přístup přes `localhost`.
+
+**Plně offline mapový podklad:** stáhněte si mapu ve formátu PMTiles
+a uložte ji jako `data/map.pmtiles` – v přepínači vrstev přibude
+„Offline (PMTiles)" a použije se automaticky. Jak mapu získat:
+
+```bash
+# nástroj pmtiles: https://github.com/protomaps/go-pmtiles/releases
+# výřez České republiky z aktuálního sestavení světa (~1–2 GB):
+pmtiles extract https://build.protomaps.com/20250101.pmtiles data/map.pmtiles \
+    --bbox=12.0,48.5,18.9,51.1
+```
+
+Aktuální sestavení najdete na https://maps.protomaps.com/builds/. Bez
+offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
+
+## 6. Ovládání navíc
+
+- **Vzhled**: tlačítko vedle nadpisu přepíná auto → tmavý → světlý.
+- **Klávesy** (na mapě): ◀ ▶ šipky listují dny přehrávání, mezerník
+  spouští/zastavuje přehrávání.
+- **Mobil**: kniha jízd se zobrazuje jako karty, panel mapy je vysouvací
+  list; vše má větší dotykové plochy.
+- **Undo**: kniha jízd drží posledních 10 hromadných akcí – tlačítko
+  „Vrátit" lze použít opakovaně.
+
+## 7. Provoz
 
 | Co | Jak |
 |---|---|
@@ -94,7 +125,7 @@ souborem zálohy, spustit.
 | Logy | `docker compose logs -f` |
 | Interaktivní API | `http://server:8000/api/docs` |
 
-## 6. Řešení potíží
+## 8. Řešení potíží
 
 - **Mapa je prázdná** – zkontrolujte období (zkuste „Vše") a `/api/range`.
 - **Import hlásí chybu** – část dat už mohla být uložena; po opravě souboru

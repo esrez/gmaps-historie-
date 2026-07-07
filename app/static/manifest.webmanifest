@@ -1,0 +1,18 @@
+{
+  "name": "GMaps Historie",
+  "short_name": "Historie",
+  "description": "Historie polohy z Google Maps – mapa, statistiky, kniha jízd",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a1a19",
+  "theme_color": "#2a78d6",
+  "lang": "cs",
+  "icons": [
+    { "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/static/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Kniha jízd", "url": "/kniha" }
+  ]
+}
