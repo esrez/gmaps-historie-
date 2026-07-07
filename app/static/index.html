@@ -67,6 +67,8 @@
       <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
       <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
       <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
+      <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
+        <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
     </details>
 
     <details class="sec" open>
@@ -108,6 +110,7 @@
       <div class="row">
         <button id="playBtn" class="primary">▶ Přehrát</button>
         <span id="playClock" class="clock">–:–</span>
+        <span id="playSpeedNow" class="muted"></span>
       </div>
       <input type="range" id="playSlider" min="0" max="1000" value="0">
       <div id="playInfo" class="muted"></div>
@@ -161,7 +164,7 @@
     </details>
   </aside>
 
-  <main id="map"></main>
+  <main id="map"><div id="mapLoading" hidden>Načítám…</div></main>
 </div>
 <div id="tooltip" hidden></div>
 

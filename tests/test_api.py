@@ -37,6 +37,22 @@ def test_stats_fallback_to_points(client, test_db, tmp_path):
     assert s["total_km"] > 0
 
 
+def test_points_viewport_bbox(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    box = {"min_lat": 50.095, "max_lat": 50.105, "min_lon": 14.385, "max_lon": 14.395}
+    sub = client.get("/api/points", params=box).json()
+    assert 0 < sub["total"] < 100          # jen část bodů u kanceláře
+    full = client.get("/api/points").json()
+    assert full["total"] == 100
+
+
+def test_heatmap_precision(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    coarse = client.get("/api/heatmap?precision=2").json()["cells"]
+    fine = client.get("/api/heatmap?precision=5").json()["cells"]
+    assert len(fine) > len(coarse)          # jemnější mřížka → víc buněk
+
+
 def test_at_location(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     res = client.get("/api/at_location",

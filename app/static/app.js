@@ -35,10 +35,21 @@ const locLayer = L.layerGroup().addTo(map);
 const canvasRenderer = L.canvas({ padding: 0.3 });
 let heatLayer = null;
 
-const state = { points: [], heatCells: [], visits: [], fitted: false };
+const state = { points: [], heatCells: [], visits: [], fitted: false, loadedOnce: false };
 
 const css = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function debounce(fn, ms) {
+  let t = null;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function distKm(a, b) {
+  const dLat = (b[1] - a[1]) * 111;
+  const dLon = (b[2] - a[2]) * 111 * Math.cos((a[1] * Math.PI) / 180);
+  return Math.hypot(dLat, dLon);
+}
 
 // ---------------------------------------------------------------- období
 
@@ -69,31 +80,93 @@ $("loadBtn").addEventListener("click", loadAll);
 
 const api = (path, params) => apiFetch(path, { params });
 
+/* Parametry výřezu mapy: při přiblížení se dotahuje plný detail jen pro
+   viditelnou oblast a heatmapa dostane jemnější mřížku. */
+function viewportParams() {
+  if (!$("layerViewport").checked || !state.loadedOnce) return {};
+  const b = map.getBounds().pad(0.3);
+  const z = map.getZoom();
+  return {
+    min_lat: b.getSouth().toFixed(5), max_lat: b.getNorth().toFixed(5),
+    min_lon: b.getWest().toFixed(5), max_lon: b.getEast().toFixed(5),
+    precision: z >= 14 ? 5 : z >= 11 ? 4 : z >= 8 ? 3 : 2,
+  };
+}
+
+let mapLoadSeq = 0;
+
+async function loadMapData() {
+  const r = { ...currentRange(), ...viewportParams() };
+  const seq = ++mapLoadSeq;
+  $("mapLoading").hidden = false;
+  try {
+    const [pts, heat] = await Promise.all([
+      api("/api/points", r),
+      api("/api/heatmap", r),
+    ]);
+    if (seq !== mapLoadSeq) return null;   // mezitím odstartoval novější dotaz
+    state.points = pts.points;
+    state.heatCells = heat.cells;
+    renderTracks();
+    renderPoints();
+    renderHeat();
+    $("dbInfo").textContent =
+      `Zobrazeno ${pts.sampled.toLocaleString("cs")} z ${pts.total.toLocaleString("cs")} bodů` +
+      (pts.step > 1 ? ` (vzorkování 1:${pts.step})` : "");
+    return pts;
+  } finally {
+    if (seq === mapLoadSeq) $("mapLoading").hidden = true;
+  }
+}
+
 async function loadAll() {
   const r = currentRange();
   $("loadBtn").disabled = true;
   try {
-    const [pts, heat, visits, stats, analysis] = await Promise.all([
-      api("/api/points", r),
-      api("/api/heatmap", r),
+    const [, visits, stats, analysis] = await Promise.all([
+      loadMapData(),
       api("/api/visits", r),
       api("/api/stats", r),
       api("/api/analysis", r),
     ]);
-    state.points = pts.points;
-    state.heatCells = heat.cells;
     state.visits = visits.visits;
-    renderTracks();
-    renderPoints();
-    renderHeat();
     renderVisits();
-    renderStats(stats, pts);
+    renderStats(stats);
     renderAnalysis(analysis);
+    state.loadedOnce = true;
     if (!state.fitted) fitToData();
+    writeHash();
   } catch (e) {
     toast("Načtení dat selhalo: " + e.message, "error");
   } finally {
     $("loadBtn").disabled = false;
+  }
+}
+
+map.on("moveend", debounce(() => {
+  writeHash();
+  if ($("layerViewport").checked && state.loadedOnce) loadMapData();
+}, 400));
+
+// ---------------------------------------------- stav pohledu v adrese (URL)
+
+function writeHash() {
+  const c = map.getCenter();
+  const parts = [];
+  if ($("dateFrom").value) parts.push("od=" + $("dateFrom").value);
+  if ($("dateTo").value) parts.push("do=" + $("dateTo").value);
+  parts.push(`ll=${c.lat.toFixed(5)},${c.lng.toFixed(5)}`, `z=${map.getZoom()}`);
+  history.replaceState(null, "", "#" + parts.join("&"));
+}
+
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("od")) $("dateFrom").value = h.get("od");
+  if (h.get("do")) $("dateTo").value = h.get("do");
+  const ll = (h.get("ll") || "").split(",").map(Number);
+  if (ll.length === 2 && !ll.some(isNaN)) {
+    map.setView(ll, Number(h.get("z")) || 12);
+    state.fitted = true;   // pohled je dán adresou, neskákat na data
   }
 }
 
@@ -186,11 +259,13 @@ function renderHeat() {
 }
 
 function visitMarker(v) {
+  // velikost značky roste s časem stráveným na místě (odmocninou, ať neuletí)
+  const hours = Math.max((v.end_ts - v.start_ts) / 3600, 0);
   return L.circleMarker([v.lat, v.lon], {
-    radius: 5,
+    radius: Math.min(12, 4 + Math.sqrt(hours) * 1.6),
     color: css("--series-2"),
     fillColor: css("--series-2"),
-    fillOpacity: 0.6,
+    fillOpacity: 0.55,
     weight: 1,
   });
 }
@@ -216,6 +291,10 @@ function renderVisits() {
     renderHeat();
     renderVisits();
   }));
+
+$("layerViewport").addEventListener("change", () => {
+  if (state.loadedOnce) loadMapData();   // přepnutí režimu → překreslit hned
+});
 
 // ------------------------------------------------------------ statistiky
 
@@ -260,10 +339,6 @@ function renderStats(s, pts) {
       const p = s.top_places[Number(a.dataset.i)];
       map.setView([p.lat, p.lon], 15);
     }));
-
-  $("dbInfo").textContent =
-    `Zobrazeno ${pts.sampled.toLocaleString("cs")} z ${pts.total.toLocaleString("cs")} bodů` +
-    (pts.step > 1 ? ` (vzorkování 1:${pts.step})` : "");
 }
 
 // Obecný sloupcový graf – SVG, jedna řada (modrá), tooltip na hover.
@@ -502,14 +577,40 @@ function shiftDay(delta) {
 $("dayPrev").addEventListener("click", () => shiftDay(-1));
 $("dayNext").addEventListener("click", () => shiftDay(1));
 
+// stopa dne je obarvená rychlostí – sekvenční modrá řada (světlá = pomalu)
+const SPEED_STEPS = [
+  [6, "#9ec5f4"], [25, "#6da7ec"], [60, "#3987e5"],
+  [100, "#256abf"], [Infinity, "#0d366b"],
+];
+
+function segmentSpeedKmh(a, b) {
+  const dt = b[0] - a[0];
+  if (dt <= 0 || dt > 900) return 0;
+  return (distKm(a, b) / dt) * 3600;
+}
+
+function speedColor(kmh) {
+  for (const [limit, color] of SPEED_STEPS)
+    if (kmh < limit) return color;
+  return SPEED_STEPS[SPEED_STEPS.length - 1][1];
+}
+
+function addTrailSegment(a, b) {
+  L.polyline([[a[1], a[2]], [b[1], b[2]]], {
+    renderer: canvasRenderer,
+    color: speedColor(segmentSpeedKmh(a, b)),
+    weight: 4,
+    opacity: 0.9,
+  }).addTo(play.trail);
+}
+
 function startPlayback(day) {
   playLayer.clearLayers();
   play.points = day.points;
   const pts = play.points;
   play.t = pts[0][0];
   play.idx = 1;
-  play.trail = L.polyline([[pts[0][1], pts[0][2]]],
-    { color: css("--accent-red"), weight: 3 }).addTo(playLayer);
+  play.trail = L.layerGroup().addTo(playLayer);
   play.marker = L.circleMarker([pts[0][1], pts[0][2]], {
     radius: 8, color: "#fff", weight: 2,
     fillColor: css("--accent-red"), fillOpacity: 1,
@@ -522,7 +623,8 @@ function startPlayback(day) {
   const km = day.activities.reduce((a, x) => a + (x.distance_m || 0), 0) / 1000;
   $("playInfo").textContent =
     `${day.points.length} bodů, ${day.visits.length} návštěv` +
-    (km ? `, ${km.toFixed(1)} km dle aktivit` : "");
+    (km ? `, ${km.toFixed(1)} km dle aktivit` : "") +
+    " · barva stopy = rychlost (světlá pomalu, tmavá rychle)";
   renderDayTimeline(day);
 
   $("playBtn").textContent = "⏸ Zastavit";
@@ -569,14 +671,14 @@ function renderPlayhead(t) {
   // posun zpět (slider) → kurzor a stopu postavit znovu od začátku
   if (t < pts[play.idx - 1][0]) {
     play.idx = 1;
-    play.trail.setLatLngs([[pts[0][1], pts[0][2]]]);
+    play.trail.clearLayers();
   }
-  // kurzor jde jen dopředu; stopa roste přidáváním bodů, ne přestavbou
+  // kurzor jde jen dopředu; stopa roste přidáváním úseků, ne přestavbou
   while (play.idx <= last && pts[play.idx][0] <= t) {
-    play.trail.addLatLng([pts[play.idx][1], pts[play.idx][2]]);
+    addTrailSegment(pts[play.idx - 1], pts[play.idx]);
     play.idx++;
   }
-  let lat, lon;
+  let lat, lon, kmh = 0;
   if (play.idx > last) {
     lat = pts[last][1]; lon = pts[last][2];
   } else {
@@ -585,9 +687,11 @@ function renderPlayhead(t) {
     const f = gap > 0 && gap < 900 ? Math.min(1, (t - a[0]) / gap) : 0;
     lat = a[1] + (b[1] - a[1]) * f;
     lon = a[2] + (b[2] - a[2]) * f;
+    kmh = segmentSpeedKmh(a, b);
   }
   play.marker.setLatLng([lat, lon]);
   $("playClock").textContent = new Date(t * 1000).toLocaleTimeString("cs");
+  $("playSpeedNow").textContent = kmh >= 1 ? `${Math.round(kmh)} km/h` : "";
   const t0 = pts[0][0], t1 = pts[last][0];
   $("playSlider").value = t1 > t0 ? Math.round(((t - t0) / (t1 - t0)) * 1000) : 1000;
 }
@@ -603,6 +707,7 @@ function stopPlayback() {
   if (play.timer) cancelAnimationFrame(play.timer);
   play.timer = null;
   $("playBtn").textContent = "▶ Přehrát";
+  $("playSpeedNow").textContent = "";
 }
 
 // ------------------------------------------------------------ údržba dat
@@ -730,6 +835,7 @@ async function showAutoImportLog() {
 // ------------------------------------------------------------------ start
 
 (async function init() {
+  readHash();   // obnovit pohled a období z adresy (záložky, sdílení, reload)
   $("playDate").value = toDateStr(new Date());
   try {
     const r = await api("/api/range");
