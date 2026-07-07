@@ -174,29 +174,53 @@ def api_range():
     }
 
 
-@app.get("/api/points")
-def api_points(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
-               limit: int = Query(MAX_TRACK_POINTS, ge=1, le=200_000)):
+def _bbox_sql(min_lat, max_lat, min_lon, max_lon) -> tuple[str, tuple]:
+    """Volitelné omezení na výřez mapy – klient tak při přiblížení dostane
+    plný detail místo hrubého vzorku celého období."""
+    if None in (min_lat, max_lat, min_lon, max_lon):
+        return "", ()
+    return (" AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
+            (min_lat, max_lat, min_lon, max_lon))
+
+
+def _points_data(from_ts, to_ts, limit=MAX_TRACK_POINTS,
+                 min_lat=None, max_lat=None, min_lon=None, max_lon=None):
     lo, hi = ts_range(from_ts, to_ts)
+    bsql, bargs = _bbox_sql(min_lat, max_lat, min_lon, max_lon)
     with closing(db.connect()) as conn:
-        n = conn.execute("SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?",
-                         (lo, hi)).fetchone()["c"]
+        n = conn.execute(
+            f"SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?{bsql}",
+            (lo, hi, *bargs)).fetchone()["c"]
         step = max(1, -(-n // limit))
         rows = conn.execute(
-            "SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ? AND (id % ?) = 0 ORDER BY ts",
-            (lo, hi, step)).fetchall()
+            f"SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ?{bsql} "
+            f"AND (id % ?) = 0 ORDER BY ts",
+            (lo, hi, *bargs, step)).fetchall()
     return {"total": n, "sampled": len(rows), "step": step,
             "points": [[r["ts"], round(r["lat"], 6), round(r["lon"], 6)] for r in rows]}
 
 
+@app.get("/api/points")
+def api_points(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+               limit: int = Query(MAX_TRACK_POINTS, ge=1, le=200_000),
+               min_lat: float | None = Query(None), max_lat: float | None = Query(None),
+               min_lon: float | None = Query(None), max_lon: float | None = Query(None)):
+    return _points_data(from_ts, to_ts, limit, min_lat, max_lat, min_lon, max_lon)
+
+
 @app.get("/api/heatmap")
-def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                precision: int = Query(4, ge=2, le=6),
+                min_lat: float | None = Query(None), max_lat: float | None = Query(None),
+                min_lon: float | None = Query(None), max_lon: float | None = Query(None)):
+    """Heatmapa s rozlišením podle přiblížení (precision = desetinná místa)."""
     lo, hi = ts_range(from_ts, to_ts)
+    bsql, bargs = _bbox_sql(min_lat, max_lat, min_lon, max_lon)
     with closing(db.connect()) as conn:
         rows = conn.execute(
-            "SELECT ROUND(lat,4) la, ROUND(lon,4) lo, COUNT(*) c FROM points "
-            "WHERE ts BETWEEN ? AND ? GROUP BY la, lo ORDER BY c DESC LIMIT ?",
-            (lo, hi, MAX_HEAT_CELLS)).fetchall()
+            f"SELECT ROUND(lat,?) la, ROUND(lon,?) lo, COUNT(*) c FROM points "
+            f"WHERE ts BETWEEN ? AND ?{bsql} GROUP BY la, lo ORDER BY c DESC LIMIT ?",
+            (precision, precision, lo, hi, *bargs, MAX_HEAT_CELLS)).fetchall()
     return {"cells": [[r["la"], r["lo"], r["c"]] for r in rows]}
 
 
@@ -429,7 +453,7 @@ def api_export_xlsx(from_ts: int | None = Query(None), to_ts: int | None = Query
                for p in stats["top_places"]], widths=[34, 9, 9, 11, 11])
 
         if include_points:
-            pts = api_points(from_ts=from_ts, to_ts=to_ts, limit=100_000)
+            pts = _points_data(from_ts, to_ts, limit=100_000)
             ws = sheet(wb, "GPS body", ["Čas", "Lat", "Lon"],
                        [[fmt_dt(p[0]), p[1], p[2]] for p in pts["points"]],
                        widths=[18, 11, 11])
@@ -468,7 +492,7 @@ def api_export_location(lat: float = Query(...), lon: float = Query(...),
 @app.get("/api/export.gpx")
 def api_export_gpx(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                    limit: int = Query(100_000, ge=1, le=500_000)):
-    pts = api_points(from_ts=from_ts, to_ts=to_ts, limit=limit)
+    pts = _points_data(from_ts, to_ts, limit=limit)
     parts = ['<?xml version="1.0" encoding="UTF-8"?>\n'
              '<gpx version="1.1" creator="gmaps-historie" '
              'xmlns="http://www.topografix.com/GPX/1/1">\n<trk><trkseg>\n']

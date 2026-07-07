@@ -10,6 +10,14 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 - **Mapa tras a bodů** – trasy, jednotlivé GPS body (s časem po najetí myší)
   i navštívená místa, filtrování podle období (vč. předvoleb Letos/Loni);
   najetí na trasu ukáže čas, kliknutí na ni rovnou přehraje daný den
+- **Detail podle výřezu mapy** – při posunu či přiblížení se automaticky
+  dotáhne plný detail jen pro viditelnou oblast (žádné hrubé vzorkování
+  při zoomu) a heatmapa přepne na jemnější mřížku; s indikátorem načítání
+- **Stav v adrese** – zvolené období a pohled na mapu se drží v URL, takže
+  funguje záložkování, sdílení odkazu i obnovení stránky
+- **Přehrávání se stopou obarvenou rychlostí** – světlá = chůze, tmavá =
+  rychlá jízda, u ukazatele běží aktuální km/h; velikost značek míst
+  odpovídá času tam strávenému
 - **4 mapové podklady** – OpenStreetMap, světlý a tmavý (Carto), satelitní
   (Esri); tmavý se předvolí podle vzhledu systému; měřítko na mapě
 - **Shlukování míst** – při oddálení se navštívená místa slučují do
