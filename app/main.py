@@ -6,15 +6,17 @@ import os
 import shutil
 import tempfile
 from collections import defaultdict
+from contextlib import closing
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import db, importer
+from . import db, importer, trips
 
 app = FastAPI(title="GMaps Historie", docs_url="/api/docs", openapi_url="/api/openapi.json")
+app.include_router(trips.router)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -39,7 +41,7 @@ def _range(from_ts: int | None, to_ts: int | None) -> tuple[int, int]:
 
 @app.get("/api/range")
 def api_range():
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         row = conn.execute(
             "SELECT MIN(ts) a, MAX(ts) b, COUNT(*) n FROM points").fetchone()
         visits = conn.execute("SELECT COUNT(*) n, MIN(start_ts) a, MAX(end_ts) b FROM visits").fetchone()
@@ -57,7 +59,7 @@ def api_range():
 def api_points(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                limit: int = Query(MAX_TRACK_POINTS, le=200_000)):
     lo, hi = _range(from_ts, to_ts)
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         n = conn.execute("SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?",
                          (lo, hi)).fetchone()["c"]
         step = max(1, -(-n // limit))
@@ -71,7 +73,7 @@ def api_points(from_ts: int | None = Query(None), to_ts: int | None = Query(None
 @app.get("/api/heatmap")
 def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
     lo, hi = _range(from_ts, to_ts)
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         rows = conn.execute(
             "SELECT ROUND(lat,4) la, ROUND(lon,4) lo, COUNT(*) c FROM points "
             "WHERE ts BETWEEN ? AND ? GROUP BY la, lo ORDER BY c DESC LIMIT ?",
@@ -83,7 +85,7 @@ def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
 def api_visits(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                limit: int = Query(5000, le=20000)):
     lo, hi = _range(from_ts, to_ts)
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         rows = conn.execute(
             "SELECT start_ts, end_ts, lat, lon, name, address, semantic FROM visits "
             "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts LIMIT ?",
@@ -94,7 +96,7 @@ def api_visits(from_ts: int | None = Query(None), to_ts: int | None = Query(None
 @app.get("/api/day")
 def api_day(from_ts: int = Query(...), to_ts: int = Query(...)):
     """Vše pro přehrávání jednoho dne (hranice dne posílá klient ve své TZ)."""
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         pts = conn.execute(
             "SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ? ORDER BY ts LIMIT 50000",
             (from_ts, to_ts)).fetchall()
@@ -131,7 +133,7 @@ def _point_distances(conn, lo: int, hi: int, tz_offset_min: int):
                 d = haversine_m(prev[1], prev[2], lat, lon)
                 if d / dt <= 70:
                     month = datetime.fromtimestamp(ts + off, timezone.utc).strftime("%Y-%m")
-                monthly[month] += d
+                    monthly[month] += d
         prev = (ts, lat, lon)
     return monthly, step > 1
 
@@ -141,7 +143,7 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
               tz_offset_min: int = Query(0)):
     lo, hi = _range(from_ts, to_ts)
     off = tz_offset_min * 60
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         n_points = conn.execute(
             "SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?", (lo, hi)).fetchone()["c"]
         days = conn.execute(
@@ -201,7 +203,7 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
 def api_search_visits(q: str = Query(..., min_length=2), limit: int = Query(20, le=100)):
     """Fulltextové hledání ve vlastních navštívených místech."""
     like = f"%{q}%"
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         rows = conn.execute(
             "SELECT COALESCE(NULLIF(name,''), COALESCE(semantic,'') || ' ' || "
             "       ROUND(lat,3) || ', ' || ROUND(lon,3)) label, "
@@ -259,7 +261,7 @@ def api_at_location(lat: float = Query(...), lon: float = Query(...),
                     radius_m: float = Query(200, ge=20, le=5000),
                     from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
     lo, hi = _range(from_ts, to_ts)
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
     return {
         "stays": [{"start_ts": s, "end_ts": e, "name": n,
@@ -310,7 +312,7 @@ def api_export_xlsx(from_ts: int | None = Query(None), to_ts: int | None = Query
     wb = Workbook()
     wb.remove(wb.active)
 
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         visits = conn.execute(
             "SELECT start_ts, end_ts, name, address, semantic, lat, lon FROM visits "
             "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts", (lo, hi)).fetchall()
@@ -360,7 +362,7 @@ def api_export_location(lat: float = Query(...), lon: float = Query(...),
     from openpyxl import Workbook
     lo, hi = _range(from_ts, to_ts)
     off = tz_offset_min * 60
-    with db.connect() as conn:
+    with closing(db.connect()) as conn:
         merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
     wb = Workbook()
     wb.remove(wb.active)
@@ -412,6 +414,11 @@ async def api_import(file: UploadFile):
 @app.get("/")
 def index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+@app.get("/kniha")
+def kniha():
+    return FileResponse(os.path.join(STATIC_DIR, "kniha.html"))
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

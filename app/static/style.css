@@ -53,6 +53,9 @@ body {
 #map { flex: 1; min-height: 300px; background: var(--page); }
 
 h1 { font-size: 18px; margin: 4px 0 12px; }
+h1 .navlink { font-size: 12px; font-weight: 400; margin-left: 8px; }
+.navlink { color: var(--series-1); text-decoration: none; }
+.navlink:hover { text-decoration: underline; }
 h2 {
   font-size: 12px;
   text-transform: uppercase;

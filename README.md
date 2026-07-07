@@ -22,6 +22,16 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 - **Export do Excelu** – listy Návštěvy, Cesty, Km po měsících, Top místa
   a GPS body za zvolené období; zvlášť i export pobytů na konkrétním místě
 - **Export do GPX** – trasy pro použití v jiných mapových aplikacích
+- **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
+  - automatické generování jízd z rozpoznaných cest autem, volitelně jen
+    pracovní dny a pracovní doba (např. po–pá 6–18 h), s minimální délkou jízdy
+  - odkud/kam se doplní podle vašich navštívených míst (Domov, Práce, názvy míst)
+  - plně editovatelná tabulka (datum, časy, místa, km, účel, soukromá jízda),
+    ruční přidávání jízd; opakované generování nepřepíše ruční úpravy
+  - **export XLSX pro import do programu SPZ** (Milk Computers): sloupce SPZ,
+    Datum, Odjezd, Příjezd, Odkud, Kam, Účel jízdy, Km, Řidič, Soukromá.
+    Pozn.: vozidlo se stejnou SPZ musí být v programu SPZ založené, jinak
+    import odmítne; prázdného řidiče si SPZ doplní z karty vozidla
 - **Import všech formátů Googlu** s automatickou detekcí:
   - nový export z telefonu (`Timeline.json`, Android i iOS varianta)
   - starý Google Takeout (`Records.json` – zvládá i vícegigabajtové soubory

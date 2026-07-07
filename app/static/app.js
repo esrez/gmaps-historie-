@@ -63,10 +63,7 @@ $("loadBtn").addEventListener("click", loadAll);
 // ------------------------------------------------------------------ API
 
 async function api(path, params) {
-  const url = new URL(path, location.origin);
-  for (const [k, v] of Object.entries(params || {}))
-    if (v !== null && v !== undefined) url.searchParams.set(k, v);
-  const res = await fetch(url);
+  const res = await fetch(buildUrl(path, params));
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
   return res.json();
 }

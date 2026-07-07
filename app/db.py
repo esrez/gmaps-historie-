@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS visits (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_unique ON visits(start_ts, end_ts, lat, lon);
 CREATE INDEX IF NOT EXISTS idx_visits_ts ON visits(start_ts);
+CREATE INDEX IF NOT EXISTS idx_visits_lat ON visits(lat);
 
 CREATE TABLE IF NOT EXISTS activities (
     id         INTEGER PRIMARY KEY,
@@ -43,6 +44,21 @@ CREATE TABLE IF NOT EXISTS activities (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_act_unique ON activities(start_ts, end_ts, type);
 CREATE INDEX IF NOT EXISTS idx_act_ts ON activities(start_ts);
+
+CREATE TABLE IF NOT EXISTS trips (
+    id          INTEGER PRIMARY KEY,
+    start_ts    INTEGER NOT NULL,
+    end_ts      INTEGER NOT NULL,
+    km          REAL NOT NULL DEFAULT 0,
+    origin      TEXT,
+    destination TEXT,
+    purpose     TEXT,
+    driver      TEXT,
+    plate       TEXT,
+    private     INTEGER NOT NULL DEFAULT 0,
+    activity_ts INTEGER UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_trips_ts ON trips(start_ts);
 """
 
 
