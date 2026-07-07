@@ -11,8 +11,11 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 const trackLayer = L.layerGroup().addTo(map);
+const pointLayer = L.layerGroup().addTo(map);
 const visitLayer = L.layerGroup().addTo(map);
 const playLayer = L.layerGroup().addTo(map);
+const locLayer = L.layerGroup().addTo(map);
+const canvasRenderer = L.canvas({ padding: 0.3 });
 let heatLayer = null;
 
 const state = { points: [], heatCells: [], visits: [], fitted: false };
@@ -21,6 +24,10 @@ const css = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // ---------------------------------------------------------------- období
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function dateToTs(value, endOfDay) {
   const [y, m, d] = value.split("-").map(Number);
@@ -38,15 +45,13 @@ function currentRange() {
 
 function setPreset(days) {
   const today = new Date();
-  const toStr = (d) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   if (days === "all") {
     $("dateFrom").value = "";
     $("dateTo").value = "";
   } else {
     const from = new Date(today.getTime() - days * 86400 * 1000);
-    $("dateFrom").value = toStr(from);
-    $("dateTo").value = toStr(today);
+    $("dateFrom").value = toDateStr(from);
+    $("dateTo").value = toDateStr(today);
   }
   loadAll();
 }
@@ -81,6 +86,7 @@ async function loadAll() {
     state.heatCells = heat.cells;
     state.visits = visits.visits;
     renderTracks();
+    renderPoints();
     renderHeat();
     renderVisits();
     renderStats(stats, pts);
@@ -140,6 +146,26 @@ function renderTracks() {
   }
 }
 
+function renderPoints() {
+  pointLayer.clearLayers();
+  if (!$("layerPoints").checked) return;
+  const pts = state.points;
+  const step = Math.max(1, Math.ceil(pts.length / 20000)); // strop kvůli plynulosti
+  for (let i = 0; i < pts.length; i += step) {
+    const p = pts[i];
+    L.circleMarker([p[1], p[2]], {
+      renderer: canvasRenderer,
+      radius: 3.5,
+      color: css("--series-1"),
+      weight: 1,
+      fillColor: css("--series-1"),
+      fillOpacity: 0.55,
+    }).bindTooltip(new Date(p[0] * 1000).toLocaleString("cs"))
+      .on("click", () => whenIWasHere(p[1], p[2]))
+      .addTo(pointLayer);
+  }
+}
+
 function renderHeat() {
   if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
   if (!$("layerHeat").checked || !state.heatCells.length) return;
@@ -168,9 +194,10 @@ function renderVisits() {
   }
 }
 
-["layerTracks", "layerHeat", "layerVisits"].forEach((id) =>
+["layerTracks", "layerPoints", "layerHeat", "layerVisits"].forEach((id) =>
   $(id).addEventListener("change", () => {
     renderTracks();
+    renderPoints();
     renderHeat();
     renderVisits();
   }));
@@ -288,22 +315,164 @@ function renderMonthlyChart(monthly) {
   });
 }
 
+// ------------------------------------------------- hledání a historie místa
+
+const loc = { lat: null, lon: null, label: "" };
+
+$("searchBtn").addEventListener("click", doSearch);
+$("searchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+
+async function doSearch() {
+  const q = $("searchInput").value.trim();
+  if (q.length < 2) return;
+  $("searchResults").innerHTML = '<p class="muted">Hledám…</p>';
+  const [mine, world] = await Promise.all([
+    api("/api/search_visits", { q }).catch(() => ({ results: [] })),
+    fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=cs&q=${encodeURIComponent(q)}`)
+      .then((r) => r.json()).catch(() => []),
+  ]);
+  let html = "";
+  if (mine.results.length) {
+    html += "<h3>Moje místa</h3><ul class=\"resultList\">" + mine.results.map((r, i) =>
+      `<li><a data-kind="mine" data-i="${i}">${escapeHtml(r.label)}</a>` +
+      `<span class="muted"> — ${r.count}×, ${r.hours.toLocaleString("cs")} h</span></li>`).join("") + "</ul>";
+  }
+  if (world.length) {
+    html += "<h3>Mapa (OpenStreetMap)</h3><ul class=\"resultList\">" + world.map((r, i) =>
+      `<li><a data-kind="world" data-i="${i}">${escapeHtml(r.display_name)}</a></li>`).join("") + "</ul>";
+  }
+  $("searchResults").innerHTML = html || '<p class="muted">Nic nenalezeno.</p>';
+  $("searchResults").querySelectorAll("a").forEach((a) =>
+    a.addEventListener("click", () => {
+      const r = a.dataset.kind === "mine"
+        ? mine.results[Number(a.dataset.i)]
+        : world[Number(a.dataset.i)];
+      const lat = Number(r.lat), lon = Number(r.lon);
+      map.setView([lat, lon], 15);
+      whenIWasHere(lat, lon, a.dataset.kind === "mine" ? r.label : r.display_name);
+    }));
+}
+
+map.on("click", (e) => {
+  const { lat, lng } = e.latlng;
+  const div = document.createElement("div");
+  const btn = document.createElement("button");
+  btn.textContent = "Kdy jsem tu byl?";
+  btn.className = "primary";
+  btn.addEventListener("click", () => { map.closePopup(); whenIWasHere(lat, lng); });
+  div.appendChild(btn);
+  L.popup().setLatLng(e.latlng).setContent(div).openOn(map);
+});
+
+async function whenIWasHere(lat, lon, label) {
+  loc.lat = lat; loc.lon = lon;
+  loc.label = label || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  const radius = Number($("locRadius").value);
+  const r = currentRange();
+  $("locPanel").hidden = false;
+  $("locTitle").textContent = loc.label;
+  $("locSummary").textContent = "Hledám pobyty…";
+  $("locStays").innerHTML = "";
+
+  locLayer.clearLayers();
+  L.circle([lat, lon], {
+    radius, color: css("--accent-red"), weight: 2, fillOpacity: 0.08,
+  }).addTo(locLayer);
+
+  try {
+    const res = await api("/api/at_location", { lat, lon, radius_m: radius, ...r });
+    const hrs = (res.total_s / 3600).toLocaleString("cs", { maximumFractionDigits: 1 });
+    $("locSummary").textContent = res.count
+      ? `${res.count}× ve zvoleném období, celkem ${hrs} h`
+      : "Ve zvoleném období tu žádný pobyt není. Zkuste větší okruh nebo období Vše.";
+    $("locStays").innerHTML = res.stays.slice().reverse().map((s) => {
+      const d = new Date(s.start_ts * 1000);
+      const from = d.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric", year: "numeric" });
+      const t1 = d.toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" });
+      const t2 = new Date(s.end_ts * 1000).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" });
+      const dur = s.duration_s >= 5400
+        ? (s.duration_s / 3600).toFixed(1) + " h"
+        : Math.round(s.duration_s / 60) + " min";
+      return `<li><a data-ts="${s.start_ts}">${from}</a> ${t1}–${t2} ` +
+        `<b>${dur}</b>${s.name ? ' <span class="muted">' + escapeHtml(s.name) + "</span>" : ""}</li>`;
+    }).join("");
+    $("locStays").querySelectorAll("a").forEach((a) =>
+      a.addEventListener("click", () => {
+        const d = new Date(Number(a.dataset.ts) * 1000);
+        $("playDate").value = toDateStr(d);
+        playDay();
+      }));
+  } catch (e) {
+    $("locSummary").textContent = "Dotaz selhal: " + e.message;
+  }
+}
+
+$("locRadius").addEventListener("change", () => {
+  if (loc.lat !== null) whenIWasHere(loc.lat, loc.lon, loc.label);
+});
+$("locCloseBtn").addEventListener("click", () => {
+  $("locPanel").hidden = true;
+  locLayer.clearLayers();
+});
+$("locExportBtn").addEventListener("click", () => {
+  if (loc.lat === null) return;
+  const r = currentRange();
+  location.href = buildUrl("/api/export_location.xlsx", {
+    lat: loc.lat, lon: loc.lon, radius_m: Number($("locRadius").value),
+    ...r, tz_offset_min: -new Date().getTimezoneOffset(), label: loc.label,
+  });
+});
+
+// ---------------------------------------------------------------- exporty
+
+function buildUrl(path, params) {
+  const url = new URL(path, location.origin);
+  for (const [k, v] of Object.entries(params || {}))
+    if (v !== null && v !== undefined) url.searchParams.set(k, v);
+  return url.toString();
+}
+
+$("exportXlsx").addEventListener("click", () => {
+  location.href = buildUrl("/api/export.xlsx",
+    { ...currentRange(), tz_offset_min: -new Date().getTimezoneOffset() });
+});
+$("exportGpx").addEventListener("click", () => {
+  location.href = buildUrl("/api/export.gpx", currentRange());
+});
+
 // -------------------------------------------------------- přehrávání dne
 
 const play = { points: [], timer: null, t: 0, marker: null, trail: null };
 
-$("playBtn").addEventListener("click", async () => {
-  if (play.timer) { stopPlayback(); return; }
+async function playDay() {
+  stopPlayback();
   const dateVal = $("playDate").value;
   if (!dateVal) { alert("Vyberte den k přehrání."); return; }
   const from_ts = dateToTs(dateVal, false);
   const day = await api("/api/day", { from_ts, to_ts: from_ts + 86400 });
   if (day.points.length < 2) {
+    playLayer.clearLayers();
     $("playInfo").textContent = "Pro tento den nejsou žádné body.";
     return;
   }
   startPlayback(day);
+}
+
+$("playBtn").addEventListener("click", () => {
+  if (play.timer) { stopPlayback(); return; }
+  playDay();
 });
+
+function shiftDay(delta) {
+  const val = $("playDate").value;
+  if (!val) return;
+  const d = new Date(dateToTs(val, false) * 1000);
+  d.setDate(d.getDate() + delta);
+  $("playDate").value = toDateStr(d);
+  playDay();
+}
+$("dayPrev").addEventListener("click", () => shiftDay(-1));
+$("dayNext").addEventListener("click", () => shiftDay(1));
 
 function startPlayback(day) {
   playLayer.clearLayers();
@@ -395,14 +564,10 @@ $("importBtn").addEventListener("click", async () => {
 // ------------------------------------------------------------------ start
 
 (async function init() {
-  const today = new Date();
-  $("playDate").value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  $("playDate").value = toDateStr(new Date());
   try {
     const r = await api("/api/range");
-    if (r.max_ts) {
-      const d = new Date(r.max_ts * 1000);
-      $("playDate").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    }
+    if (r.max_ts) $("playDate").value = toDateStr(new Date(r.max_ts * 1000));
   } catch (e) { /* prázdná DB */ }
   loadAll();
 })();

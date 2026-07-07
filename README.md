@@ -7,11 +7,21 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 
 ## Funkce
 
-- **Mapa tras a bodů** – zobrazení pohybu na mapě s filtrováním podle období
+- **Mapa tras a bodů** – trasy, jednotlivé GPS body (s časem po najetí myší)
+  i navštívená místa, filtrování podle období
 - **Heatmapa** – kde trávíte nejvíc času / kudy nejčastěji jezdíte
+- **Hledání místa** – vyhledá vaše navštívená místa i libovolnou adresu/obec
+  (OpenStreetMap Nominatim)
+- **„Kdy jsem tu byl?"** – klikněte kamkoli do mapy (nebo na výsledek hledání)
+  a dostanete seznam všech svých pobytů v daném okruhu: datum, od–do, délka.
+  Kliknutím na pobyt se den rovnou přehraje; seznam jde exportovat do Excelu
 - **Statistiky** – celkové kilometry, rozpad podle dopravního prostředku,
   kilometry po měsících (graf), nejnavštěvovanější místa, hodiny strávené na místech
-- **Přehrávání dne** – animace pohybu ve zvoleném dni s časovou osou a rychlostí přehrávání
+- **Přehrávání dne** – animace pohybu ve zvoleném dni s časovou osou, rychlostí
+  přehrávání a listováním po dnech (◀ ▶)
+- **Export do Excelu** – listy Návštěvy, Cesty, Km po měsících, Top místa
+  a GPS body za zvolené období; zvlášť i export pobytů na konkrétním místě
+- **Export do GPX** – trasy pro použití v jiných mapových aplikacích
 - **Import všech formátů Googlu** s automatickou detekcí:
   - nový export z telefonu (`Timeline.json`, Android i iOS varianta)
   - starý Google Takeout (`Records.json` – zvládá i vícegigabajtové soubory

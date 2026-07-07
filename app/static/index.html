@@ -30,8 +30,37 @@
     </section>
 
     <section>
+      <h2>Hledání místa</h2>
+      <div class="row">
+        <input type="search" id="searchInput" placeholder="Obec, adresa, název místa…">
+        <button id="searchBtn">Hledat</button>
+      </div>
+      <div id="searchResults"></div>
+      <p class="muted">Klikněte do mapy a zvolte „Kdy jsem tu byl?" – zjistíte všechny
+         své pobyty v daném okruhu.</p>
+      <div id="locPanel" hidden>
+        <h3 id="locTitle"></h3>
+        <div class="row">
+          <label>Okruh
+            <select id="locRadius">
+              <option value="100">100 m</option>
+              <option value="200" selected>200 m</option>
+              <option value="500">500 m</option>
+              <option value="1000">1 km</option>
+            </select>
+          </label>
+          <button id="locExportBtn">Excel</button>
+          <button id="locCloseBtn">✕</button>
+        </div>
+        <div id="locSummary" class="muted"></div>
+        <ul id="locStays"></ul>
+      </div>
+    </section>
+
+    <section>
       <h2>Vrstvy</h2>
       <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
+      <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
       <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
       <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
     </section>
@@ -52,7 +81,9 @@
     <section>
       <h2>Přehrávání dne</h2>
       <div class="row">
+        <button id="dayPrev" title="Předchozí den">◀</button>
         <input type="date" id="playDate">
+        <button id="dayNext" title="Další den">▶</button>
         <select id="playSpeed">
           <option value="60">1 min/s</option>
           <option value="300" selected>5 min/s</option>
@@ -66,6 +97,16 @@
       </div>
       <input type="range" id="playSlider" min="0" max="1000" value="0">
       <div id="playInfo" class="muted"></div>
+    </section>
+
+    <section>
+      <h2>Export</h2>
+      <div class="row">
+        <button id="exportXlsx">📊 Excel (.xlsx)</button>
+        <button id="exportGpx">🛰 GPX</button>
+      </div>
+      <p class="muted">Exportuje zvolené období: návštěvy, cesty, statistiky
+         a GPS body do listů Excelu; GPX pro jiné mapové aplikace.</p>
     </section>
 
     <section>

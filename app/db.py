@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS points (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_points_unique ON points(ts, lat, lon);
 CREATE INDEX IF NOT EXISTS idx_points_ts ON points(ts);
+CREATE INDEX IF NOT EXISTS idx_points_lat ON points(lat);
 
 CREATE TABLE IF NOT EXISTS visits (
     id       INTEGER PRIMARY KEY,

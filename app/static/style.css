@@ -143,6 +143,41 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .clock { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; }
 
+input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.resultList { margin: 4px 0; padding-left: 16px; font-size: 12px; }
+.resultList li { margin: 3px 0; color: var(--text-secondary); }
+.resultList a { color: var(--series-1); cursor: pointer; text-decoration: none; }
+.resultList a:hover { text-decoration: underline; }
+
+#locPanel {
+  margin-top: 10px;
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+#locStays {
+  margin: 6px 0 0;
+  padding-left: 4px;
+  list-style: none;
+  font-size: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+}
+#locStays li { margin: 3px 0; color: var(--text-secondary); }
+#locStays a { color: var(--series-1); cursor: pointer; text-decoration: none; }
+#locStays a:hover { text-decoration: underline; }
+#locStays b { color: var(--text-primary); }
+
 #tooltip {
   position: fixed;
   z-index: 10000;

@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import db, importer
@@ -195,6 +195,201 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
                         "count": r["n"], "hours": round((r["secs"] or 0) / 3600, 1)}
                        for r in top_places],
     }
+
+
+@app.get("/api/search_visits")
+def api_search_visits(q: str = Query(..., min_length=2), limit: int = Query(20, le=100)):
+    """Fulltextové hledání ve vlastních navštívených místech."""
+    like = f"%{q}%"
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT COALESCE(NULLIF(name,''), COALESCE(semantic,'') || ' ' || "
+            "       ROUND(lat,3) || ', ' || ROUND(lon,3)) label, "
+            "       AVG(lat) lat, AVG(lon) lon, COUNT(*) n, "
+            "       SUM(end_ts - start_ts) secs, MAX(end_ts) last_ts "
+            "FROM visits WHERE name LIKE ? OR address LIKE ? OR semantic LIKE ? "
+            "GROUP BY label ORDER BY n DESC LIMIT ?", (like, like, like, limit)).fetchall()
+    return {"results": [{"label": r["label"], "lat": r["lat"], "lon": r["lon"],
+                         "count": r["n"], "hours": round((r["secs"] or 0) / 3600, 1),
+                         "last_ts": r["last_ts"]} for r in rows]}
+
+
+def _stays_at(conn, lat: float, lon: float, radius_m: float,
+              lo: int, hi: int, gap_s: int = 2700):
+    """Pobyty v okruhu daného místa: GPS body seskupené v čase + záznamy návštěv,
+    překrývající se intervaly sloučené do jednoho."""
+    dlat = radius_m / 111_000
+    dlon = radius_m / (111_000 * max(math.cos(math.radians(lat)), 0.01))
+    intervals: list[list] = []  # [start, end, name]
+
+    prev = None
+    cur = conn.execute(
+        "SELECT ts, lat, lon FROM points WHERE lat BETWEEN ? AND ? "
+        "AND lon BETWEEN ? AND ? AND ts BETWEEN ? AND ? ORDER BY ts",
+        (lat - dlat, lat + dlat, lon - dlon, lon + dlon, lo, hi))
+    for ts, plat, plon in cur:
+        if haversine_m(lat, lon, plat, plon) > radius_m:
+            continue
+        if prev is not None and ts - prev[1] <= gap_s:
+            prev[1] = ts
+        else:
+            prev = [ts, ts, None]
+            intervals.append(prev)
+
+    vrows = conn.execute(
+        "SELECT start_ts, end_ts, name, semantic FROM visits WHERE lat BETWEEN ? AND ? "
+        "AND lon BETWEEN ? AND ? AND start_ts BETWEEN ? AND ? ORDER BY start_ts",
+        (lat - dlat, lat + dlat, lon - dlon, lon + dlon, lo, hi)).fetchall()
+    for v in vrows:
+        intervals.append([v["start_ts"], v["end_ts"], v["name"] or v["semantic"]])
+
+    intervals.sort(key=lambda x: x[0])
+    merged: list[list] = []
+    for s, e, name in intervals:
+        if merged and s <= merged[-1][1] + gap_s:
+            merged[-1][1] = max(merged[-1][1], e)
+            merged[-1][2] = merged[-1][2] or name
+        else:
+            merged.append([s, e, name])
+    return merged
+
+
+@app.get("/api/at_location")
+def api_at_location(lat: float = Query(...), lon: float = Query(...),
+                    radius_m: float = Query(200, ge=20, le=5000),
+                    from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+    lo, hi = _range(from_ts, to_ts)
+    with db.connect() as conn:
+        merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
+    return {
+        "stays": [{"start_ts": s, "end_ts": e, "name": n,
+                   "duration_s": max(e - s, 60)} for s, e, n in merged],
+        "total_s": sum(max(e - s, 60) for s, e, _ in merged),
+        "count": len(merged),
+    }
+
+
+# ---------------------------------------------------------------- exporty
+
+def _fmt_dt(ts: int | None, off: int):
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts + off, timezone.utc).replace(tzinfo=None)
+
+
+def _xlsx_response(wb, filename: str):
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(
+        buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+def _sheet(wb, title, headers, rows, widths=None):
+    ws = wb.create_sheet(title)
+    from openpyxl.styles import Font
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        ws.append(row)
+    for i, w in enumerate(widths or []):
+        ws.column_dimensions[chr(ord("A") + i)].width = w
+    ws.freeze_panes = "A2"
+    return ws
+
+
+@app.get("/api/export.xlsx")
+def api_export_xlsx(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                    tz_offset_min: int = Query(0), include_points: bool = Query(True)):
+    from openpyxl import Workbook
+    lo, hi = _range(from_ts, to_ts)
+    off = tz_offset_min * 60
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    with db.connect() as conn:
+        visits = conn.execute(
+            "SELECT start_ts, end_ts, name, address, semantic, lat, lon FROM visits "
+            "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts", (lo, hi)).fetchall()
+        _sheet(wb, "Návštěvy",
+               ["Od", "Do", "Hodin", "Místo", "Adresa", "Typ", "Lat", "Lon"],
+               [[_fmt_dt(v["start_ts"], off), _fmt_dt(v["end_ts"], off),
+                 round((v["end_ts"] - v["start_ts"]) / 3600, 2),
+                 v["name"], v["address"], v["semantic"], v["lat"], v["lon"]]
+                for v in visits],
+               widths=[18, 18, 8, 30, 30, 14, 11, 11])
+
+        acts = conn.execute(
+            "SELECT start_ts, end_ts, type, distance_m FROM activities "
+            "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts", (lo, hi)).fetchall()
+        _sheet(wb, "Cesty",
+               ["Od", "Do", "Minut", "Způsob", "Km"],
+               [[_fmt_dt(a["start_ts"], off), _fmt_dt(a["end_ts"], off),
+                 round((a["end_ts"] - a["start_ts"]) / 60, 1), a["type"],
+                 round((a["distance_m"] or 0) / 1000, 2)] for a in acts],
+               widths=[18, 18, 8, 24, 9])
+
+        stats = api_stats(from_ts, to_ts, tz_offset_min)
+        _sheet(wb, "Km po měsících", ["Měsíc", "Km"],
+               [[m["month"], m["km"]] for m in stats["monthly_km"]], widths=[10, 10])
+        _sheet(wb, "Top místa", ["Místo", "Návštěv", "Hodin", "Lat", "Lon"],
+               [[p["label"], p["count"], p["hours"], round(p["lat"], 6), round(p["lon"], 6)]
+                for p in stats["top_places"]], widths=[34, 9, 9, 11, 11])
+
+        if include_points:
+            pts = api_points(from_ts, to_ts, limit=100_000)
+            ws = _sheet(wb, "GPS body", ["Čas", "Lat", "Lon"],
+                        [[_fmt_dt(p[0], off), p[1], p[2]] for p in pts["points"]],
+                        widths=[18, 11, 11])
+            if pts["step"] > 1:
+                ws.append([])
+                ws.append([f"Pozn.: vzorkováno 1:{pts['step']} "
+                           f"(celkem {pts['total']} bodů v období)"])
+
+    return _xlsx_response(wb, "gmaps-historie.xlsx")
+
+
+@app.get("/api/export_location.xlsx")
+def api_export_location(lat: float = Query(...), lon: float = Query(...),
+                        radius_m: float = Query(200, ge=20, le=5000),
+                        from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                        tz_offset_min: int = Query(0), label: str = Query("")):
+    from openpyxl import Workbook
+    lo, hi = _range(from_ts, to_ts)
+    off = tz_offset_min * 60
+    with db.connect() as conn:
+        merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = _sheet(wb, "Pobyty",
+                ["Datum", "Od", "Do", "Hodin", "Místo"],
+                [[_fmt_dt(s, off).date(), _fmt_dt(s, off).strftime("%H:%M"),
+                  _fmt_dt(e, off).strftime("%H:%M"),
+                  round(max(e - s, 60) / 3600, 2), n or label]
+                 for s, e, n in merged],
+                widths=[12, 8, 8, 8, 34])
+    ws.append([])
+    ws.append([f"Souřadnice: {lat:.6f}, {lon:.6f}; okruh {int(radius_m)} m; "
+               f"celkem {len(merged)} pobytů"])
+    return _xlsx_response(wb, "gmaps-misto.xlsx")
+
+
+@app.get("/api/export.gpx")
+def api_export_gpx(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                   limit: int = Query(100_000, le=500_000)):
+    pts = api_points(from_ts, to_ts, limit=limit)
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>\n'
+             '<gpx version="1.1" creator="gmaps-historie" '
+             'xmlns="http://www.topografix.com/GPX/1/1">\n<trk><trkseg>\n']
+    for ts, lat, lon in pts["points"]:
+        t = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        parts.append(f'<trkpt lat="{lat}" lon="{lon}"><time>{t}</time></trkpt>\n')
+    parts.append("</trkseg></trk>\n</gpx>\n")
+    return Response("".join(parts), media_type="application/gpx+xml",
+                    headers={"Content-Disposition": 'attachment; filename="gmaps-historie.gpx"'})
 
 
 @app.post("/api/import")
