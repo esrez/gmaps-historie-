@@ -322,6 +322,60 @@ def delete_range(from_ts: int | None = Query(None), to_ts: int | None = Query(No
     return {"deleted": cur.rowcount}
 
 
+@router.get("/missing_days")
+def missing_days(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                 workdays_only: bool = Query(True), min_km: float = Query(0.5)):
+    """Dny, kdy podle historie proběhla jízda autem, ale v knize jízd chybí.
+    Slouží jako upozornění na nevykázané dny."""
+    lo, hi = ts_range(from_ts, to_ts)
+    with closing(db.connect()) as conn:
+        acts = conn.execute(
+            "SELECT a.start_ts, a.distance_m FROM activities a "
+            "LEFT JOIN trips t ON t.activity_ts = a.start_ts "
+            "WHERE a.start_ts BETWEEN ? AND ? AND t.id IS NULL "
+            "AND REPLACE(UPPER(a.type), ' ', '_') IN (%s)"
+            % ",".join("?" * len(CAR_TYPES)),
+            (lo, hi, *CAR_TYPES)).fetchall()
+        trip_days = {r["d"] for r in conn.execute(
+            "SELECT DISTINCT date(start_ts,'unixepoch','localtime') d FROM trips "
+            "WHERE start_ts BETWEEN ? AND ?", (lo, hi))}
+    days: dict[str, dict] = {}
+    for a in acts:
+        km = (a["distance_m"] or 0) / 1000
+        if km < min_km:
+            continue
+        local = local_dt(a["start_ts"])
+        if workdays_only and local.weekday() >= 5:
+            continue
+        key = local.date().isoformat()
+        if key in trip_days:
+            continue   # den už v knize nějaké jízdy má
+        d = days.setdefault(key, {"date": key, "km": 0.0, "count": 0})
+        d["km"] = round(d["km"] + km, 1)
+        d["count"] += 1
+    return {"days": sorted(days.values(), key=lambda x: x["date"])}
+
+
+@router.get("/alerts")
+def alerts(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+    """Upozornění pro knihu jízd: neúplné jízdy a překročený tachometr."""
+    lo, hi = ts_range(from_ts, to_ts)
+    with closing(db.connect()) as conn:
+        incomplete = conn.execute(
+            "SELECT COUNT(*) c FROM trips WHERE start_ts BETWEEN ? AND ? AND excluded=0 "
+            "AND (km <= 0 OR COALESCE(TRIM(destination),'') = '')", (lo, hi)).fetchone()["c"]
+        odo_over = []
+        for r in conn.execute("SELECT year, km FROM odometer"):
+            booked = conn.execute(
+                "SELECT COALESCE(SUM(km),0) s FROM trips WHERE excluded=0 "
+                "AND strftime('%Y', start_ts, 'unixepoch', 'localtime') = ?",
+                (str(r["year"]),)).fetchone()["s"]
+            if booked > r["km"]:
+                odo_over.append({"year": r["year"], "odometer_km": r["km"],
+                                 "booked_km": round(booked, 1)})
+    return {"incomplete_trips": incomplete, "odometer_exceeded": odo_over}
+
+
 # ------------------------------------------------------------- pravidla
 
 @router.get("/rules")

@@ -350,6 +350,167 @@ def api_export_gpx(from_ts: int | None = Query(None), to_ts: int | None = Query(
                     headers={"Content-Disposition": 'attachment; filename="gmaps-historie.gpx"'})
 
 
+# ------------------------------------------------- kvalita dat a analýza
+
+OUTLIER_SPEED = 70.0        # m/s (~250 km/h) – rychlejší skok = chyba GPS
+DEFAULT_ACC_LIMIT = 100.0   # m
+
+
+def _find_outliers(conn, lo: int, hi: int, limit_ids: int | None = None):
+    """Najde GPS „teleporty": bod, který od předchozího vyžaduje nereálnou
+    rychlost a následující bod je zpět u předchozího (osamocený skok)."""
+    ids: list[int] = []
+    prev = None      # poslední důvěryhodný bod (id, ts, lat, lon)
+    cand = None      # podezřelý bod čekající na potvrzení dalším bodem
+    cur = conn.execute(
+        "SELECT id, ts, lat, lon FROM points WHERE ts BETWEEN ? AND ? ORDER BY ts",
+        (lo, hi))
+    for pid, ts, lat, lon in cur:
+        if prev is None:
+            prev = (pid, ts, lat, lon)
+            continue
+        if cand is not None:
+            # je návrat k prev reálný, zatímco skok na cand nebyl?
+            dt2 = ts - cand[1]
+            d_prev = haversine_m(prev[2], prev[3], lat, lon)
+            dt_prev = ts - prev[1]
+            if dt_prev > 0 and d_prev / dt_prev <= OUTLIER_SPEED:
+                ids.append(cand[0])       # cand byl osamocený skok
+            else:
+                prev = cand               # skok byl skutečný přesun
+            cand = None
+            if limit_ids and len(ids) >= limit_ids:
+                break
+        dt = ts - prev[1]
+        d = haversine_m(prev[2], prev[3], lat, lon)
+        if 0 < dt and d / dt > OUTLIER_SPEED:
+            cand = (pid, ts, lat, lon)
+        else:
+            prev = (pid, ts, lat, lon)
+    return ids
+
+
+@app.get("/api/quality")
+def api_quality(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                accuracy_limit: float = Query(DEFAULT_ACC_LIMIT, ge=10)):
+    """Kontrola kvality dat + upozornění (mezery v historii)."""
+    lo, hi = ts_range(from_ts, to_ts)
+    with closing(db.connect()) as conn:
+        low_acc = conn.execute(
+            "SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ? AND accuracy > ?",
+            (lo, hi, accuracy_limit)).fetchone()["c"]
+        bad_visits = conn.execute(
+            "SELECT COUNT(*) c FROM visits WHERE start_ts BETWEEN ? AND ? "
+            "AND end_ts <= start_ts", (lo, hi)).fetchone()["c"]
+        bounds = conn.execute(
+            "SELECT MIN(ts) a, MAX(ts) b, COUNT(*) n FROM points WHERE ts BETWEEN ? AND ?",
+            (lo, hi)).fetchone()
+        outliers = len(_find_outliers(conn, lo, hi)) if (bounds["n"] or 0) <= 3_000_000 else None
+
+        gaps: list[str] = []
+        gap_count = 0
+        if bounds["a"] is not None:
+            have = {r["d"] for r in conn.execute(
+                "SELECT DISTINCT date(ts,'unixepoch','localtime') d FROM points "
+                "WHERE ts BETWEEN ? AND ?", (lo, hi))}
+            from datetime import timedelta
+            day = local_dt(bounds["a"]).date()
+            last = local_dt(bounds["b"]).date()
+            while day <= last:
+                if day.isoformat() not in have:
+                    gap_count += 1
+                    if len(gaps) < 30:
+                        gaps.append(day.isoformat())
+                day += timedelta(days=1)
+    return {
+        "points": bounds["n"],
+        "low_accuracy": low_acc,
+        "accuracy_limit": accuracy_limit,
+        "outliers": outliers,
+        "bad_visits": bad_visits,
+        "gap_days": gap_count,
+        "gap_samples": gaps,
+    }
+
+
+@app.post("/api/cleanup")
+def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                remove_low_accuracy: bool = Query(True),
+                accuracy_limit: float = Query(DEFAULT_ACC_LIMIT, ge=10),
+                remove_outliers: bool = Query(True),
+                remove_bad_visits: bool = Query(True),
+                dry_run: bool = Query(True)):
+    """Automatické opravy: smaže nepřesné body, GPS teleporty a vadné
+    návštěvy. S dry_run=true jen spočítá, co by se smazalo."""
+    lo, hi = ts_range(from_ts, to_ts)
+    result = {"dry_run": dry_run, "low_accuracy": 0, "outliers": 0, "bad_visits": 0}
+    with closing(db.connect()) as conn:
+        if remove_low_accuracy:
+            if dry_run:
+                result["low_accuracy"] = conn.execute(
+                    "SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ? AND accuracy > ?",
+                    (lo, hi, accuracy_limit)).fetchone()["c"]
+            else:
+                result["low_accuracy"] = conn.execute(
+                    "DELETE FROM points WHERE ts BETWEEN ? AND ? AND accuracy > ?",
+                    (lo, hi, accuracy_limit)).rowcount
+        if remove_outliers:
+            ids = _find_outliers(conn, lo, hi)
+            result["outliers"] = len(ids)
+            if not dry_run:
+                for i in range(0, len(ids), 900):
+                    chunk = ids[i:i + 900]
+                    conn.execute(
+                        "DELETE FROM points WHERE id IN (%s)" % ",".join("?" * len(chunk)),
+                        chunk)
+        if remove_bad_visits:
+            if dry_run:
+                result["bad_visits"] = conn.execute(
+                    "SELECT COUNT(*) c FROM visits WHERE start_ts BETWEEN ? AND ? "
+                    "AND end_ts <= start_ts", (lo, hi)).fetchone()["c"]
+            else:
+                result["bad_visits"] = conn.execute(
+                    "DELETE FROM visits WHERE start_ts BETWEEN ? AND ? AND end_ts <= start_ts",
+                    (lo, hi)).rowcount
+        if not dry_run:
+            conn.commit()
+    return result
+
+
+@app.get("/api/analysis")
+def api_analysis(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+    """Podklady pro analytické grafy."""
+    lo, hi = ts_range(from_ts, to_ts)
+    with closing(db.connect()) as conn:
+        weekday = conn.execute(
+            "SELECT CAST(strftime('%w', start_ts, 'unixepoch', 'localtime') AS INT) w, "
+            "SUM(COALESCE(distance_m,0))/1000.0 km FROM activities "
+            "WHERE start_ts BETWEEN ? AND ? GROUP BY w", (lo, hi)).fetchall()
+        hours = conn.execute(
+            "SELECT CAST(strftime('%H', ts, 'unixepoch', 'localtime') AS INT) h, COUNT(*) c "
+            "FROM points WHERE ts BETWEEN ? AND ? GROUP BY h", (lo, hi)).fetchall()
+        yearly = conn.execute(
+            "SELECT strftime('%Y', start_ts, 'unixepoch', 'localtime') y, "
+            "SUM(COALESCE(distance_m,0))/1000.0 km, COUNT(*) n FROM activities "
+            "WHERE start_ts BETWEEN ? AND ? GROUP BY y ORDER BY y", (lo, hi)).fetchall()
+        places_monthly = conn.execute(
+            "SELECT strftime('%Y-%m', start_ts, 'unixepoch', 'localtime') m, "
+            "COUNT(DISTINCT ROUND(lat,3) || ',' || ROUND(lon,3)) n FROM visits "
+            "WHERE start_ts BETWEEN ? AND ? GROUP BY m ORDER BY m", (lo, hi)).fetchall()
+    wk = {r["w"]: round(r["km"], 1) for r in weekday}
+    hr = {r["h"]: r["c"] for r in hours}
+    return {
+        # 0=neděle ve strftime → přeskládat na Po..Ne
+        "weekday_km": [{"day": d, "km": wk.get(w, 0)}
+                       for d, w in zip(["Po", "Út", "St", "Čt", "Pá", "So", "Ne"],
+                                       [1, 2, 3, 4, 5, 6, 0])],
+        "hourly_points": [{"hour": h, "count": hr.get(h, 0)} for h in range(24)],
+        "yearly_km": [{"year": r["y"], "km": round(r["km"], 1), "trips": r["n"]}
+                      for r in yearly],
+        "places_monthly": [{"month": r["m"], "places": r["n"]} for r in places_monthly],
+    }
+
+
 @app.post("/api/import")
 async def api_import(file: UploadFile):
     tmpdir = os.path.dirname(db.DB_PATH) or "."

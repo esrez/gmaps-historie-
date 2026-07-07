@@ -27,6 +27,17 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 - **Export do Excelu** – listy Návštěvy, Cesty, Km po měsících, Top místa
   a GPS body za zvolené období; zvlášť i export pobytů na konkrétním místě
 - **Export do GPX** – trasy pro použití v jiných mapových aplikacích
+- **Analýza** – kilometry podle dne v týdnu, aktivita podle hodiny dne,
+  kilometry a počty cest po letech
+- **Údržba dat s automatickými opravami** – kontrola najde GPS „teleporty"
+  (osamocené nereálné skoky), body s nízkou přesností (volitelný limit
+  50/100/200 m), vadné návštěvy a dny bez dat; oprava je nejdřív ukáže
+  a smaže až po potvrzení
+- **Upozornění v knize jízd** – dny s jízdou autem, které v knize chybí
+  (s tlačítkem Doplnit nyní), neúplné jízdy a překročený roční tachometr
+- **Intuitivní ovládání** – sbalovací sekce, nenápadná oznámení místo
+  vyskakovacích oken, obrácené období se samo prohodí, potvrzení uložení
+  přímo v řádku tabulky, navádění k importu při prázdné databázi
 - **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen
     pracovní dny a pracovní doba (např. po–pá 6–18 h), s minimální délkou jízdy

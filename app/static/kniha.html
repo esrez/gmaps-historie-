@@ -16,8 +16,8 @@
 
 <div id="knihaLayout">
   <aside id="knihaSettings">
-    <section>
-      <h2>Období</h2>
+    <details class="sec" open>
+      <summary>Období</summary>
       <div class="row">
         <label>Od <input type="date" id="dateFrom"></label>
         <label>Do <input type="date" id="dateTo"></label>
@@ -26,17 +26,17 @@
         <button data-preset="thisMonth">Tento měsíc</button>
         <button data-preset="lastMonth">Minulý měsíc</button>
       </div>
-    </section>
+    </details>
 
-    <section>
-      <h2>Vozidlo a řidič</h2>
+    <details class="sec" open>
+      <summary>Vozidlo a řidič</summary>
       <label>SPZ vozidla <input type="text" id="setPlate" placeholder="1AB 2345"></label>
       <label>Řidič <input type="text" id="setDriver" placeholder="Jméno Příjmení"></label>
       <label>Výchozí účel <input type="text" id="setPurpose" value="Služební jízda"></label>
-    </section>
+    </details>
 
-    <section>
-      <h2>Generování z historie</h2>
+    <details class="sec" open>
+      <summary>Generování z historie</summary>
       <label class="check"><input type="checkbox" id="setWorkdays" checked> Jen pracovní dny (po–pá)</label>
       <div class="row">
         <label>Od hod. <input type="number" id="setHourFrom" min="0" max="23" value="6"></label>
@@ -49,10 +49,10 @@
       <p class="muted">Vytvoří jízdy z rozpoznaných cest autem ve zvoleném období.
          Už vytvořené jízdy se nepřepíšou – ruční úpravy zůstanou zachované.</p>
       <div id="genStatus" class="muted"></div>
-    </section>
+    </details>
 
-    <section>
-      <h2>Pravidla kilometrů</h2>
+    <details class="sec">
+      <summary>Pravidla kilometrů</summary>
       <p class="muted">Pevné km pro trasu či místo (např. Kancelář = 12 km).
          Platí obousměrně; bez „odkud" pro všechny jízdy na dané místo.
          Pravidlo vznikne i automaticky při zadání km v tabulce.</p>
@@ -64,30 +64,31 @@
       </div>
       <button id="ruleAddBtn">＋ Přidat pravidlo</button>
       <button id="applyRulesBtn">⟳ Použít pravidla na období</button>
-    </section>
+    </details>
 
-    <section>
-      <h2>Tachometr</h2>
+    <details class="sec">
+      <summary>Tachometr</summary>
       <div class="row">
         <label>Rok <input type="number" id="odoYear" min="2000" max="2100"></label>
         <label>Najeto za rok (km) <input type="number" id="odoKm" min="0" step="1"></label>
       </div>
       <button id="odoSaveBtn">Uložit stav tachometru</button>
       <div id="odoInfo" class="muted"></div>
-    </section>
+    </details>
 
-    <section>
-      <h2>Akce</h2>
+    <details class="sec" open>
+      <summary>Akce</summary>
       <button id="addBtn">＋ Přidat jízdu ručně</button>
       <button id="exportBtn">📊 Export XLSX pro SPZ</button>
       <button id="clearBtn" class="danger">🗑 Smazat jízdy v období</button>
       <p class="muted">Export je xlsx pro univerzální import knihy jízd v programu
          SPZ (Milk Computers): SPZ, Datum, Odjezd, Příjezd, Odkud, Kam, Účel, Km,
          Řidič. Vozidlo s touto SPZ musí být v programu SPZ založené.</p>
-    </section>
+    </details>
   </aside>
 
   <main id="knihaMain">
+    <div id="knihaAlerts"></div>
     <div id="tripsSummary" class="muted"></div>
     <div id="tableWrap">
       <table id="tripsTable">
