@@ -20,12 +20,13 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import db, importer, trips
+from . import db, importer, places, trips
 from .common import fmt_dt, haversine_m, local_dt, sheet, ts_range, xlsx_response
 
 app = FastAPI(title="GMaps Historie", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.add_middleware(GZipMiddleware, minimum_size=2048)  # JSON s body/heatmapou je velký
 app.include_router(trips.router)
+app.include_router(places.router)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -233,7 +234,14 @@ def api_visits(from_ts: int | None = Query(None), to_ts: int | None = Query(None
             "SELECT start_ts, end_ts, lat, lon, name, address, semantic FROM visits "
             "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts LIMIT ?",
             (lo, hi, limit)).fetchall()
-    return {"visits": [dict(r) for r in rows]}
+        custom = places.load_places(conn)
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["label"] = places.visit_label(custom, r["lat"], r["lon"],
+                                        r["name"], r["semantic"])
+        out.append(d)
+    return {"visits": out}
 
 
 @app.get("/api/day")
@@ -305,12 +313,26 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
             "SELECT COUNT(*), SUM(end_ts - start_ts) FROM visits "
             "WHERE start_ts BETWEEN ? AND ?", (lo, hi)).fetchone()
 
-        top_places = conn.execute(
-            "SELECT COALESCE(NULLIF(name,''), COALESCE(semantic,'') || ' ' || "
-            "       ROUND(lat,3) || ', ' || ROUND(lon,3)) label, "
-            "       AVG(lat) lat, AVG(lon) lon, COUNT(*) n, SUM(end_ts - start_ts) secs "
-            "FROM visits WHERE start_ts BETWEEN ? AND ? "
-            "GROUP BY label ORDER BY secs DESC LIMIT 15", (lo, hi)).fetchall()
+        # top místa: popisky se řeší v Pythonu, aby vlastní názvy (place_names)
+        # měly přednost a sloučily i blízké skupiny souřadnic pod jedno jméno
+        visit_rows = conn.execute(
+            "SELECT lat, lon, name, semantic, end_ts - start_ts secs "
+            "FROM visits WHERE start_ts BETWEEN ? AND ?", (lo, hi)).fetchall()
+        custom = places.load_places(conn)
+        agg: dict[str, dict] = {}
+        for v in visit_rows:
+            label = places.visit_label(custom, v["lat"], v["lon"],
+                                       v["name"], v["semantic"])
+            g = agg.setdefault(label, {"label": label, "lat": 0.0, "lon": 0.0,
+                                       "n": 0, "secs": 0})
+            g["n"] += 1
+            g["secs"] += max(v["secs"], 0)
+            g["lat"] += v["lat"]
+            g["lon"] += v["lon"]
+        top_places = sorted(agg.values(), key=lambda g: -g["secs"])[:15]
+        for g in top_places:
+            g["lat"] /= g["n"]
+            g["lon"] /= g["n"]
 
         activities_total = sum(r["dist"] or 0 for r in by_type)
         monthly_source = "activities"
@@ -343,9 +365,13 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
 
 @app.get("/api/search_visits")
 def api_search_visits(q: str = Query(..., min_length=2), limit: int = Query(20, le=100)):
-    """Fulltextové hledání ve vlastních navštívených místech."""
+    """Fulltextové hledání ve vlastních navštívených místech i vlastních názvech."""
     like = f"%{q}%"
     with closing(db.connect()) as conn:
+        custom = [{"label": p["name"], "lat": p["lat"], "lon": p["lon"],
+                   "count": None, "hours": None, "last_ts": None, "custom": True}
+                  for p in places.load_places(conn)
+                  if q.lower() in p["name"].lower()]
         rows = conn.execute(
             "SELECT COALESCE(NULLIF(name,''), COALESCE(semantic,'') || ' ' || "
             "       ROUND(lat,3) || ', ' || ROUND(lon,3)) label, "
@@ -353,7 +379,7 @@ def api_search_visits(q: str = Query(..., min_length=2), limit: int = Query(20, 
             "       SUM(end_ts - start_ts) secs, MAX(end_ts) last_ts "
             "FROM visits WHERE name LIKE ? OR address LIKE ? OR semantic LIKE ? "
             "GROUP BY label ORDER BY n DESC LIMIT ?", (like, like, like, limit)).fetchall()
-    return {"results": [{"label": r["label"], "lat": r["lat"], "lon": r["lon"],
+    return {"results": custom + [{"label": r["label"], "lat": r["lat"], "lon": r["lon"],
                          "count": r["n"], "hours": round((r["secs"] or 0) / 3600, 1),
                          "last_ts": r["last_ts"]} for r in rows]}
 
@@ -405,8 +431,16 @@ def api_at_location(lat: float = Query(...), lon: float = Query(...),
     lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
+        custom = places.load_places(conn)
+
+    def stay_name(n):
+        if not n:
+            return None
+        return places.SEMANTIC_CZ.get(n.upper(), n) or n
+
     return {
-        "stays": [{"start_ts": s, "end_ts": e, "name": n,
+        "place_name": places.custom_label(custom, lat, lon),
+        "stays": [{"start_ts": s, "end_ts": e, "name": stay_name(n),
                    "duration_s": max(e - s, 60)} for s, e, n in merged],
         "total_s": sum(max(e - s, 60) for s, e, _ in merged),
         "count": len(merged),

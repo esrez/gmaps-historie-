@@ -63,6 +63,9 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   vozidlo zvlášť), **export do PDF** pro tisk (měsíční součty, česká
   diakritika) a **vrácení poslední hromadné akce** (generování, propagace km,
   použití pravidel i smazání období)
+- **Vlastní názvy míst** – místa lze pojmenovat (zákazník, adresa…) místo
+  souřadnic; názvy se použijí v top místech, na mapě, v hledání i v knize
+  jízd a jdou kdykoli upravit (Home/Work se překládá na Domov/Práce)
 - **Kalendářový přehled roku** – mřížka všech dnů obarvená podle najetých km
   (šedě dny se záznamem bez jízdy); kliknutí na den ho rovnou přehraje
 - **Mobilní ovládání** – na telefonu se kniha jízd zobrazuje jako karty,

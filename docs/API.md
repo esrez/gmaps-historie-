@@ -20,6 +20,8 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/calendar` | GET | denní km + počty bodů pro kalendář roku (`year`) |
 | `/api/pmtiles/status` | GET | dostupnost offline mapy `data/map.pmtiles` |
 | `/api/pmtiles` | GET | servíruje PMTiles s podporou HTTP Range |
+| `/api/places` | GET/POST | vlastní názvy míst (zákazník, adresa…); POST upsert dle blízkosti |
+| `/api/places/{id}` | DELETE | smazání vlastního názvu |
 
 ## Import a údržba
 

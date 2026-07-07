@@ -77,6 +77,14 @@ CREATE TABLE IF NOT EXISTS odometer (
     PRIMARY KEY (year, plate)
 );
 
+CREATE TABLE IF NOT EXISTS place_names (
+    id       INTEGER PRIMARY KEY,
+    lat      REAL NOT NULL,
+    lon      REAL NOT NULL,
+    radius_m REAL NOT NULL DEFAULT 250,
+    name     TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS undo_log (
     id      INTEGER PRIMARY KEY,
     created INTEGER NOT NULL,

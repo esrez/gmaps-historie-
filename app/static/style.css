@@ -340,3 +340,13 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
   }
   h1 { font-size: 16px; }
 }
+
+.renameBtn {
+  border: none;
+  background: none;
+  padding: 0 3px;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.renameBtn:hover { opacity: 1; }
