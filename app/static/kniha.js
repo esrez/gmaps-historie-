@@ -1,66 +1,14 @@
-/* Kniha jízd – logika stránky */
+/* Kniha jízd – logika stránky (sdílené helpery v common.js) */
 "use strict";
 
-const $ = (id) => document.getElementById(id);
-const TZ_MIN = -new Date().getTimezoneOffset();
-
+const api = apiFetch;
 let trips = [];
-
-// ------------------------------------------------------------- pomocné
-
-function toDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function toTimeStr(d) {
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-function partsToTs(dateStr, timeStr) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh, mm] = (timeStr || "0:0").split(":").map(Number);
-  return Math.floor(new Date(y, m - 1, d, hh, mm).getTime() / 1000);
-}
-function dateToTs(value, endOfDay) {
-  return partsToTs(value, "0:0") + (endOfDay ? 86400 : 0);
-}
-
-function currentRange() {
-  const f = $("dateFrom").value, t = $("dateTo").value;
-  return {
-    from_ts: f ? dateToTs(f, false) : null,
-    to_ts: t ? dateToTs(t, true) : null,
-  };
-}
-
-function buildUrl(path, params) {
-  const url = new URL(path, location.origin);
-  for (const [k, v] of Object.entries(params || {}))
-    if (v !== null && v !== undefined) url.searchParams.set(k, v);
-  return url.toString();
-}
-
-async function api(path, { method = "GET", params, body } = {}) {
-  const res = await fetch(buildUrl(path, params), {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try { msg = (await res.json()).detail || msg; } catch (e) { /* — */ }
-    throw new Error(msg);
-  }
-  return res.json();
-}
-
-function escapeAttr(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (m) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
-}
+let rules = [];
 
 // ------------------------------------------------------------ nastavení
 
 const SETTINGS = ["setPlate", "setDriver", "setPurpose", "setWorkdays",
-                  "setHourFrom", "setHourTo", "setMinKm"];
+                  "setHourFrom", "setHourTo", "setMinKm", "setRoundUp", "setAutoFill"];
 
 function loadSettings() {
   for (const id of SETTINGS) {
@@ -78,6 +26,9 @@ function saveSettings() {
   }
 }
 SETTINGS.forEach((id) => $(id).addEventListener("change", saveSettings));
+
+const roundUpOn = () => $("setRoundUp").checked;
+const roundKm = (v) => (roundUpOn() ? Math.ceil(v - 1e-9) : Math.round(v * 10) / 10);
 
 function setMonthPreset(which) {
   const now = new Date();
@@ -100,9 +51,20 @@ async function loadTrips() {
     const data = await api("/api/trips", { params: currentRange() });
     trips = data.trips;
     renderTable(data.total_km);
+    refreshOdometer(odoYear()); // rok podle zvoleného období
   } catch (e) {
     $("tripsSummary").textContent = "Načtení jízd selhalo: " + e.message;
   }
+}
+
+function updateTotal(totalKm) {
+  const total = totalKm ?? trips.reduce((a, t) => a + (t.excluded ? 0 : t.km), 0);
+  $("totalKm").textContent = total.toLocaleString("cs", { maximumFractionDigits: 1 });
+  const included = trips.filter((t) => !t.excluded).length;
+  const excluded = trips.length - included;
+  $("tripsSummary").textContent = trips.length
+    ? `${included} jízd v knize${excluded ? ` (+ ${excluded} vlastním autem, mimo knihu)` : ""}`
+    : "Žádné jízdy – zvolte období a klikněte na Generovat jízdy, nebo přidejte jízdu ručně.";
 }
 
 function renderTable(totalKm) {
@@ -114,6 +76,7 @@ function renderTable(totalKm) {
     const e = new Date(t.end_ts * 1000);
     const tr = document.createElement("tr");
     tr.dataset.id = t.id;
+    if (t.excluded) tr.classList.add("excludedRow");
     const month = `${s.getFullYear()}-${s.getMonth()}`;
     if (prevMonth && month !== prevMonth) tr.classList.add("monthStart");
     prevMonth = month;
@@ -121,22 +84,19 @@ function renderTable(totalKm) {
       <td><input type="date" data-f="date" value="${toDateStr(s)}"></td>
       <td><input type="time" data-f="dep" value="${toTimeStr(s)}"></td>
       <td><input type="time" data-f="arr" value="${toTimeStr(e)}"></td>
-      <td><input type="text" data-f="origin" value="${escapeAttr(t.origin)}"></td>
-      <td><input type="text" data-f="destination" value="${escapeAttr(t.destination)}"></td>
+      <td><input type="text" data-f="origin" value="${escapeHtml(t.origin)}"></td>
+      <td><input type="text" data-f="destination" value="${escapeHtml(t.destination)}"></td>
       <td><input type="text" inputmode="decimal" class="km" data-f="km" value="${t.km}"></td>
-      <td><input type="text" data-f="purpose" value="${escapeAttr(t.purpose)}"></td>
+      <td><input type="text" data-f="purpose" value="${escapeHtml(t.purpose)}"></td>
       <td style="text-align:center"><input type="checkbox" data-f="private" ${t.private ? "checked" : ""}></td>
+      <td style="text-align:center"><input type="checkbox" data-f="excluded" ${t.excluded ? "checked" : ""}></td>
       <td><button class="del" title="Smazat jízdu">✕</button></td>`;
     tr.querySelectorAll("input").forEach((inp) =>
       inp.addEventListener("change", () => onCellChange(t, inp)));
     tr.querySelector(".del").addEventListener("click", () => onDelete(t, tr));
     body.appendChild(tr);
   }
-  $("totalKm").textContent = (totalKm ?? trips.reduce((a, t) => a + t.km, 0))
-    .toLocaleString("cs", { maximumFractionDigits: 1 });
-  $("tripsSummary").textContent = trips.length
-    ? `${trips.length} jízd ve zvoleném období`
-    : "Žádné jízdy – zvolte období a klikněte na Generovat jízdy, nebo přidejte jízdu ručně.";
+  updateTotal(totalKm);
 }
 
 async function onCellChange(t, inp) {
@@ -153,21 +113,44 @@ async function onCellChange(t, inp) {
   } else if (f === "km") {
     const v = parseFloat(String(inp.value).replace(",", "."));
     if (isNaN(v) || v < 0) { inp.value = t.km; return; }
-    patch.km = Math.round(v * 10) / 10;
+    patch.km = roundKm(v);
     inp.value = patch.km;
-  } else if (f === "private") {
-    patch.private = inp.checked;
+  } else if (f === "private" || f === "excluded") {
+    patch[f] = inp.checked;
   } else {
     patch[f] = inp.value;
   }
   try {
     const updated = await api(`/api/trips/${t.id}`, { method: "PATCH", body: patch });
     Object.assign(t, updated);
-    $("totalKm").textContent = trips.reduce((a, x) => a + x.km, 0)
-      .toLocaleString("cs", { maximumFractionDigits: 1 });
+    if (f === "excluded") {
+      row.classList.toggle("excludedRow", t.excluded);
+      refreshOdometer();
+    }
+    if (f === "km" && $("setAutoFill").checked && (t.destination || t.origin)) {
+      await propagateKm(t);
+      return; // propagate překreslí tabulku i pravidla
+    }
+    updateTotal();
   } catch (e) {
     alert("Uložení selhalo: " + e.message);
   }
+}
+
+async function propagateKm(t) {
+  const res = await api("/api/trips/propagate", {
+    method: "POST",
+    body: {
+      trip_id: t.id, km: t.km, ...currentRange(),
+      round_up: roundUpOn(), save_rule: true,
+    },
+  });
+  trips = res.trips;
+  renderTable(res.total_km);
+  loadRules();
+  $("genStatus").textContent =
+    `Doplněno ${res.km} km do ${res.updated} jízd na trase ` +
+    `${t.origin || "?"} – ${t.destination || "?"} (pravidlo uloženo).`;
 }
 
 async function onDelete(t, tr) {
@@ -175,8 +158,85 @@ async function onDelete(t, tr) {
   await api(`/api/trips/${t.id}`, { method: "DELETE" });
   trips = trips.filter((x) => x.id !== t.id);
   tr.remove();
-  renderTable();
+  updateTotal();
+  refreshOdometer();
 }
+
+// -------------------------------------------------------------- pravidla
+
+async function loadRules() {
+  try {
+    rules = (await api("/api/trips/rules")).rules;
+  } catch (e) { rules = []; }
+  $("rulesList").innerHTML = rules.map((r) =>
+    `<li>${r.origin ? escapeHtml(r.origin) + " ⇄ " : "→ "}` +
+    `<b>${escapeHtml(r.destination)}</b>: ${r.km.toLocaleString("cs")} km ` +
+    `<button class="del" data-id="${r.id}" title="Smazat pravidlo">✕</button></li>`).join("")
+    || '<li class="muted">Zatím žádná pravidla.</li>';
+  $("rulesList").querySelectorAll("button.del").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await api(`/api/trips/rules/${b.dataset.id}`, { method: "DELETE" });
+      loadRules();
+    }));
+}
+
+$("ruleAddBtn").addEventListener("click", async () => {
+  const dest = $("ruleDest").value.trim();
+  const km = parseFloat(String($("ruleKm").value).replace(",", "."));
+  if (!dest || isNaN(km)) { alert("Vyplňte cíl (kam) a km."); return; }
+  await api("/api/trips/rules", {
+    method: "POST",
+    body: { origin: $("ruleOrigin").value.trim(), destination: dest, km: roundKm(km) },
+  });
+  $("ruleOrigin").value = ""; $("ruleDest").value = ""; $("ruleKm").value = "";
+  loadRules();
+});
+
+$("applyRulesBtn").addEventListener("click", async () => {
+  const res = await api("/api/trips/apply_rules", {
+    method: "POST",
+    params: { ...currentRange(), round_up: roundUpOn() },
+  });
+  $("genStatus").textContent = `Pravidla přepočítala ${res.updated} jízd.`;
+  loadTrips();
+});
+
+// ------------------------------------------------------------- tachometr
+
+function odoYear() {
+  const from = $("dateFrom").value;
+  return from ? Number(from.slice(0, 4)) : new Date().getFullYear();
+}
+
+async function refreshOdometer(explicitYear) {
+  const year = explicitYear ?? (Number($("odoYear").value) || odoYear());
+  $("odoYear").value = year;
+  try {
+    const o = await api("/api/trips/odometer", { params: { year } });
+    if (o.odometer_km !== null) {
+      $("odoKm").value = o.odometer_km;
+      const fmt = (v) => v.toLocaleString("cs", { maximumFractionDigits: 1 });
+      $("odoInfo").innerHTML =
+        `Tachometr ${year}: <b>${fmt(o.odometer_km)} km</b> · ` +
+        `v knize ${fmt(o.booked_km)} km · ` +
+        `zbývá <b>${fmt(o.remaining_km)} km</b>`;
+    } else {
+      $("odoInfo").textContent =
+        `Pro rok ${year} není stav tachometru zadán (v knize ${o.booked_km.toLocaleString("cs")} km).`;
+    }
+  } catch (e) {
+    $("odoInfo").textContent = "";
+  }
+}
+
+$("odoSaveBtn").addEventListener("click", async () => {
+  const year = Number($("odoYear").value);
+  const km = parseFloat(String($("odoKm").value).replace(",", "."));
+  if (!year || isNaN(km)) { alert("Vyplňte rok a km."); return; }
+  await api("/api/trips/odometer", { method: "PUT", body: { year, km } });
+  refreshOdometer();
+});
+$("odoYear").addEventListener("change", refreshOdometer);
 
 // ---------------------------------------------------------------- akce
 
@@ -193,11 +253,11 @@ $("generateBtn").addEventListener("click", async () => {
       method: "POST",
       body: {
         ...r,
-        tz_offset_min: TZ_MIN,
         workdays_only: $("setWorkdays").checked,
         hour_from: Number($("setHourFrom").value),
         hour_to: Number($("setHourTo").value),
         min_km: parseFloat($("setMinKm").value) || 0,
+        round_up: roundUpOn(),
         purpose: $("setPurpose").value,
         driver: $("setDriver").value,
         plate: $("setPlate").value,
@@ -226,6 +286,7 @@ $("addBtn").addEventListener("click", async () => {
       driver: $("setDriver").value,
       plate: $("setPlate").value,
       private: false,
+      excluded: false,
     },
   });
   trips.push(t);
@@ -234,8 +295,7 @@ $("addBtn").addEventListener("click", async () => {
 });
 
 $("exportBtn").addEventListener("click", () => {
-  location.href = buildUrl("/api/trips/export.xlsx",
-    { ...currentRange(), tz_offset_min: TZ_MIN });
+  location.href = buildUrl("/api/trips/export.xlsx", currentRange());
 });
 
 $("clearBtn").addEventListener("click", async () => {
@@ -253,4 +313,5 @@ $("clearBtn").addEventListener("click", async () => {
 // ---------------------------------------------------------------- start
 
 loadSettings();
+loadRules();
 setMonthPreset("thisMonth");

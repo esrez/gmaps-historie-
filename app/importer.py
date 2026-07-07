@@ -268,7 +268,14 @@ def _import_json_stream(fileobj, w: Writer, label: str):
         head_txt = head
     fileobj.seek(0)
 
-    if '"locations"' in head_txt:
+    # rozhoduje klíč, který se v souboru objeví jako první (top-level klíč
+    # je vždy na začátku; jiný výskyt téhož slova hlouběji nevadí)
+    markers = {m: head_txt.find(m) for m in
+               ('"locations"', '"timelineObjects"', '"semanticSegments"', '"rawSignals"')}
+    found = {m: i for m, i in markers.items() if i >= 0}
+    first = min(found, key=found.get) if found else None
+
+    if first == '"locations"':
         _import_records_stream(fileobj, w)
         return "Records"
 
@@ -297,7 +304,7 @@ def import_path(path: str, conn=None, counters: Counters | None = None) -> Count
         conn = db.connect()
     c = counters or Counters()
     try:
-        if path.lower().endswith(".zip"):
+        if zipfile.is_zipfile(path):
             with zipfile.ZipFile(path) as zf:
                 for name in zf.namelist():
                     if not name.lower().endswith(".json"):

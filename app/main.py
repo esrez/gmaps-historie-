@@ -10,12 +10,15 @@ from contextlib import closing
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import db, importer, trips
+from .common import fmt_dt, haversine_m, local_dt, sheet, ts_range, xlsx_response
 
 app = FastAPI(title="GMaps Historie", docs_url="/api/docs", openapi_url="/api/openapi.json")
+app.add_middleware(GZipMiddleware, minimum_size=2048)  # JSON s body/heatmapou je velký
 app.include_router(trips.router)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -23,20 +26,6 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 MAX_TRACK_POINTS = 60_000
 MAX_HEAT_CELLS = 40_000
 MAX_DIST_ROWS = 3_000_000
-
-
-def haversine_m(lat1, lon1, lat2, lon2) -> float:
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = p2 - p1
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
-
-
-def _range(from_ts: int | None, to_ts: int | None) -> tuple[int, int]:
-    return (from_ts if from_ts is not None else 0,
-            to_ts if to_ts is not None else 2**53)
 
 
 @app.get("/api/range")
@@ -57,8 +46,8 @@ def api_range():
 
 @app.get("/api/points")
 def api_points(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
-               limit: int = Query(MAX_TRACK_POINTS, le=200_000)):
-    lo, hi = _range(from_ts, to_ts)
+               limit: int = Query(MAX_TRACK_POINTS, ge=1, le=200_000)):
+    lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         n = conn.execute("SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?",
                          (lo, hi)).fetchone()["c"]
@@ -72,7 +61,7 @@ def api_points(from_ts: int | None = Query(None), to_ts: int | None = Query(None
 
 @app.get("/api/heatmap")
 def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
-    lo, hi = _range(from_ts, to_ts)
+    lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         rows = conn.execute(
             "SELECT ROUND(lat,4) la, ROUND(lon,4) lo, COUNT(*) c FROM points "
@@ -84,7 +73,7 @@ def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
 @app.get("/api/visits")
 def api_visits(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                limit: int = Query(5000, le=20000)):
-    lo, hi = _range(from_ts, to_ts)
+    lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         rows = conn.execute(
             "SELECT start_ts, end_ts, lat, lon, name, address, semantic FROM visits "
@@ -111,44 +100,42 @@ def api_day(from_ts: int = Query(...), to_ts: int = Query(...)):
             "activities": [dict(r) for r in acts]}
 
 
-def _point_distances(conn, lo: int, hi: int, tz_offset_min: int):
+def _point_distances(conn, lo: int, hi: int):
     """Vzdálenost spočtená ze surových bodů, po měsících (fallback bez aktivit).
 
     Přeskakuje mezery > 10 minut a nereálné skoky (> 70 m/s), aby chyby GPS
-    nenafukovaly součet.
+    nenafukovaly součet. U obřích rozsahů se body vzorkují a časová mezera
+    se úměrně zvětší, jinak by vzorkování většinu úseků zahodilo.
     """
     n = conn.execute("SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?",
                      (lo, hi)).fetchone()["c"]
     step = max(1, -(-n // MAX_DIST_ROWS))
+    max_gap = 600 * step
     monthly: dict[str, float] = defaultdict(float)
     prev = None
-    off = tz_offset_min * 60
     cur = conn.execute(
         "SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ? AND (id % ?) = 0 ORDER BY ts",
         (lo, hi, step))
     for ts, lat, lon in cur:
         if prev is not None:
             dt = ts - prev[0]
-            if 0 < dt <= 600:
+            if 0 < dt <= max_gap:
                 d = haversine_m(prev[1], prev[2], lat, lon)
                 if d / dt <= 70:
-                    month = datetime.fromtimestamp(ts + off, timezone.utc).strftime("%Y-%m")
-                    monthly[month] += d
+                    monthly[local_dt(ts).strftime("%Y-%m")] += d
         prev = (ts, lat, lon)
     return monthly, step > 1
 
 
 @app.get("/api/stats")
-def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
-              tz_offset_min: int = Query(0)):
-    lo, hi = _range(from_ts, to_ts)
-    off = tz_offset_min * 60
+def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+    lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         n_points = conn.execute(
             "SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?", (lo, hi)).fetchone()["c"]
         days = conn.execute(
-            "SELECT COUNT(DISTINCT (ts + ?) / 86400) c FROM points WHERE ts BETWEEN ? AND ?",
-            (off, lo, hi)).fetchone()["c"]
+            "SELECT COUNT(DISTINCT date(ts, 'unixepoch', 'localtime')) c "
+            "FROM points WHERE ts BETWEEN ? AND ?", (lo, hi)).fetchone()["c"]
 
         by_type = conn.execute(
             "SELECT type, COUNT(*) n, SUM(COALESCE(distance_m,0)) dist "
@@ -156,9 +143,9 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
             "GROUP BY type ORDER BY dist DESC", (lo, hi)).fetchall()
 
         act_monthly = conn.execute(
-            "SELECT strftime('%Y-%m', datetime(start_ts + ?, 'unixepoch')) m, "
+            "SELECT strftime('%Y-%m', start_ts, 'unixepoch', 'localtime') m, "
             "SUM(COALESCE(distance_m,0)) dist FROM activities "
-            "WHERE start_ts BETWEEN ? AND ? GROUP BY m ORDER BY m", (off, lo, hi)).fetchall()
+            "WHERE start_ts BETWEEN ? AND ? GROUP BY m ORDER BY m", (lo, hi)).fetchall()
 
         n_visits, visit_secs = conn.execute(
             "SELECT COUNT(*), SUM(end_ts - start_ts) FROM visits "
@@ -174,10 +161,11 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
         activities_total = sum(r["dist"] or 0 for r in by_type)
         monthly_source = "activities"
         approx = False
-        if act_monthly:
+        if activities_total > 0:
             monthly = {r["m"]: r["dist"] for r in act_monthly}
         else:
-            monthly, approx = _point_distances(conn, lo, hi, tz_offset_min)
+            # žádné aktivity, nebo aktivity bez vzdáleností → spočítat z bodů
+            monthly, approx = _point_distances(conn, lo, hi)
             monthly_source = "points"
 
     total_km = (activities_total if activities_total else sum(monthly.values())) / 1000
@@ -260,7 +248,7 @@ def _stays_at(conn, lat: float, lon: float, radius_m: float,
 def api_at_location(lat: float = Query(...), lon: float = Query(...),
                     radius_m: float = Query(200, ge=20, le=5000),
                     from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
-    lo, hi = _range(from_ts, to_ts)
+    lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
     return {
@@ -273,42 +261,11 @@ def api_at_location(lat: float = Query(...), lon: float = Query(...),
 
 # ---------------------------------------------------------------- exporty
 
-def _fmt_dt(ts: int | None, off: int):
-    if ts is None:
-        return None
-    return datetime.fromtimestamp(ts + off, timezone.utc).replace(tzinfo=None)
-
-
-def _xlsx_response(wb, filename: str):
-    import io
-    buf = io.BytesIO()
-    wb.save(buf)
-    return Response(
-        buf.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-
-def _sheet(wb, title, headers, rows, widths=None):
-    ws = wb.create_sheet(title)
-    from openpyxl.styles import Font
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for row in rows:
-        ws.append(row)
-    for i, w in enumerate(widths or []):
-        ws.column_dimensions[chr(ord("A") + i)].width = w
-    ws.freeze_panes = "A2"
-    return ws
-
-
 @app.get("/api/export.xlsx")
 def api_export_xlsx(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
-                    tz_offset_min: int = Query(0), include_points: bool = Query(True)):
+                    include_points: bool = Query(True)):
     from openpyxl import Workbook
-    lo, hi = _range(from_ts, to_ts)
-    off = tz_offset_min * 60
+    lo, hi = ts_range(from_ts, to_ts)
     wb = Workbook()
     wb.remove(wb.active)
 
@@ -316,73 +273,72 @@ def api_export_xlsx(from_ts: int | None = Query(None), to_ts: int | None = Query
         visits = conn.execute(
             "SELECT start_ts, end_ts, name, address, semantic, lat, lon FROM visits "
             "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts", (lo, hi)).fetchall()
-        _sheet(wb, "Návštěvy",
-               ["Od", "Do", "Hodin", "Místo", "Adresa", "Typ", "Lat", "Lon"],
-               [[_fmt_dt(v["start_ts"], off), _fmt_dt(v["end_ts"], off),
-                 round((v["end_ts"] - v["start_ts"]) / 3600, 2),
-                 v["name"], v["address"], v["semantic"], v["lat"], v["lon"]]
-                for v in visits],
-               widths=[18, 18, 8, 30, 30, 14, 11, 11])
+        sheet(wb, "Návštěvy",
+              ["Od", "Do", "Hodin", "Místo", "Adresa", "Typ", "Lat", "Lon"],
+              [[fmt_dt(v["start_ts"]), fmt_dt(v["end_ts"]),
+                round((v["end_ts"] - v["start_ts"]) / 3600, 2),
+                v["name"], v["address"], v["semantic"], v["lat"], v["lon"]]
+               for v in visits],
+              widths=[18, 18, 8, 30, 30, 14, 11, 11])
 
         acts = conn.execute(
             "SELECT start_ts, end_ts, type, distance_m FROM activities "
             "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts", (lo, hi)).fetchall()
-        _sheet(wb, "Cesty",
-               ["Od", "Do", "Minut", "Způsob", "Km"],
-               [[_fmt_dt(a["start_ts"], off), _fmt_dt(a["end_ts"], off),
-                 round((a["end_ts"] - a["start_ts"]) / 60, 1), a["type"],
-                 round((a["distance_m"] or 0) / 1000, 2)] for a in acts],
-               widths=[18, 18, 8, 24, 9])
+        sheet(wb, "Cesty",
+              ["Od", "Do", "Minut", "Způsob", "Km"],
+              [[fmt_dt(a["start_ts"]), fmt_dt(a["end_ts"]),
+                round((a["end_ts"] - a["start_ts"]) / 60, 1), a["type"],
+                round((a["distance_m"] or 0) / 1000, 2)] for a in acts],
+              widths=[18, 18, 8, 24, 9])
 
-        stats = api_stats(from_ts, to_ts, tz_offset_min)
-        _sheet(wb, "Km po měsících", ["Měsíc", "Km"],
-               [[m["month"], m["km"]] for m in stats["monthly_km"]], widths=[10, 10])
-        _sheet(wb, "Top místa", ["Místo", "Návštěv", "Hodin", "Lat", "Lon"],
-               [[p["label"], p["count"], p["hours"], round(p["lat"], 6), round(p["lon"], 6)]
-                for p in stats["top_places"]], widths=[34, 9, 9, 11, 11])
+        stats = api_stats(from_ts=from_ts, to_ts=to_ts)
+        sheet(wb, "Km po měsících", ["Měsíc", "Km"],
+              [[m["month"], m["km"]] for m in stats["monthly_km"]], widths=[10, 10])
+        sheet(wb, "Top místa", ["Místo", "Návštěv", "Hodin", "Lat", "Lon"],
+              [[p["label"], p["count"], p["hours"], round(p["lat"], 6), round(p["lon"], 6)]
+               for p in stats["top_places"]], widths=[34, 9, 9, 11, 11])
 
         if include_points:
-            pts = api_points(from_ts, to_ts, limit=100_000)
-            ws = _sheet(wb, "GPS body", ["Čas", "Lat", "Lon"],
-                        [[_fmt_dt(p[0], off), p[1], p[2]] for p in pts["points"]],
-                        widths=[18, 11, 11])
+            pts = api_points(from_ts=from_ts, to_ts=to_ts, limit=100_000)
+            ws = sheet(wb, "GPS body", ["Čas", "Lat", "Lon"],
+                       [[fmt_dt(p[0]), p[1], p[2]] for p in pts["points"]],
+                       widths=[18, 11, 11])
             if pts["step"] > 1:
                 ws.append([])
                 ws.append([f"Pozn.: vzorkováno 1:{pts['step']} "
                            f"(celkem {pts['total']} bodů v období)"])
 
-    return _xlsx_response(wb, "gmaps-historie.xlsx")
+    return xlsx_response(wb, "gmaps-historie.xlsx")
 
 
 @app.get("/api/export_location.xlsx")
 def api_export_location(lat: float = Query(...), lon: float = Query(...),
                         radius_m: float = Query(200, ge=20, le=5000),
                         from_ts: int | None = Query(None), to_ts: int | None = Query(None),
-                        tz_offset_min: int = Query(0), label: str = Query("")):
+                        label: str = Query("")):
     from openpyxl import Workbook
-    lo, hi = _range(from_ts, to_ts)
-    off = tz_offset_min * 60
+    lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
     wb = Workbook()
     wb.remove(wb.active)
-    ws = _sheet(wb, "Pobyty",
-                ["Datum", "Od", "Do", "Hodin", "Místo"],
-                [[_fmt_dt(s, off).date(), _fmt_dt(s, off).strftime("%H:%M"),
-                  _fmt_dt(e, off).strftime("%H:%M"),
-                  round(max(e - s, 60) / 3600, 2), n or label]
-                 for s, e, n in merged],
-                widths=[12, 8, 8, 8, 34])
+    ws = sheet(wb, "Pobyty",
+               ["Datum", "Od", "Do", "Hodin", "Místo"],
+               [[fmt_dt(s).date(), fmt_dt(s).strftime("%H:%M"),
+                 fmt_dt(e).strftime("%H:%M"),
+                 round(max(e - s, 60) / 3600, 2), n or label]
+                for s, e, n in merged],
+               widths=[12, 8, 8, 8, 34])
     ws.append([])
     ws.append([f"Souřadnice: {lat:.6f}, {lon:.6f}; okruh {int(radius_m)} m; "
                f"celkem {len(merged)} pobytů"])
-    return _xlsx_response(wb, "gmaps-misto.xlsx")
+    return xlsx_response(wb, "gmaps-misto.xlsx")
 
 
 @app.get("/api/export.gpx")
 def api_export_gpx(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
-                   limit: int = Query(100_000, le=500_000)):
-    pts = api_points(from_ts, to_ts, limit=limit)
+                   limit: int = Query(100_000, ge=1, le=500_000)):
+    pts = api_points(from_ts=from_ts, to_ts=to_ts, limit=limit)
     parts = ['<?xml version="1.0" encoding="UTF-8"?>\n'
              '<gpx version="1.1" creator="gmaps-historie" '
              'xmlns="http://www.topografix.com/GPX/1/1">\n<trk><trkseg>\n']
@@ -396,16 +352,18 @@ def api_export_gpx(from_ts: int | None = Query(None), to_ts: int | None = Query(
 
 @app.post("/api/import")
 async def api_import(file: UploadFile):
-    suffix = ".zip" if (file.filename or "").lower().endswith(".zip") else ".json"
     tmpdir = os.path.dirname(db.DB_PATH) or "."
     os.makedirs(tmpdir, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=tmpdir, suffix=suffix, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(dir=tmpdir, suffix=".upload", delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
     try:
         counters = importer.import_path(tmp_path)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Import selhal: {exc}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Import selhal: {exc} (část dat už mohla být uložena; "
+                   f"opakovaný import je bezpečný, duplicity se přeskočí)")
     finally:
         os.unlink(tmp_path)
     return counters.as_dict()

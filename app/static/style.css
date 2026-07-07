@@ -25,11 +25,6 @@
     --series-2: #199e70;
     --accent-red: #e66767;
   }
-  .leaflet-layer,
-  .leaflet-control-zoom,
-  .leaflet-control-attribution {
-    filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
-  }
 }
 
 * { box-sizing: border-box; }

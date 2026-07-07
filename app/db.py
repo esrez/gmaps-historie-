@@ -1,6 +1,7 @@
 """SQLite úložiště pro historii polohy."""
 import os
 import sqlite3
+import threading
 
 DB_PATH = os.environ.get("DB_PATH", os.path.join("data", "history.db"))
 
@@ -56,10 +57,49 @@ CREATE TABLE IF NOT EXISTS trips (
     driver      TEXT,
     plate       TEXT,
     private     INTEGER NOT NULL DEFAULT 0,
-    activity_ts INTEGER UNIQUE
+    activity_ts INTEGER UNIQUE,
+    excluded    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_trips_ts ON trips(start_ts);
+
+CREATE TABLE IF NOT EXISTS km_rules (
+    id          INTEGER PRIMARY KEY,
+    origin      TEXT NOT NULL DEFAULT '',
+    destination TEXT NOT NULL,
+    km          REAL NOT NULL,
+    UNIQUE(origin, destination)
+);
+
+CREATE TABLE IF NOT EXISTS odometer (
+    year INTEGER PRIMARY KEY,
+    km   REAL NOT NULL
+);
 """
+
+# migrace pro databáze založené staršími verzemi schématu
+MIGRATIONS = {
+    "trips": {"excluded": "ALTER TABLE trips ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0"},
+}
+
+_schema_lock = threading.Lock()
+_schema_done = False
+
+
+def _ensure_schema(conn: sqlite3.Connection):
+    global _schema_done
+    if _schema_done:
+        return
+    with _schema_lock:
+        if _schema_done:
+            return
+        conn.executescript(SCHEMA)
+        for table, cols in MIGRATIONS.items():
+            existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for col, ddl in cols.items():
+                if col not in existing:
+                    conn.execute(ddl)
+        conn.commit()
+        _schema_done = True
 
 
 def connect() -> sqlite3.Connection:
@@ -70,5 +110,5 @@ def connect() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
-    conn.executescript(SCHEMA)
+    _ensure_schema(conn)
     return conn

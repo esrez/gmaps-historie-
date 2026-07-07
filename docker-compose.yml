@@ -10,3 +10,9 @@ services:
       - TZ=Europe/Prague
       - DB_PATH=/data/history.db
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/range', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3

@@ -8,7 +8,12 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 ## Funkce
 
 - **Mapa tras a bodů** – trasy, jednotlivé GPS body (s časem po najetí myší)
-  i navštívená místa, filtrování podle období
+  i navštívená místa, filtrování podle období (vč. předvoleb Letos/Loni);
+  najetí na trasu ukáže čas, kliknutí na ni rovnou přehraje daný den
+- **4 mapové podklady** – OpenStreetMap, světlý a tmavý (Carto), satelitní
+  (Esri); tmavý se předvolí podle vzhledu systému; měřítko na mapě
+- **Shlukování míst** – při oddálení se navštívená místa slučují do
+  přehledných clusterů s počtem
 - **Heatmapa** – kde trávíte nejvíc času / kudy nejčastěji jezdíte
 - **Hledání místa** – vyhledá vaše navštívená místa i libovolnou adresu/obec
   (OpenStreetMap Nominatim)
@@ -26,12 +31,25 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen
     pracovní dny a pracovní doba (např. po–pá 6–18 h), s minimální délkou jízdy
   - odkud/kam se doplní podle vašich navštívených míst (Domov, Práce, názvy míst)
-  - plně editovatelná tabulka (datum, časy, místa, km, účel, soukromá jízda),
+  - **pravidla kilometrů**: pevné km pro trasu či místo (např. Kancelář = 12 km);
+    po zadání km v tabulce se stejná hodnota automaticky doplní všem jízdám na
+    téže trase (obousměrně) a uloží se jako pravidlo; pravidla lze spravovat
+    a hromadně aplikovat na období
+  - **zaokrouhlování km nahoru** (volitelné)
+  - **tachometr**: zadáte roční nájezd a aplikace průběžně ukazuje, kolik km
+    je vykázáno v knize a kolik zbývá
+  - **jízdy vlastním autem**: zaškrtnutím „Vl. auto" se jízda vyřadí z knihy
+    (nezapočítává se a v exportu nebude), „Soukr." značí soukromou jízdu
+    firemním vozem (v knize zůstává)
+  - plně editovatelná tabulka (datum, časy, místa, km, účel),
     ruční přidávání jízd; opakované generování nepřepíše ruční úpravy
   - **export XLSX pro import do programu SPZ** (Milk Computers): sloupce SPZ,
     Datum, Odjezd, Příjezd, Odkud, Kam, Účel jízdy, Km, Řidič, Soukromá.
     Pozn.: vozidlo se stejnou SPZ musí být v programu SPZ založené, jinak
     import odmítne; prázdného řidiče si SPZ doplní z karty vozidla
+
+Časy se všude převádějí podle proměnné `TZ` (výchozí Europe/Prague) se správným
+letním/zimním časem – nastavte ji v `docker-compose.yml`, pokud jste jinde.
 - **Import všech formátů Googlu** s automatickou detekcí:
   - nový export z telefonu (`Timeline.json`, Android i iOS varianta)
   - starý Google Takeout (`Records.json` – zvládá i vícegigabajtové soubory

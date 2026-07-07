@@ -1,18 +1,35 @@
-/* GMaps Historie – frontendová logika */
+/* GMaps Historie – frontendová logika (sdílené helpery v common.js) */
 "use strict";
 
-const $ = (id) => document.getElementById(id);
 const tooltip = $("tooltip");
 
-const map = L.map("map").setView([49.8, 15.5], 7); // výchozí pohled na ČR
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}).addTo(map);
+const map = L.map("map", { zoomControl: true }).setView([49.8, 15.5], 7); // ČR
+
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const CARTO_ATTR = OSM_ATTR + ' &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const baseLayers = {
+  "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 19, attribution: OSM_ATTR }),
+  "Světlá (Carto)": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    { maxZoom: 20, attribution: CARTO_ATTR }),
+  "Tmavá (Carto)": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    { maxZoom: 20, attribution: CARTO_ATTR }),
+  "Satelit (Esri)": L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, attribution: "Tiles &copy; Esri" }),
+};
+const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+baseLayers[prefersDark ? "Tmavá (Carto)" : "OpenStreetMap"].addTo(map);
+L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
+L.control.scale({ imperial: false }).addTo(map);
 
 const trackLayer = L.layerGroup().addTo(map);
 const pointLayer = L.layerGroup().addTo(map);
-const visitLayer = L.layerGroup().addTo(map);
+const visitLayer = L.markerClusterGroup({
+  disableClusteringAtZoom: 15,
+  maxClusterRadius: 40,
+  showCoverageOnHover: false,
+}).addTo(map);
 const playLayer = L.layerGroup().addTo(map);
 const locLayer = L.layerGroup().addTo(map);
 const canvasRenderer = L.canvas({ padding: 0.3 });
@@ -25,31 +42,19 @@ const css = (name) =>
 
 // ---------------------------------------------------------------- období
 
-function toDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function dateToTs(value, endOfDay) {
-  const [y, m, d] = value.split("-").map(Number);
-  const dt = new Date(y, m - 1, d, 0, 0, 0);
-  return Math.floor(dt.getTime() / 1000) + (endOfDay ? 86400 : 0);
-}
-
-function currentRange() {
-  const f = $("dateFrom").value, t = $("dateTo").value;
-  return {
-    from_ts: f ? dateToTs(f, false) : null,
-    to_ts: t ? dateToTs(t, true) : null,
-  };
-}
-
-function setPreset(days) {
+function setPreset(preset) {
   const today = new Date();
-  if (days === "all") {
+  if (preset === "all") {
     $("dateFrom").value = "";
     $("dateTo").value = "";
+  } else if (preset === "thisYear") {
+    $("dateFrom").value = `${today.getFullYear()}-01-01`;
+    $("dateTo").value = toDateStr(today);
+  } else if (preset === "lastYear") {
+    $("dateFrom").value = `${today.getFullYear() - 1}-01-01`;
+    $("dateTo").value = `${today.getFullYear() - 1}-12-31`;
   } else {
-    const from = new Date(today.getTime() - days * 86400 * 1000);
+    const from = new Date(today.getTime() - Number(preset) * 86400 * 1000);
     $("dateFrom").value = toDateStr(from);
     $("dateTo").value = toDateStr(today);
   }
@@ -57,27 +62,22 @@ function setPreset(days) {
 }
 
 document.querySelectorAll(".presets button").forEach((b) =>
-  b.addEventListener("click", () => setPreset(b.dataset.days === "all" ? "all" : Number(b.dataset.days))));
+  b.addEventListener("click", () => setPreset(b.dataset.days)));
 $("loadBtn").addEventListener("click", loadAll);
 
 // ------------------------------------------------------------------ API
 
-async function api(path, params) {
-  const res = await fetch(buildUrl(path, params));
-  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
-  return res.json();
-}
+const api = (path, params) => apiFetch(path, { params });
 
 async function loadAll() {
   const r = currentRange();
   $("loadBtn").disabled = true;
   try {
-    const tz = -new Date().getTimezoneOffset();
     const [pts, heat, visits, stats] = await Promise.all([
       api("/api/points", r),
       api("/api/heatmap", r),
       api("/api/visits", r),
-      api("/api/stats", { ...r, tz_offset_min: tz }),
+      api("/api/stats", r),
     ]);
     state.points = pts.points;
     state.heatCells = heat.cells;
@@ -135,11 +135,23 @@ function renderTracks() {
   trackLayer.clearLayers();
   if (!$("layerTracks").checked) return;
   for (const seg of splitSegments(state.points)) {
-    L.polyline(seg.map((p) => [p[1], p[2]]), {
+    const from = new Date(seg[0][0] * 1000);
+    const to = new Date(seg[seg.length - 1][0] * 1000);
+    const line = L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: css("--series-1"),
       weight: 2,
       opacity: 0.75,
-    }).addTo(trackLayer);
+    }).bindTooltip(
+      `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>` +
+      "<i>kliknutím přehrajete den</i>", { sticky: true });
+    line.on("click", (ev) => {
+      L.DomEvent.stop(ev); // nespouštět mapový popup „Kdy jsem tu byl?"
+      $("playDate").value = toDateStr(from);
+      playDay();
+    });
+    line.on("mouseover", () => line.setStyle({ weight: 4 }));
+    line.on("mouseout", () => line.setStyle({ weight: 2 }));
+    line.addTo(trackLayer);
   }
 }
 
@@ -171,19 +183,23 @@ function renderHeat() {
   heatLayer = L.heatLayer(data, { radius: 12, blur: 18, maxZoom: 17, max: 1.0 }).addTo(map);
 }
 
+function visitMarker(v) {
+  return L.circleMarker([v.lat, v.lon], {
+    radius: 5,
+    color: css("--series-2"),
+    fillColor: css("--series-2"),
+    fillOpacity: 0.6,
+    weight: 1,
+  });
+}
+
 function renderVisits() {
   visitLayer.clearLayers();
   if (!$("layerVisits").checked) return;
   for (const v of state.visits) {
     const from = new Date(v.start_ts * 1000), to = new Date(v.end_ts * 1000);
     const hours = ((v.end_ts - v.start_ts) / 3600).toFixed(1);
-    L.circleMarker([v.lat, v.lon], {
-      radius: 5,
-      color: css("--series-2"),
-      fillColor: css("--series-2"),
-      fillOpacity: 0.6,
-      weight: 1,
-    }).bindPopup(
+    visitMarker(v).bindPopup(
       `<b>${escapeHtml(v.name || v.semantic || "Místo")}</b><br>` +
       (v.address ? escapeHtml(v.address) + "<br>" : "") +
       `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>${hours} h`
@@ -199,24 +215,17 @@ function renderVisits() {
     renderVisits();
   }));
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (m) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
-}
-
 // ------------------------------------------------------------ statistiky
 
 const TYPE_LABELS = {
-  "IN_PASSENGER_VEHICLE": "Autem", "IN PASSENGER VEHICLE": "Autem",
-  "DRIVING": "Autem", "WALKING": "Pěšky", "RUNNING": "Běh",
-  "CYCLING": "Na kole", "IN_BUS": "Autobusem", "IN BUS": "Autobusem",
-  "IN_TRAIN": "Vlakem", "IN TRAIN": "Vlakem", "IN_TRAM": "Tramvají",
-  "IN TRAM": "Tramvají", "IN_SUBWAY": "Metrem", "IN SUBWAY": "Metrem",
-  "FLYING": "Letadlem", "MOTORCYCLING": "Na motorce", "IN_FERRY": "Trajektem",
-  "SAILING": "Lodí", "SKIING": "Lyže", "UNKNOWN": "Neznámé",
-  "UNKNOWN_ACTIVITY_TYPE": "Neznámé",
+  IN_PASSENGER_VEHICLE: "Autem", DRIVING: "Autem", WALKING: "Pěšky",
+  RUNNING: "Běh", CYCLING: "Na kole", IN_BUS: "Autobusem", IN_TRAIN: "Vlakem",
+  IN_TRAM: "Tramvají", IN_SUBWAY: "Metrem", FLYING: "Letadlem",
+  MOTORCYCLING: "Na motorce", IN_FERRY: "Trajektem", SAILING: "Lodí",
+  SKIING: "Lyže", UNKNOWN: "Neznámé", UNKNOWN_ACTIVITY_TYPE: "Neznámé",
 };
-const typeLabel = (t) => TYPE_LABELS[t] || t.replaceAll("_", " ").toLowerCase();
+const typeLabel = (t) => TYPE_LABELS[t.replaceAll(" ", "_")]
+  || t.replaceAll("_", " ").toLowerCase();
 
 function tile(value, label) {
   return `<div class="tile"><div class="value">${value}</div><div class="label">${label}</div></div>`;
@@ -416,22 +425,14 @@ $("locExportBtn").addEventListener("click", () => {
   const r = currentRange();
   location.href = buildUrl("/api/export_location.xlsx", {
     lat: loc.lat, lon: loc.lon, radius_m: Number($("locRadius").value),
-    ...r, tz_offset_min: -new Date().getTimezoneOffset(), label: loc.label,
+    ...r, label: loc.label,
   });
 });
 
 // ---------------------------------------------------------------- exporty
 
-function buildUrl(path, params) {
-  const url = new URL(path, location.origin);
-  for (const [k, v] of Object.entries(params || {}))
-    if (v !== null && v !== undefined) url.searchParams.set(k, v);
-  return url.toString();
-}
-
 $("exportXlsx").addEventListener("click", () => {
-  location.href = buildUrl("/api/export.xlsx",
-    { ...currentRange(), tz_offset_min: -new Date().getTimezoneOffset() });
+  location.href = buildUrl("/api/export.xlsx", currentRange());
 });
 $("exportGpx").addEventListener("click", () => {
   location.href = buildUrl("/api/export.gpx", currentRange());
@@ -439,7 +440,7 @@ $("exportGpx").addEventListener("click", () => {
 
 // -------------------------------------------------------- přehrávání dne
 
-const play = { points: [], timer: null, t: 0, marker: null, trail: null };
+const play = { points: [], timer: null, t: 0, marker: null, trail: null, idx: 1 };
 
 async function playDay() {
   stopPlayback();
@@ -476,7 +477,9 @@ function startPlayback(day) {
   play.points = day.points;
   const pts = play.points;
   play.t = pts[0][0];
-  play.trail = L.polyline([], { color: css("--accent-red"), weight: 3 }).addTo(playLayer);
+  play.idx = 1;
+  play.trail = L.polyline([[pts[0][1], pts[0][2]]],
+    { color: css("--accent-red"), weight: 3 }).addTo(playLayer);
   play.marker = L.circleMarker([pts[0][1], pts[0][2]], {
     radius: 8, color: "#fff", weight: 2,
     fillColor: css("--accent-red"), fillOpacity: 1,
@@ -484,9 +487,7 @@ function startPlayback(day) {
   map.fitBounds(pts.map((p) => [p[1], p[2]]), { padding: [40, 40] });
 
   for (const v of day.visits) {
-    L.circleMarker([v.lat, v.lon], {
-      radius: 5, color: css("--series-2"), fillColor: css("--series-2"), fillOpacity: 0.5, weight: 1,
-    }).bindTooltip(v.name || v.semantic || "Místo").addTo(playLayer);
+    visitMarker(v).bindTooltip(v.name || v.semantic || "Místo").addTo(playLayer);
   }
   const km = day.activities.reduce((a, x) => a + (x.distance_m || 0), 0) / 1000;
   $("playInfo").textContent =
@@ -507,17 +508,31 @@ function startPlayback(day) {
 
 function renderPlayhead(t) {
   const pts = play.points;
-  let i = pts.findIndex((p) => p[0] > t);
-  if (i < 1) i = 1;
-  const a = pts[i - 1], b = pts[i] || a;
-  const gap = b[0] - a[0];
-  const f = gap > 0 && gap < 900 ? Math.min(1, (t - a[0]) / gap) : 0;
-  const lat = a[1] + (b[1] - a[1]) * f, lon = a[2] + (b[2] - a[2]) * f;
+  const last = pts.length - 1;
+  // posun zpět (slider) → kurzor a stopu postavit znovu od začátku
+  if (t < pts[play.idx - 1][0]) {
+    play.idx = 1;
+    play.trail.setLatLngs([[pts[0][1], pts[0][2]]]);
+  }
+  // kurzor jde jen dopředu; stopa roste přidáváním bodů, ne přestavbou
+  while (play.idx <= last && pts[play.idx][0] <= t) {
+    play.trail.addLatLng([pts[play.idx][1], pts[play.idx][2]]);
+    play.idx++;
+  }
+  let lat, lon;
+  if (play.idx > last) {
+    lat = pts[last][1]; lon = pts[last][2];
+  } else {
+    const a = pts[play.idx - 1], b = pts[play.idx];
+    const gap = b[0] - a[0];
+    const f = gap > 0 && gap < 900 ? Math.min(1, (t - a[0]) / gap) : 0;
+    lat = a[1] + (b[1] - a[1]) * f;
+    lon = a[2] + (b[2] - a[2]) * f;
+  }
   play.marker.setLatLng([lat, lon]);
-  play.trail.setLatLngs(pts.slice(0, i).map((p) => [p[1], p[2]]).concat([[lat, lon]]));
   $("playClock").textContent = new Date(t * 1000).toLocaleTimeString("cs");
-  const t0 = pts[0][0], t1 = pts[pts.length - 1][0];
-  $("playSlider").value = Math.round(((t - t0) / (t1 - t0)) * 1000);
+  const t0 = pts[0][0], t1 = pts[last][0];
+  $("playSlider").value = t1 > t0 ? Math.round(((t - t0) / (t1 - t0)) * 1000) : 1000;
 }
 
 $("playSlider").addEventListener("input", () => {
