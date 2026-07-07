@@ -15,8 +15,8 @@
   <aside id="sidebar">
     <h1>🗺️ GMaps Historie <a href="/kniha" class="navlink">Kniha jízd →</a></h1>
 
-    <section>
-      <h2>Období</h2>
+    <details class="sec" open>
+      <summary>Období</summary>
       <div class="row">
         <label>Od <input type="date" id="dateFrom"></label>
         <label>Do <input type="date" id="dateTo"></label>
@@ -31,10 +31,10 @@
         <button data-days="all">Vše</button>
       </div>
       <button id="loadBtn" class="primary">Načíst</button>
-    </section>
+    </details>
 
-    <section>
-      <h2>Hledání místa</h2>
+    <details class="sec" open>
+      <summary>Hledání místa</summary>
       <div class="row">
         <input type="search" id="searchInput" placeholder="Obec, adresa, název místa…">
         <button id="searchBtn">Hledat</button>
@@ -59,31 +59,41 @@
         <div id="locSummary" class="muted"></div>
         <ul id="locStays"></ul>
       </div>
-    </section>
+    </details>
 
-    <section>
-      <h2>Vrstvy</h2>
+    <details class="sec" open>
+      <summary>Vrstvy</summary>
       <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
       <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
       <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
       <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
-    </section>
+    </details>
 
-    <section>
-      <h2>Statistiky</h2>
+    <details class="sec" open>
+      <summary>Statistiky</summary>
       <div id="statTiles" class="tiles"></div>
       <div id="monthlyChartWrap">
         <h3 id="monthlyTitle">Kilometry po měsících</h3>
-        <div id="monthlyChart"></div>
+        <div id="monthlyChart" class="chart"></div>
         <p id="monthlyNote" class="muted"></p>
       </div>
       <div id="byType"></div>
       <h3>Nejnavštěvovanější místa</h3>
       <ol id="topPlaces"></ol>
-    </section>
+    </details>
 
-    <section>
-      <h2>Přehrávání dne</h2>
+    <details class="sec">
+      <summary>Analýza</summary>
+      <h3>Km podle dne v týdnu</h3>
+      <div id="weekdayChart" class="chart"></div>
+      <h3>Aktivita podle hodiny</h3>
+      <div id="hourlyChart" class="chart"></div>
+      <h3>Kilometry po letech</h3>
+      <div id="yearlyList"></div>
+    </details>
+
+    <details class="sec">
+      <summary>Přehrávání dne</summary>
       <div class="row">
         <button id="dayPrev" title="Předchozí den">◀</button>
         <input type="date" id="playDate">
@@ -101,20 +111,38 @@
       </div>
       <input type="range" id="playSlider" min="0" max="1000" value="0">
       <div id="playInfo" class="muted"></div>
-    </section>
+    </details>
 
-    <section>
-      <h2>Export</h2>
+    <details class="sec">
+      <summary>Export</summary>
       <div class="row">
         <button id="exportXlsx">📊 Excel (.xlsx)</button>
         <button id="exportGpx">🛰 GPX</button>
       </div>
       <p class="muted">Exportuje zvolené období: návštěvy, cesty, statistiky
          a GPS body do listů Excelu; GPX pro jiné mapové aplikace.</p>
-    </section>
+    </details>
 
-    <section>
-      <h2>Import dat</h2>
+    <details class="sec">
+      <summary>Údržba dat</summary>
+      <p class="muted">Najde a opraví chyby v datech: GPS „teleporty",
+         nepřesné body a vadné záznamy návštěv. Upozorní i na dny bez dat.</p>
+      <div class="row">
+        <button id="qualityBtn">🔍 Zkontrolovat data</button>
+        <label>Limit přesnosti
+          <select id="accLimit">
+            <option value="50">50 m</option>
+            <option value="100" selected>100 m</option>
+            <option value="200">200 m</option>
+          </select>
+        </label>
+      </div>
+      <div id="qualityReport"></div>
+      <button id="cleanupBtn" hidden class="danger">🧹 Opravit (smazat vadné záznamy)</button>
+    </details>
+
+    <details class="sec">
+      <summary>Import dat</summary>
       <p class="muted">Nahrajte <b>Timeline.json</b> (export z telefonu), <b>Records.json</b>,
          měsíční JSON ze Semantic Location History, nebo celý <b>ZIP</b> z Takeoutu.
          Formát se rozpozná automaticky, duplicity se přeskočí.</p>
@@ -122,7 +150,7 @@
       <button id="importBtn">Importovat</button>
       <div id="importStatus" class="muted"></div>
       <div id="dbInfo" class="muted"></div>
-    </section>
+    </details>
   </aside>
 
   <main id="map"></main>

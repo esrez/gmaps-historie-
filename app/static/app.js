@@ -73,11 +73,12 @@ async function loadAll() {
   const r = currentRange();
   $("loadBtn").disabled = true;
   try {
-    const [pts, heat, visits, stats] = await Promise.all([
+    const [pts, heat, visits, stats, analysis] = await Promise.all([
       api("/api/points", r),
       api("/api/heatmap", r),
       api("/api/visits", r),
       api("/api/stats", r),
+      api("/api/analysis", r),
     ]);
     state.points = pts.points;
     state.heatCells = heat.cells;
@@ -87,9 +88,10 @@ async function loadAll() {
     renderHeat();
     renderVisits();
     renderStats(stats, pts);
+    renderAnalysis(analysis);
     if (!state.fitted) fitToData();
   } catch (e) {
-    alert("Načtení selhalo: " + e.message);
+    toast("Načtení dat selhalo: " + e.message, "error");
   } finally {
     $("loadBtn").disabled = false;
   }
@@ -264,61 +266,88 @@ function renderStats(s, pts) {
     (pts.step > 1 ? ` (vzorkování 1:${pts.step})` : "");
 }
 
-// Sloupcový graf km/měsíc – SVG, jedna řada (modrá), tooltip na hover.
-function renderMonthlyChart(monthly) {
-  const el = $("monthlyChart");
-  if (!monthly || monthly.length < 2) {
+// Obecný sloupcový graf – SVG, jedna řada (modrá), tooltip na hover.
+// items: [{label, value, tip?}]; opts: {unit, tickEvery, aria, decimals}
+function renderBarChart(el, items, opts = {}) {
+  if (!items || items.length < 2 || !items.some((it) => it.value > 0)) {
     el.innerHTML = "";
-    $("monthlyTitle").hidden = true;
-    return;
+    return false;
   }
-  $("monthlyTitle").hidden = false;
+  const unit = opts.unit || "";
+  const dec = opts.decimals ?? 0;
+  const fmt = (v) => v.toLocaleString("cs", { maximumFractionDigits: dec });
 
-  const W = 308, H = 126, padL = 30, padB = 16, padT = 14;
+  const W = 308, H = 126, padL = 34, padB = 16, padT = 14;
   const plotW = W - padL - 4, plotH = H - padT - padB;
-  const maxKm = Math.max(...monthly.map((m) => m.km), 1);
-  const n = monthly.length;
+  const maxV = Math.max(...items.map((it) => it.value), 1e-9);
+  const n = items.length;
   const slot = plotW / n;
   const barW = Math.max(2, Math.min(18, slot - 2));
-  const y = (km) => padT + plotH * (1 - km / maxKm);
-  const peakIdx = monthly.findIndex((m) => m.km === maxKm);
+  const y = (v) => padT + plotH * (1 - v / maxV);
+  const peakIdx = items.findIndex((it) => it.value === maxV);
 
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Kilometry po měsících">`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.aria || ""}">`;
   for (const f of [0.5, 1]) {
-    const gy = y(maxKm * f);
+    const gy = y(maxV * f);
     svg += `<line class="gridline" x1="${padL}" y1="${gy}" x2="${W - 4}" y2="${gy}"/>`;
-    svg += `<text x="${padL - 4}" y="${gy + 3}" text-anchor="end">${Math.round(maxKm * f).toLocaleString("cs")}</text>`;
+    svg += `<text x="${padL - 4}" y="${gy + 3}" text-anchor="end">${fmt(maxV * f)}</text>`;
   }
-  monthly.forEach((m, i) => {
+  items.forEach((it, i) => {
     const x = padL + i * slot + (slot - barW) / 2;
-    const by = y(m.km);
+    const by = y(it.value);
     const h = Math.max(0, padT + plotH - by);
     const r = Math.min(4, barW / 2, h); // zaoblený jen horní konec, ukotveno k základně
     svg += `<path class="bar" data-i="${i}" d="M${x},${padT + plotH} v${-(h - r)} q0,${-r} ${r},${-r} h${barW - 2 * r} q${r},0 ${r},${r} v${h - r} z"/>`;
     if (i === peakIdx && h > 10)
-      svg += `<text class="peak" x="${x + barW / 2}" y="${by - 3}" text-anchor="middle">${Math.round(m.km).toLocaleString("cs")}</text>`;
+      svg += `<text class="peak" x="${x + barW / 2}" y="${by - 3}" text-anchor="middle">${fmt(it.value)}</text>`;
   });
   svg += `<line class="baseline" x1="${padL}" y1="${padT + plotH}" x2="${W - 4}" y2="${padT + plotH}"/>`;
-  const every = Math.ceil(n / 6);
-  monthly.forEach((m, i) => {
+  const every = opts.tickEvery || Math.ceil(n / 6);
+  items.forEach((it, i) => {
     if (i % every !== 0) return;
     const x = padL + i * slot + slot / 2;
-    const [yy, mm] = m.month.split("-");
-    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle">${Number(mm)}/${yy.slice(2)}</text>`;
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle">${it.label}</text>`;
   });
   svg += "</svg>";
   el.innerHTML = svg;
 
   el.querySelectorAll(".bar").forEach((bar) => {
     bar.addEventListener("mousemove", (ev) => {
-      const m = monthly[Number(bar.dataset.i)];
-      tooltip.innerHTML = `<span class="t-label">${m.month}</span> <b>${m.km.toLocaleString("cs")} km</b>`;
+      const it = items[Number(bar.dataset.i)];
+      tooltip.innerHTML =
+        `<span class="t-label">${it.tip || it.label}</span> ` +
+        `<b>${it.value.toLocaleString("cs", { maximumFractionDigits: 1 })}${unit ? " " + unit : ""}</b>`;
       tooltip.hidden = false;
       tooltip.style.left = ev.clientX + 12 + "px";
       tooltip.style.top = ev.clientY - 10 + "px";
     });
     bar.addEventListener("mouseleave", () => { tooltip.hidden = true; });
   });
+  return true;
+}
+
+function renderMonthlyChart(monthly) {
+  const items = (monthly || []).map((m) => {
+    const [yy, mm] = m.month.split("-");
+    return { label: `${Number(mm)}/${yy.slice(2)}`, tip: m.month, value: m.km };
+  });
+  const shown = renderBarChart($("monthlyChart"), items,
+    { unit: "km", aria: "Kilometry po měsících" });
+  $("monthlyTitle").hidden = !shown;
+}
+
+function renderAnalysis(a) {
+  renderBarChart($("weekdayChart"),
+    a.weekday_km.map((d) => ({ label: d.day, value: d.km })),
+    { unit: "km", tickEvery: 1, aria: "Kilometry podle dne v týdnu" });
+  renderBarChart($("hourlyChart"),
+    a.hourly_points.map((h) => ({ label: String(h.hour), tip: `${h.hour}:00–${h.hour}:59`, value: h.count })),
+    { unit: "záznamů", tickEvery: 4, aria: "Počet GPS záznamů podle hodiny dne" });
+  $("yearlyList").innerHTML = a.yearly_km.length
+    ? a.yearly_km.map((y) =>
+        `<div class="typeRow"><span>${y.year} (${y.trips.toLocaleString("cs")} cest)</span>` +
+        `<b>${y.km.toLocaleString("cs")} km</b></div>`).join("")
+    : '<p class="muted">Žádné rozpoznané cesty v období.</p>';
 }
 
 // ------------------------------------------------- hledání a historie místa
@@ -445,7 +474,8 @@ const play = { points: [], timer: null, t: 0, marker: null, trail: null, idx: 1 
 async function playDay() {
   stopPlayback();
   const dateVal = $("playDate").value;
-  if (!dateVal) { alert("Vyberte den k přehrání."); return; }
+  if (!dateVal) { toast("Vyberte den k přehrání.", "error"); return; }
+  $("playDate").closest("details").open = true;
   const from_ts = dateToTs(dateVal, false);
   const day = await api("/api/day", { from_ts, to_ts: from_ts + 86400 });
   if (day.points.length < 2) {
@@ -548,11 +578,63 @@ function stopPlayback() {
   $("playBtn").textContent = "▶ Přehrát";
 }
 
+// ------------------------------------------------------------ údržba dat
+
+function qualityParams() {
+  return { ...currentRange(), accuracy_limit: Number($("accLimit").value) };
+}
+
+$("qualityBtn").addEventListener("click", async () => {
+  $("qualityBtn").disabled = true;
+  $("qualityReport").innerHTML = '<p class="muted">Kontroluji…</p>';
+  try {
+    const q = await api("/api/quality", qualityParams());
+    const fmt = (v) => v.toLocaleString("cs");
+    const issues = [];
+    if (q.low_accuracy) issues.push(`⚠️ ${fmt(q.low_accuracy)} bodů s přesností horší než ${q.accuracy_limit} m`);
+    if (q.outliers) issues.push(`⚠️ ${fmt(q.outliers)} GPS „teleportů" (osamocené skoky)`);
+    if (q.outliers === null) issues.push("ℹ️ Příliš mnoho bodů – teleporty se vyhodnotí až při opravě");
+    if (q.bad_visits) issues.push(`⚠️ ${fmt(q.bad_visits)} vadných návštěv (konec před začátkem)`);
+    if (q.gap_days) issues.push(
+      `ℹ️ ${fmt(q.gap_days)} dní bez jakýchkoli dat` +
+      (q.gap_samples.length ? ` (např. ${q.gap_samples.slice(0, 5).join(", ")}…)` : ""));
+    $("qualityReport").innerHTML = issues.length
+      ? `<ul class="issueList">${issues.map((i) => `<li>${i}</li>`).join("")}</ul>`
+      : '<p class="muted">✅ Žádné problémy nenalezeny.</p>';
+    const fixable = q.low_accuracy + (q.outliers ?? 1) + q.bad_visits;
+    $("cleanupBtn").hidden = fixable === 0;
+  } catch (e) {
+    $("qualityReport").innerHTML = `<p class="muted">Kontrola selhala: ${e.message}</p>`;
+  } finally {
+    $("qualityBtn").disabled = false;
+  }
+});
+
+$("cleanupBtn").addEventListener("click", async () => {
+  const dry = await apiFetch("/api/cleanup", { method: "POST", params: { ...qualityParams(), dry_run: true } });
+  const total = dry.low_accuracy + dry.outliers + dry.bad_visits;
+  if (!total) { $("qualityReport").innerHTML = '<p class="muted">Není co opravovat.</p>'; return; }
+  if (!confirm(`Smazat ${dry.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
+    + `${dry.outliers.toLocaleString("cs")} teleportů a ${dry.bad_visits.toLocaleString("cs")} vadných návštěv?\n`
+    + "Doporučení: originální exporty od Googlu si nechte – kdykoli je lze naimportovat znovu.")) return;
+  $("cleanupBtn").disabled = true;
+  try {
+    const res = await apiFetch("/api/cleanup", { method: "POST", params: { ...qualityParams(), dry_run: false } });
+    $("qualityReport").innerHTML =
+      `<p class="muted">🧹 Smazáno: ${res.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
+      + `${res.outliers.toLocaleString("cs")} teleportů, ${res.bad_visits.toLocaleString("cs")} návštěv.</p>`;
+    $("cleanupBtn").hidden = true;
+    loadAll();
+  } finally {
+    $("cleanupBtn").disabled = false;
+  }
+});
+
 // ----------------------------------------------------------------- import
 
 $("importBtn").addEventListener("click", async () => {
   const f = $("importFile").files[0];
-  if (!f) { alert("Vyberte soubor k importu."); return; }
+  if (!f) { toast("Nejdřív vyberte soubor k importu.", "error"); return; }
   const fd = new FormData();
   fd.append("file", f);
   $("importBtn").disabled = true;
@@ -564,10 +646,12 @@ $("importBtn").addEventListener("click", async () => {
     $("importStatus").textContent =
       `Hotovo: +${body.points.toLocaleString("cs")} bodů, +${body.visits.toLocaleString("cs")} návštěv, ` +
       `+${body.activities.toLocaleString("cs")} aktivit (${body.files} souborů).`;
+    toast("Import dokončen ✓", "success");
     state.fitted = false;
     loadAll();
   } catch (e) {
     $("importStatus").textContent = "Import selhal: " + e.message;
+    toast("Import selhal", "error");
   } finally {
     $("importBtn").disabled = false;
   }
@@ -580,6 +664,13 @@ $("importBtn").addEventListener("click", async () => {
   try {
     const r = await api("/api/range");
     if (r.max_ts) $("playDate").value = toDateStr(new Date(r.max_ts * 1000));
-  } catch (e) { /* prázdná DB */ }
+    if (!r.points && !r.visits) {
+      // prázdná databáze → navést uživatele rovnou k importu
+      $("importFile").closest("details").open = true;
+      $("importStatus").textContent =
+        "👋 Začněte zde: nahrajte Timeline.json z telefonu nebo ZIP z Takeoutu.";
+      toast("Zatím nejsou žádná data – začněte importem exportu z Google Maps.");
+    }
+  } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   loadAll();
 })();

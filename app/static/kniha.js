@@ -52,6 +52,7 @@ async function loadTrips() {
     trips = data.trips;
     renderTable(data.total_km);
     refreshOdometer(odoYear()); // rok podle zvoleného období
+    refreshAlerts();
   } catch (e) {
     $("tripsSummary").textContent = "Načtení jízd selhalo: " + e.message;
   }
@@ -112,7 +113,11 @@ async function onCellChange(t, inp) {
     patch.end_ts = end;
   } else if (f === "km") {
     const v = parseFloat(String(inp.value).replace(",", "."));
-    if (isNaN(v) || v < 0) { inp.value = t.km; return; }
+    if (isNaN(v) || v < 0) {
+      inp.value = t.km;
+      toast("Neplatná hodnota km – vráceno zpět.", "error");
+      return;
+    }
     patch.km = roundKm(v);
     inp.value = patch.km;
   } else if (f === "private" || f === "excluded") {
@@ -123,9 +128,13 @@ async function onCellChange(t, inp) {
   try {
     const updated = await api(`/api/trips/${t.id}`, { method: "PATCH", body: patch });
     Object.assign(t, updated);
+    row.classList.remove("flashOk");
+    void row.offsetWidth; // restart animace
+    row.classList.add("flashOk");
     if (f === "excluded") {
       row.classList.toggle("excludedRow", t.excluded);
       refreshOdometer();
+      refreshAlerts();
     }
     if (f === "km" && $("setAutoFill").checked && (t.destination || t.origin)) {
       await propagateKm(t);
@@ -133,7 +142,7 @@ async function onCellChange(t, inp) {
     }
     updateTotal();
   } catch (e) {
-    alert("Uložení selhalo: " + e.message);
+    toast("Uložení selhalo: " + e.message, "error");
   }
 }
 
@@ -148,9 +157,9 @@ async function propagateKm(t) {
   trips = res.trips;
   renderTable(res.total_km);
   loadRules();
-  $("genStatus").textContent =
-    `Doplněno ${res.km} km do ${res.updated} jízd na trase ` +
-    `${t.origin || "?"} – ${t.destination || "?"} (pravidlo uloženo).`;
+  refreshOdometer();
+  toast(`Doplněno ${res.km} km do ${res.updated} jízd na stejné trase (pravidlo uloženo).`,
+    "success");
 }
 
 async function onDelete(t, tr) {
@@ -160,6 +169,8 @@ async function onDelete(t, tr) {
   tr.remove();
   updateTotal();
   refreshOdometer();
+  refreshAlerts();
+  toast("Jízda smazána.", "success");
 }
 
 // -------------------------------------------------------------- pravidla
@@ -183,7 +194,7 @@ async function loadRules() {
 $("ruleAddBtn").addEventListener("click", async () => {
   const dest = $("ruleDest").value.trim();
   const km = parseFloat(String($("ruleKm").value).replace(",", "."));
-  if (!dest || isNaN(km)) { alert("Vyplňte cíl (kam) a km."); return; }
+  if (!dest || isNaN(km)) { toast("Vyplňte cíl (kam) a km.", "error"); return; }
   await api("/api/trips/rules", {
     method: "POST",
     body: { origin: $("ruleOrigin").value.trim(), destination: dest, km: roundKm(km) },
@@ -232,18 +243,57 @@ async function refreshOdometer(explicitYear) {
 $("odoSaveBtn").addEventListener("click", async () => {
   const year = Number($("odoYear").value);
   const km = parseFloat(String($("odoKm").value).replace(",", "."));
-  if (!year || isNaN(km)) { alert("Vyplňte rok a km."); return; }
+  if (!year || isNaN(km)) { toast("Vyplňte rok a km.", "error"); return; }
   await api("/api/trips/odometer", { method: "PUT", body: { year, km } });
   refreshOdometer();
 });
 $("odoYear").addEventListener("change", refreshOdometer);
+
+// ------------------------------------------------------------ upozornění
+
+async function refreshAlerts() {
+  const r = currentRange();
+  const box = $("knihaAlerts");
+  if (r.from_ts === null || r.to_ts === null) { box.innerHTML = ""; return; }
+  try {
+    const [missing, al] = await Promise.all([
+      api("/api/trips/missing_days", {
+        params: { ...r, workdays_only: $("setWorkdays").checked,
+                  min_km: parseFloat($("setMinKm").value) || 0 },
+      }),
+      api("/api/trips/alerts", { params: r }),
+    ]);
+    const items = [];
+    if (missing.days.length) {
+      const sample = missing.days.slice(0, 6)
+        .map((d) => `${new Date(d.date).toLocaleDateString("cs")} (${d.km} km)`).join(", ");
+      items.push(`🚗 <b>${missing.days.length} dní s jízdou autem chybí v knize</b>: ` +
+        `${sample}${missing.days.length > 6 ? "…" : ""} ` +
+        `<button id="fillMissingBtn">⚙ Doplnit nyní</button>`);
+    }
+    if (al.incomplete_trips) {
+      items.push(`✏️ <b>${al.incomplete_trips} jízd je neúplných</b> (chybí km nebo cíl).`);
+    }
+    for (const o of al.odometer_exceeded) {
+      items.push(`⚠️ <b>Rok ${o.year}: v knize ${o.booked_km.toLocaleString("cs")} km, ` +
+        `ale tachometr jen ${o.odometer_km.toLocaleString("cs")} km</b> – zkontrolujte km jízd.`);
+    }
+    box.innerHTML = items.length
+      ? `<div class="warnBox">${items.map((i) => `<div>${i}</div>`).join("")}</div>`
+      : "";
+    const fill = $("fillMissingBtn");
+    if (fill) fill.addEventListener("click", () => $("generateBtn").click());
+  } catch (e) {
+    box.innerHTML = "";
+  }
+}
 
 // ---------------------------------------------------------------- akce
 
 $("generateBtn").addEventListener("click", async () => {
   const r = currentRange();
   if (r.from_ts === null || r.to_ts === null) {
-    alert("Nejdřív zvolte období (od–do).");
+    toast("Nejdřív zvolte období (od–do).", "error");
     return;
   }
   $("generateBtn").disabled = true;
@@ -301,7 +351,7 @@ $("exportBtn").addEventListener("click", () => {
 $("clearBtn").addEventListener("click", async () => {
   const r = currentRange();
   if (r.from_ts === null || r.to_ts === null) {
-    alert("Nejdřív zvolte období (od–do).");
+    toast("Nejdřív zvolte období (od–do).", "error");
     return;
   }
   if (!confirm("Opravdu smazat VŠECHNY jízdy ve zvoleném období?")) return;

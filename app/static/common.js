@@ -21,13 +21,35 @@ function dateToTs(value, endOfDay) {
   return partsToTs(value, "0:0") + (endOfDay ? 86400 : 0);
 }
 
-/* Rozsah z polí #dateFrom / #dateTo (obě stránky používají stejná id). */
+/* Rozsah z polí #dateFrom / #dateTo (obě stránky používají stejná id).
+   Obrácené období (od > do) se automaticky prohodí, aby nešlo udělat chybu. */
 function currentRange() {
-  const f = $("dateFrom").value, t = $("dateTo").value;
+  let f = $("dateFrom").value, t = $("dateTo").value;
+  if (f && t && f > t) {
+    [f, t] = [t, f];
+    $("dateFrom").value = f;
+    $("dateTo").value = t;
+    toast("Datum OD bylo později než DO – období jsem prohodil.", "info");
+  }
   return {
     from_ts: f ? dateToTs(f, false) : null,
     to_ts: t ? dateToTs(t, true) : null,
   };
+}
+
+/* Nenápadné oznámení v rohu obrazovky (náhrada za alert). */
+let _toastTimer = null;
+function toast(msg, type = "info") {
+  let el = $("toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.className = "show " + type;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = ""; }, 4000);
 }
 
 function buildUrl(path, params) {

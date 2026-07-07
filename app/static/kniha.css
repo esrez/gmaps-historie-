@@ -47,6 +47,19 @@ body.kniha {
 button.danger:hover { border-color: var(--accent-red); color: var(--accent-red); }
 
 #knihaMain { flex: 1; min-width: 0; }
+
+.warnBox {
+  border: 1px solid var(--baseline);
+  border-left: 3px solid #eda100;
+  border-radius: 8px;
+  background: var(--surface-1);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.warnBox > div { margin: 3px 0; }
+.warnBox b { color: var(--text-primary); }
 #tripsSummary { margin: 0 0 8px 2px; }
 
 #tableWrap {
@@ -106,6 +119,11 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
 #tripsTable .del:hover { color: var(--accent-red); }
 #tripsTable tr.monthStart td { border-top: 2px solid var(--baseline); }
 #tripsTable tr.excludedRow { opacity: 0.45; }
+@keyframes rowSaved {
+  0% { background: rgba(12, 163, 12, 0.25); }
+  100% { background: transparent; }
+}
+#tripsTable tr.flashOk td { animation: rowSaved 0.9s ease-out; }
 #tripsTable tr.excludedRow input:not([data-f="excluded"]) { text-decoration: line-through; }
 
 #rulesList { margin: 4px 0 8px; padding-left: 16px; font-size: 12px; }
