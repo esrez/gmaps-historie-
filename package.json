@@ -1,0 +1,10 @@
+{
+  "name": "gmaps-historie",
+  "private": true,
+  "scripts": {
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

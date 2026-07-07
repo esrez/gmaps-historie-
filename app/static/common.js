@@ -2,6 +2,36 @@
 
 export const $ = (id) => document.getElementById(id);
 
+/* ------------------------------------------------------------- téma
+   auto (podle systému) → dark → light; uložené volby přebijí systém. */
+const savedTheme = localStorage.getItem("theme");
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+
+export function isDarkTheme() {
+  const t = document.documentElement.dataset.theme;
+  if (t) return t === "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+export function initThemeToggle(btn) {
+  const LABELS = { "": "🌓 auto", dark: "🌙 tmavý", light: "☀️ světlý" };
+  const current = () => localStorage.getItem("theme") || "";
+  btn.textContent = LABELS[current()];
+  btn.title = "Přepnout vzhled (auto / tmavý / světlý)";
+  btn.addEventListener("click", () => {
+    const order = ["", "dark", "light"];
+    const next = order[(order.indexOf(current()) + 1) % order.length];
+    if (next) localStorage.setItem("theme", next);
+    else localStorage.removeItem("theme");
+    location.reload();   // barvy map/grafů se čtou při vykreslení
+  });
+}
+
+/* PWA: registrace service workeru (offline UI, instalace na plochu). */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => { /* http bez TLS */ });
+}
+
 export function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

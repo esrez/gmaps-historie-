@@ -15,7 +15,7 @@ from collections import defaultdict
 from contextlib import closing
 from datetime import UTC, datetime
 
-from fastapi import FastAPI, HTTPException, Query, UploadFile
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -679,6 +679,66 @@ def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
     return result
 
 
+@app.get("/api/calendar")
+def api_calendar(year: int = Query(..., ge=2000, le=2100)):
+    """Denní souhrn pro kalendářový přehled roku: km z cest + počet GPS bodů."""
+    from .common import LOCAL_TZ
+    lo = int(datetime(year, 1, 1, tzinfo=LOCAL_TZ).timestamp())
+    hi = int(datetime(year + 1, 1, 1, tzinfo=LOCAL_TZ).timestamp()) - 1
+    with closing(db.connect()) as conn:
+        km = {r["d"]: r["km"] for r in conn.execute(
+            "SELECT date(start_ts,'unixepoch','localtime') d, "
+            "SUM(COALESCE(distance_m,0))/1000.0 km FROM activities "
+            "WHERE start_ts BETWEEN ? AND ? GROUP BY d", (lo, hi))}
+        pts = {r["d"]: r["c"] for r in conn.execute(
+            "SELECT date(ts,'unixepoch','localtime') d, COUNT(*) c FROM points "
+            "WHERE ts BETWEEN ? AND ? GROUP BY d", (lo, hi))}
+    days = sorted(set(km) | set(pts))
+    return {"year": year,
+            "days": [{"date": d, "km": round(km.get(d, 0), 1),
+                      "points": pts.get(d, 0)} for d in days]}
+
+
+# ------------------------------------------------ offline mapy (PMTiles)
+
+def _pmtiles_path() -> str:
+    return os.path.join(_data_dir(), "map.pmtiles")
+
+
+@app.get("/api/pmtiles/status")
+def api_pmtiles_status():
+    path = _pmtiles_path()
+    ok = os.path.exists(path)
+    return {"available": ok, "size": os.path.getsize(path) if ok else 0}
+
+
+@app.get("/api/pmtiles")
+def api_pmtiles(request: Request):
+    """Servíruje data/map.pmtiles s podporou HTTP Range (vyžaduje PMTiles klient)."""
+    path = _pmtiles_path()
+    if not os.path.exists(path):
+        raise HTTPException(404, "Soubor data/map.pmtiles neexistuje")
+    size = os.path.getsize(path)
+    range_header = request.headers.get("range", "")
+    if range_header.startswith("bytes="):
+        try:
+            start_s, end_s = range_header[6:].split("-", 1)
+            start = int(start_s)
+            end = min(int(end_s) if end_s else size - 1, size - 1)
+        except ValueError as exc:
+            raise HTTPException(416, "Neplatný Range") from exc
+        if start > end or start >= size:
+            raise HTTPException(416, "Range mimo soubor")
+        with open(path, "rb") as f:
+            f.seek(start)
+            chunk = f.read(end - start + 1)
+        return Response(chunk, status_code=206, media_type="application/octet-stream",
+                        headers={"Content-Range": f"bytes {start}-{end}/{size}",
+                                 "Accept-Ranges": "bytes"})
+    return FileResponse(path, media_type="application/octet-stream",
+                        headers={"Accept-Ranges": "bytes"})
+
+
 @app.get("/api/analysis")
 def api_analysis(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
     """Podklady pro analytické grafy."""
@@ -764,6 +824,19 @@ def index():
 @app.get("/kniha")
 def kniha():
     return FileResponse(os.path.join(STATIC_DIR, "kniha.html"))
+
+
+@app.get("/sw.js")
+def service_worker():
+    # service worker musí být servírovaný z kořene, aby měl scope na celou aplikaci
+    return FileResponse(os.path.join(STATIC_DIR, "sw.js"),
+                        media_type="application/javascript")
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(os.path.join(STATIC_DIR, "manifest.webmanifest"),
+                        media_type="application/manifest+json")
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

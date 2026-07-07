@@ -96,6 +96,28 @@ def test_exports(client, test_db, tmp_path):
     assert gpx.status_code == 200 and b"<trkpt" in gpx.content
 
 
+def test_calendar(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    cal = client.get("/api/calendar?year=2025").json()
+    assert cal["year"] == 2025
+    assert len(cal["days"]) == 5               # 5 dní se záznamem (výchozí seed)
+    assert sum(d["km"] for d in cal["days"]) > 0
+    assert client.get("/api/calendar?year=2010").json()["days"] == []
+
+
+def test_pmtiles_status_and_range(client, test_db, tmp_path, monkeypatch):
+    assert client.get("/api/pmtiles/status").json()["available"] is False
+    # podvržený soubor → ověřit Range odpověď
+    import app.main as m
+    pm = tmp_path / "map.pmtiles"
+    pm.write_bytes(b"0123456789abcdef")
+    monkeypatch.setattr(m, "_pmtiles_path", lambda: str(pm))
+    assert client.get("/api/pmtiles/status").json()["available"] is True
+    r = client.get("/api/pmtiles", headers={"Range": "bytes=4-7"})
+    assert r.status_code == 206 and r.content == b"4567"
+    assert r.headers["content-range"] == "bytes 4-7/16"
+
+
 def test_backup(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     r = client.get("/api/backup")

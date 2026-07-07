@@ -1,8 +1,11 @@
 /* Kniha jízd – logika stránky (ES modul, sdílené helpery v common.js) */
 import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
-         buildUrl, apiFetch, escapeHtml, toast } from "./common.js";
+         buildUrl, apiFetch, escapeHtml, toast, initThemeToggle } from "./common.js";
+
+initThemeToggle($("themeBtn"));
 
 const api = apiFetch;
+const RENDER_CHUNK = 250;   // řádků najednou; zbytek se dokreslí při doskrolování
 let trips = [];
 let rules = [];
 
@@ -78,35 +81,67 @@ function updateTotal(totalKm) {
     : "Žádné jízdy – zvolte období a klikněte na Generovat jízdy, nebo přidejte jízdu ručně.";
 }
 
+function buildRow(t, prevMonth) {
+  const s = new Date(t.start_ts * 1000);
+  const e = new Date(t.end_ts * 1000);
+  const tr = document.createElement("tr");
+  tr.dataset.id = t.id;
+  if (t.excluded) tr.classList.add("excludedRow");
+  const month = `${s.getFullYear()}-${s.getMonth()}`;
+  if (prevMonth && month !== prevMonth) tr.classList.add("monthStart");
+  tr.innerHTML = `
+      <td data-l="Datum"><input type="date" data-f="date" value="${toDateStr(s)}"></td>
+      <td data-l="Odjezd"><input type="time" data-f="dep" value="${toTimeStr(s)}"></td>
+      <td data-l="Příjezd"><input type="time" data-f="arr" value="${toTimeStr(e)}"></td>
+      <td data-l="Odkud"><input type="text" data-f="origin" value="${escapeHtml(t.origin)}"></td>
+      <td data-l="Kam"><input type="text" data-f="destination" value="${escapeHtml(t.destination)}"></td>
+      <td data-l="Km"><input type="text" inputmode="decimal" class="km" data-f="km" value="${t.km}"></td>
+      <td data-l="Účel"><input type="text" data-f="purpose" value="${escapeHtml(t.purpose)}"></td>
+      <td data-l="Soukromá" class="cbCell"><input type="checkbox" data-f="private" ${t.private ? "checked" : ""}></td>
+      <td data-l="Vlastní auto" class="cbCell"><input type="checkbox" data-f="excluded" ${t.excluded ? "checked" : ""}></td>
+      <td class="delCell"><button class="del" title="Smazat jízdu">✕</button></td>`;
+  tr.querySelectorAll("input").forEach((inp) =>
+    inp.addEventListener("change", () => onCellChange(t, inp)));
+  tr.querySelector(".del").addEventListener("click", () => onDelete(t, tr));
+  return tr;
+}
+
+// Dlouhá období se vykreslují po dávkách – tabulka s tisíci řádky by jinak
+// zamrzala; další dávka se dokreslí, jakmile uživatel doskroluje na konec.
+let renderObserver = null;
+
 function renderTable(totalKm) {
   const body = $("tripsBody");
   body.innerHTML = "";
-  let prevMonth = "";
-  for (const t of trips) {
-    const s = new Date(t.start_ts * 1000);
-    const e = new Date(t.end_ts * 1000);
+  renderObserver?.disconnect();
+
+  let rendered = 0;
+  const renderChunk = () => {
+    const frag = document.createDocumentFragment();
+    const end = Math.min(rendered + RENDER_CHUNK, trips.length);
+    for (; rendered < end; rendered++) {
+      const prev = rendered > 0
+        ? `${new Date(trips[rendered - 1].start_ts * 1000).getFullYear()}-${new Date(trips[rendered - 1].start_ts * 1000).getMonth()}`
+        : "";
+      frag.appendChild(buildRow(trips[rendered], prev));
+    }
+    body.appendChild(frag);
+    if (rendered < trips.length) sentinel();
+  };
+  const sentinel = () => {
     const tr = document.createElement("tr");
-    tr.dataset.id = t.id;
-    if (t.excluded) tr.classList.add("excludedRow");
-    const month = `${s.getFullYear()}-${s.getMonth()}`;
-    if (prevMonth && month !== prevMonth) tr.classList.add("monthStart");
-    prevMonth = month;
-    tr.innerHTML = `
-      <td><input type="date" data-f="date" value="${toDateStr(s)}"></td>
-      <td><input type="time" data-f="dep" value="${toTimeStr(s)}"></td>
-      <td><input type="time" data-f="arr" value="${toTimeStr(e)}"></td>
-      <td><input type="text" data-f="origin" value="${escapeHtml(t.origin)}"></td>
-      <td><input type="text" data-f="destination" value="${escapeHtml(t.destination)}"></td>
-      <td><input type="text" inputmode="decimal" class="km" data-f="km" value="${t.km}"></td>
-      <td><input type="text" data-f="purpose" value="${escapeHtml(t.purpose)}"></td>
-      <td style="text-align:center"><input type="checkbox" data-f="private" ${t.private ? "checked" : ""}></td>
-      <td style="text-align:center"><input type="checkbox" data-f="excluded" ${t.excluded ? "checked" : ""}></td>
-      <td><button class="del" title="Smazat jízdu">✕</button></td>`;
-    tr.querySelectorAll("input").forEach((inp) =>
-      inp.addEventListener("change", () => onCellChange(t, inp)));
-    tr.querySelector(".del").addEventListener("click", () => onDelete(t, tr));
+    tr.innerHTML = `<td colspan="10" class="muted" style="text-align:center">… načítám dalších ${Math.min(RENDER_CHUNK, trips.length - rendered)} jízd</td>`;
     body.appendChild(tr);
-  }
+    renderObserver = new IntersectionObserver((entries) => {
+      if (entries.some((en) => en.isIntersecting)) {
+        renderObserver.disconnect();
+        tr.remove();
+        renderChunk();
+      }
+    });
+    renderObserver.observe(tr);
+  };
+  renderChunk();
   updateTotal(totalKm);
 }
 
@@ -395,7 +430,8 @@ async function refreshUndo() {
     if (u.available) {
       const OPS = { generate: "generování", propagate: "propagaci km",
                     apply_rules: "použití pravidel", delete_range: "smazání období" };
-      $("undoBtn").textContent = `↩ Vrátit ${OPS[u.op] || u.op} (${u.affected} jízd)`;
+      $("undoBtn").textContent = `↩ Vrátit ${OPS[u.op] || u.op} (${u.affected} jízd)` +
+        (u.steps > 1 ? ` · ${u.steps} kroků zpět` : "");
     }
   } catch (e) { $("undoBtn").hidden = true; }
 }
@@ -403,7 +439,7 @@ async function refreshUndo() {
 $("undoBtn").addEventListener("click", async () => {
   try {
     const res = await api("/api/trips/undo", { method: "POST" });
-    toast(`Akce vrácena (${res.restored + res.removed} jízd).`, "success");
+    toast(`Akce vrácena (${res.restored + res.removed} jízd). Další krok zpět: znovu Vrátit.`, "success");
     loadTrips();
   } catch (e) {
     toast("Vrácení selhalo: " + e.message, "error");

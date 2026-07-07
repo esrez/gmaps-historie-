@@ -179,14 +179,19 @@ TRIP_COLS = ("id", "start_ts", "end_ts", "km", "origin", "destination",
              "purpose", "driver", "plate", "private", "activity_ts", "excluded")
 
 
+UNDO_DEPTH = 10
+
+
 def _save_undo(conn, op: str, rows=(), created=()):
-    """Uloží podklad pro vrácení poslední hromadné akce (drží se jen jedna)."""
+    """Uloží podklad pro vrácení hromadné akce (drží se posledních 10 kroků)."""
     payload = json.dumps(
         {"rows": [dict(r) for r in rows], "created": [int(c) for c in created]},
         ensure_ascii=False)
-    conn.execute("DELETE FROM undo_log")
     conn.execute("INSERT INTO undo_log(created, op, data) VALUES(?,?,?)",
                  (int(time.time()), op, payload))
+    conn.execute(
+        "DELETE FROM undo_log WHERE id NOT IN "
+        "(SELECT id FROM undo_log ORDER BY id DESC LIMIT ?)", (UNDO_DEPTH,))
 
 
 # --------------------------------------------------------------- jízdy
@@ -381,12 +386,14 @@ def delete_range(from_ts: int | None = Query(None), to_ts: int | None = Query(No
 @router.get("/undo")
 def undo_info():
     with closing(db.connect()) as conn:
+        steps = conn.execute("SELECT COUNT(*) c FROM undo_log").fetchone()["c"]
         row = conn.execute("SELECT created, op, data FROM undo_log "
                            "ORDER BY id DESC LIMIT 1").fetchone()
     if row is None:
-        return {"available": False}
+        return {"available": False, "steps": 0}
     data = json.loads(row["data"])
-    return {"available": True, "op": row["op"], "created": row["created"],
+    return {"available": True, "steps": steps, "op": row["op"],
+            "created": row["created"],
             "affected": len(data["rows"]) + len(data["created"])}
 
 

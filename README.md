@@ -63,8 +63,21 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   vozidlo zvlášť), **export do PDF** pro tisk (měsíční součty, česká
   diakritika) a **vrácení poslední hromadné akce** (generování, propagace km,
   použití pravidel i smazání období)
-- **Automatické testy** – sada pytest testů (importér, API, kniha jízd)
-  spouštěná v GitHub Actions při každém push
+- **Kalendářový přehled roku** – mřížka všech dnů obarvená podle najetých km
+  (šedě dny se záznamem bez jízdy); kliknutí na den ho rovnou přehraje
+- **Mobilní ovládání** – na telefonu se kniha jízd zobrazuje jako karty,
+  boční panel mapy jako vysouvací sheet, větší dotykové plochy
+- **PWA** – aplikaci lze nainstalovat na plochu telefonu/počítače; UI se
+  cachuje a naběhne i bez připojení
+- **Plně offline mapy** – volitelně vlastní mapový podklad ze souboru
+  `data/map.pmtiles` (Protomaps); žádná dlaždice pak neopouští vaši síť
+- **WebGL vykreslování** – nad 20 000 zobrazených bodů převezme kreslení
+  WebGL vrstva, plynulé i pro statisíce bodů
+- **Přepínač vzhledu** (auto/tmavý/světlý), **klávesové zkratky**
+  (◀ ▶ = listování dnů, mezerník = přehrát/zastavit), **vícekrokové undo**
+  v knize jízd (10 kroků zpět), plynulé načítání dlouhých tabulek
+- **Automatické testy** – pytest (27 testů: importér, API, kniha jízd)
+  + Playwright e2e testy UI, obojí v GitHub Actions při každém push
 - **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen
     pracovní dny a pracovní doba (např. po–pá 6–18 h), s minimální délkou jízdy

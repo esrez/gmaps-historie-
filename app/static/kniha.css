@@ -141,3 +141,40 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
   #knihaLayout { flex-direction: column; }
   #knihaSettings { width: 100%; min-width: 0; }
 }
+
+/* Na telefonu se tabulka mění na karty: jeden řádek = jedna jízda,
+   každá hodnota s popiskem (bere se z data-l atributu buňky). */
+@media (max-width: 700px) {
+  #tripsTable thead { display: none; }
+  #tripsTable, #tripsTable tbody, #tripsTable tfoot,
+  #tripsTable tr, #tripsTable td { display: block; width: 100%; }
+  #tripsTable tbody tr {
+    border: 1px solid var(--grid);
+    border-radius: 10px;
+    margin: 10px 6px;
+    padding: 8px 10px;
+    background: var(--surface-1);
+  }
+  #tripsTable tbody tr.monthStart { border-top: 3px solid var(--baseline); }
+  #tripsTable td {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: none;
+    padding: 3px 0;
+  }
+  #tripsTable td::before {
+    content: attr(data-l);
+    flex: 0 0 84px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  #tripsTable td.delCell { justify-content: flex-end; }
+  #tripsTable td.delCell::before { content: none; }
+  #tripsTable input[type="date"], #tripsTable input[type="time"] { width: auto; flex: 1; }
+  #tripsTable input { font-size: 15px; padding: 7px 8px; }
+  #tripsTable .del { font-size: 15px; padding: 6px 14px; border: 1px solid var(--grid); border-radius: 6px; }
+  #tripsTable tfoot td { display: flex; justify-content: space-between; padding: 8px 12px; }
+}
