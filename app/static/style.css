@@ -83,7 +83,12 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 14px 8px;
+  cursor: grab;            /* tažením za hlavičku lze panel odsunout */
+  user-select: none;
+  touch-action: none;
 }
+#panelHead.dragging { cursor: grabbing; }
+#panelHead button, #panelHead a { cursor: pointer; }
 #panelHead h1 { display: flex; align-items: center; gap: 6px; }
 #panelHead .navlink { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
 #panelBody { overflow-y: auto; padding: 0 14px 14px; }
@@ -168,6 +173,7 @@ body {
   color: var(--text-secondary);
   display: grid;
   gap: 4px;
+  pointer-events: none;   /* legenda nesmí blokovat posun mapy pod ní */
 }
 #mapLegend > div { display: flex; align-items: center; gap: 6px; }
 .lg-line { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
@@ -197,6 +203,7 @@ body {
   padding: 4px 14px;
   font-size: 12px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  pointer-events: none;   /* jen indikátor – nechytat myš */
 }
 
 h1 { font-size: 18px; margin: 4px 0 12px; }
@@ -620,5 +627,7 @@ button .ic { margin-right: 1px; }
   z-index: 950;
   text-align: center;
   padding: 22px 30px;
+  pointer-events: none;   /* kartička nechytá myš, jen její tlačítko */
 }
+#emptyState button { pointer-events: auto; }
 #emptyState .ic { display: block; margin: 0 auto 8px; opacity: 0.6; }

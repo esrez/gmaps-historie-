@@ -39,6 +39,26 @@ test.describe("mapa", () => {
     await expect(page.locator("#qualityReport")).not.toBeEmpty({ timeout: 15000 });
   });
 
+  test("panel lze odsunout tažením a legenda nechytá myš", async ({ page }) => {
+    await page.goto("/");
+    // legenda i indikátor jsou průchozí pro myš (posun mapy pod nimi)
+    for (const sel of ["#mapLegend", "#mapLoading"]) {
+      expect(await page.locator(sel).evaluate((el) => getComputedStyle(el).pointerEvents))
+        .toBe("none");
+    }
+    // přesun panelu tažením za hlavičku
+    const left = () => page.locator("#panel").evaluate((el) => el.getBoundingClientRect().left);
+    const before = await left();
+    const box = await page.locator("#panelHead").boundingBox();
+    await page.mouse.move(box.x + 140, box.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 440, box.y + 200, { steps: 8 });
+    await page.mouse.up();
+    expect(await left()).toBeGreaterThan(before + 100);
+    // odkaz v hlavičce po přesunu stále funguje
+    await expect(page.locator('#panelHead a.navlink')).toHaveAttribute("href", "/kniha");
+  });
+
   test("moje místa: přehled, pobyty a přejmenování", async ({ page }) => {
     await page.goto("/");
     // pojmenovat místo přes API, ať máme co zobrazit
