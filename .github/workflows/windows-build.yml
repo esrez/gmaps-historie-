@@ -59,7 +59,9 @@ jobs:
 
       - name: Smoke test update package
         shell: cmd
-        run: .venv-build\Scripts\python.exe scripts\smoke_test.py --package dist\GMapsHistorie-update.zip
+        run: |
+          .venv-build\Scripts\python.exe -m pip install httpx
+          .venv-build\Scripts\python.exe scripts\smoke_test.py --package dist\GMapsHistorie-update.zip
         env:
           TZ: Europe/Prague
 

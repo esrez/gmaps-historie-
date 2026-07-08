@@ -19,7 +19,7 @@ if not exist ".venv-build\Scripts\python.exe" (
 call ".venv-build\Scripts\activate.bat"
 python -m pip install --upgrade pip >nul
 echo Instaluji zavislosti a PyInstaller...
-python -m pip install -r requirements.txt pyinstaller || (echo Instalace selhala. & if not defined BUILD_NO_PAUSE pause & exit /b 1)
+python -m pip install -r requirements.txt pyinstaller httpx || (echo Instalace selhala. & if not defined BUILD_NO_PAUSE pause & exit /b 1)
 
 echo Sestavuji GMapsHistorie.exe ...
 pyinstaller --clean --noconfirm gmaps-historie.spec || (echo Build selhal. & if not defined BUILD_NO_PAUSE pause & exit /b 1)
