@@ -70,6 +70,10 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 - **Kniha jízd po dnech** – řádek dne se součtem km a trasou, rozbalení na
   editovatelné jízdy; pole s **našeptávačem** míst a účelů; km bez údaje od
   Googlu se dopočítají ze skutečné GPS stopy, takže kniha souhlasí s mapou
+- **Zápis po městech** – místní jízdy v rámci města se sloučí do řádku
+  „Brno" se sečtenými km, mezi městy „Brno → Praha" (vestavěný offline
+  číselník českých měst); na mapě mají cesty směrové šipky, střídavé
+  odstíny pro rozlišení a bubliny míst ukazují délku pobytu v období
 - **Kalendářový přehled roku** – mřížka všech dnů obarvená podle najetých km
   (šedě dny se záznamem bez jízdy); kliknutí na den ho rovnou přehraje
 - **Mobilní ovládání** – na telefonu se kniha jízd zobrazuje jako karty,

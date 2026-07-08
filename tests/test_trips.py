@@ -130,3 +130,35 @@ def test_km_fallback_from_gps(client, test_db, tmp_path):
     assert res["created"] == 3
     trips = client.get("/api/trips", params=RANGE).json()["trips"]
     assert all(3.0 < t["km"] < 5.0 for t in trips)   # ~4.2 km dle GPS stopy
+
+
+def test_city_mode_merges_local_trips(client, test_db, tmp_path):
+    """Ohyby v Brně → jeden řádek Brno se sečtenými km; Brno→Praha zvlášť."""
+    with closing(test_db.connect()) as conn:
+        day = 1748844000  # po 2. 6. 2025 08:00 místního času
+        rows = [
+            # tři místní jízdy po Brně (3 + 2 + 4 km)
+            (day, day + 1200, 3000, 49.19, 16.60, 49.21, 16.63),
+            (day + 3600, day + 4500, 2000, 49.21, 16.63, 49.17, 16.58),
+            (day + 7200, day + 8100, 4000, 49.17, 16.58, 49.20, 16.61),
+            # přejezd Brno → Praha
+            (day + 10800, day + 17400, 205000, 49.20, 16.61, 50.08, 14.43),
+            # dvě místní jízdy po Praze
+            (day + 18000, day + 18900, 5000, 50.08, 14.43, 50.10, 14.39),
+            (day + 21600, day + 22500, 6000, 50.10, 14.39, 50.07, 14.44),
+        ]
+        for s, e, m, la1, lo1, la2, lo2 in rows:
+            conn.execute(
+                "INSERT INTO activities(start_ts,end_ts,type,distance_m,"
+                "start_lat,start_lon,end_lat,end_lon)"
+                " VALUES(?,?,'IN_PASSENGER_VEHICLE',?,?,?,?,?)",
+                (s, e, m, la1, lo1, la2, lo2))
+        conn.commit()
+
+    res = gen(client, city_mode=True, round_up=True)
+    assert res["created"] == 3
+    trips = client.get("/api/trips", params=RANGE).json()["trips"]
+    routes = [(t["origin"], t["destination"], t["km"]) for t in trips]
+    assert routes[0] == ("Brno", "Brno", 9.0)      # 3+2+4 km sloučeno
+    assert routes[1] == ("Brno", "Praha", 205.0)
+    assert routes[2] == ("Praha", "Praha", 11.0)   # 5+6 km sloučeno

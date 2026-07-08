@@ -22,6 +22,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/pmtiles` | GET | servíruje PMTiles s podporou HTTP Range |
 | `/api/places` | GET/POST | vlastní názvy míst (zákazník, adresa…); POST upsert dle blízkosti, volitelně `polygon` |
 | `/api/places/{id}` | DELETE | smazání vlastního názvu |
+| `/api/places/stats` | GET | pobyt na pojmenovaných místech v období (pro bubliny na mapě) |
 
 ## Import a údržba
 
@@ -51,7 +52,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/trips/{id}` | PATCH | částečná úprava (libovolná pole `TripPatch`) |
 | `/api/trips/{id}` | DELETE | smazání jízdy |
 | `/api/trips` | DELETE | smazání jízd v období (volitelně `plate`); jde vrátit |
-| `/api/trips/generate` | POST | vygeneruje jízdy z cest autem (pracovní dny/hodiny, min. km, zaokrouhlení, pravidla, přeskočí duplicity); jde vrátit |
+| `/api/trips/generate` | POST | vygeneruje jízdy z cest autem (pracovní dny/hodiny, min. km, zaokrouhlení, pravidla, duplicity; `city_mode` slučuje místní jízdy pod město); jde vrátit |
 | `/api/trips/propagate` | POST | doplní km všem jízdám na stejné trase + uloží pravidlo; jde vrátit |
 | `/api/trips/apply_rules` | POST | přepočítá km v období podle pravidel; jde vrátit |
 | `/api/trips/rules` | GET/POST | výpis / upsert pravidla (`origin` volitelný, `destination`, `km`) |
