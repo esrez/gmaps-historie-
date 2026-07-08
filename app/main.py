@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import math
 import os
 import secrets
@@ -29,6 +30,22 @@ app.include_router(trips.router)
 app.include_router(places.router)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+
+def _static_version() -> str:
+    """Otisk obsahu frontendu – mění se s každým vydáním, verzuje cache
+    service workeru (jinak by PWA po aktualizaci serveru zůstala na staré UI)."""
+    h = hashlib.sha1()
+    for root, _dirs, files in os.walk(STATIC_DIR):
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            h.update(name.encode())
+            with open(path, "rb") as f:
+                h.update(f.read())
+    return h.hexdigest()[:10]
+
+
+APP_VERSION = _static_version()
 
 MAX_TRACK_POINTS = 60_000
 MAX_HEAT_CELLS = 40_000
@@ -873,11 +890,21 @@ def kniha():
     return FileResponse(os.path.join(STATIC_DIR, "kniha.html"))
 
 
+@app.get("/api/version")
+def api_version():
+    """Verze frontendu (otisk statických souborů) – zobrazuje se v Nástrojích."""
+    return {"version": APP_VERSION}
+
+
 @app.get("/sw.js")
 def service_worker():
-    # service worker musí být servírovaný z kořene, aby měl scope na celou aplikaci
-    return FileResponse(os.path.join(STATIC_DIR, "sw.js"),
-                        media_type="application/javascript")
+    # service worker musí být servírovaný z kořene, aby měl scope na celou
+    # aplikaci; verze cache se dosazuje při každém startu, takže nové vydání
+    # automaticky zahodí starou cache (no-cache nutí prohlížeč soubor ověřit)
+    with open(os.path.join(STATIC_DIR, "sw.js"), encoding="utf-8") as f:
+        body = f.read().replace("__VERSION__", APP_VERSION)
+    return Response(body, media_type="application/javascript",
+                    headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/manifest.webmanifest")

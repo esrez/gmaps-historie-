@@ -1263,7 +1263,15 @@ async function showAutoImportLog() {
       toast("Zatím nejsou žádná data – začněte importem exportu z Google Maps.");
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
+  showVersion();
   showAutoImportLog();
   renderCalendar();
   loadAll();
 })();
+
+async function showVersion() {
+  try {
+    const { version } = await api("/api/version");
+    $("appVersion").textContent = `GMaps Historie · verze ${version}`;
+  } catch (e) { /* nedostupné */ }
+}
