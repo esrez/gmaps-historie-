@@ -290,8 +290,12 @@ def _point_distances(conn, lo: int, hi: int):
 
 
 @app.get("/api/stats")
-def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+              min_stay_min: float = Query(2, ge=0, le=120)):
+    """Souhrnné statistiky. Návštěvy kratší než min_stay_min (výchozí 2 min)
+    se do počtů, hodin ani top míst nepočítají – jde o průjezdy."""
     lo, hi = ts_range(from_ts, to_ts)
+    min_stay_s = int(min_stay_min * 60)
     with closing(db.connect()) as conn:
         n_points = conn.execute(
             "SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?", (lo, hi)).fetchone()["c"]
@@ -311,13 +315,15 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
 
         n_visits, visit_secs = conn.execute(
             "SELECT COUNT(*), SUM(end_ts - start_ts) FROM visits "
-            "WHERE start_ts BETWEEN ? AND ?", (lo, hi)).fetchone()
+            "WHERE start_ts BETWEEN ? AND ? AND end_ts - start_ts >= ?",
+            (lo, hi, min_stay_s)).fetchone()
 
         # top místa: popisky se řeší v Pythonu, aby vlastní názvy (place_names)
         # měly přednost a sloučily i blízké skupiny souřadnic pod jedno jméno
         visit_rows = conn.execute(
             "SELECT lat, lon, name, semantic, end_ts - start_ts secs "
-            "FROM visits WHERE start_ts BETWEEN ? AND ?", (lo, hi)).fetchall()
+            "FROM visits WHERE start_ts BETWEEN ? AND ? AND end_ts - start_ts >= ?",
+            (lo, hi, min_stay_s)).fetchall()
         custom = places.load_places(conn)
         agg: dict[str, dict] = {}
         for v in visit_rows:
@@ -427,11 +433,16 @@ def _stays_at(conn, lat: float, lon: float, radius_m: float,
 @app.get("/api/at_location")
 def api_at_location(lat: float = Query(...), lon: float = Query(...),
                     radius_m: float = Query(200, ge=20, le=5000),
-                    from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+                    from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                    min_stay_min: float = Query(2, ge=0, le=120)):
+    """Pobyty v okruhu místa. Pobyty kratší než min_stay_min (výchozí 2 min)
+    se nepočítají – jde nejspíš jen o průjezd místem, ne o návštěvu."""
     lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
         custom = places.load_places(conn)
+    min_s = min_stay_min * 60
+    merged = [(s, e, n) for s, e, n in merged if e - s >= min_s]
 
     def stay_name(n):
         if not n:
@@ -479,7 +490,7 @@ def api_export_xlsx(from_ts: int | None = Query(None), to_ts: int | None = Query
                 round((a["distance_m"] or 0) / 1000, 2)] for a in acts],
               widths=[18, 18, 8, 24, 9])
 
-        stats = api_stats(from_ts=from_ts, to_ts=to_ts)
+        stats = api_stats(from_ts=from_ts, to_ts=to_ts, min_stay_min=2)
         sheet(wb, "Km po měsících", ["Měsíc", "Km"],
               [[m["month"], m["km"]] for m in stats["monthly_km"]], widths=[10, 10])
         sheet(wb, "Top místa", ["Místo", "Návštěv", "Hodin", "Lat", "Lon"],
@@ -503,11 +514,13 @@ def api_export_xlsx(from_ts: int | None = Query(None), to_ts: int | None = Query
 def api_export_location(lat: float = Query(...), lon: float = Query(...),
                         radius_m: float = Query(200, ge=20, le=5000),
                         from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+                        min_stay_min: float = Query(2, ge=0, le=120),
                         label: str = Query("")):
     from openpyxl import Workbook
     lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         merged = _stays_at(conn, lat, lon, radius_m, lo, hi)
+    merged = [(s, e, n) for s, e, n in merged if e - s >= min_stay_min * 60]
     wb = Workbook()
     wb.remove(wb.active)
     ws = sheet(wb, "Pobyty",

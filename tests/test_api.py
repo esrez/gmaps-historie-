@@ -151,3 +151,27 @@ def test_semantic_translated(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     stats = client.get("/api/stats").json()
     assert stats["top_places"][0]["label"] == "Práce"   # Work → Práce
+
+
+def test_min_stay_filters_passthrough(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    with closing(test_db.connect()) as conn:
+        # 90s „průjezd" místem práce večer (mimo pracovní návštěvu) – nemá se počítat
+        conn.execute("INSERT INTO visits(start_ts,end_ts,lat,lon,semantic)"
+                     " VALUES(1748880000,1748880090,50.1,14.39,'Work')")
+        conn.commit()
+
+    # výchozí filtr 2 min: průjezd se nepočítá nikde
+    stats = client.get("/api/stats").json()
+    assert stats["visits"] == 5
+    loc = client.get("/api/at_location",
+                     params={"lat": 50.1, "lon": 14.39, "radius_m": 300}).json()
+    assert loc["count"] == 5
+
+    # min_stay_min=0 průjezd ukáže
+    stats0 = client.get("/api/stats?min_stay_min=0").json()
+    assert stats0["visits"] == 6
+    loc0 = client.get("/api/at_location",
+                      params={"lat": 50.1, "lon": 14.39, "radius_m": 300,
+                              "min_stay_min": 0}).json()
+    assert loc0["count"] == 6
