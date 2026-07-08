@@ -81,16 +81,25 @@ test.describe("kniha jízd", () => {
     }
   });
 
-  test("hromadný výběr dne nabídne smazání", async ({ page }) => {
+  test("hromadný výběr dne skutečně smaže a jde vrátit", async ({ page }) => {
     await page.goto("/kniha");
     await page.fill("#dateFrom", "2025-06-01");
     await page.fill("#dateTo", "2025-06-30");
     await page.dispatchEvent("#dateTo", "change");
     await page.locator("#tripsBody tr.dayRow").first().waitFor();
+    const before = await page.locator("#tripsBody tr.dayRow").count();
     await expect(page.locator("#bulkDelBtn")).toBeHidden();
     await page.locator("#tripsBody tr.dayRow .selDay").first().check();
-    await expect(page.locator("#bulkDelBtn")).toBeVisible();
     await expect(page.locator("#bulkDelBtn")).toContainText("Smazat vybrané");
+    page.once("dialog", (d) => d.accept());   // potvrzení mazání
+    await page.click("#bulkDelBtn");
+    await expect(page.locator("#toast")).toContainText("Smazáno");
+    await expect(page.locator("#tripsBody tr.dayRow")).toHaveCount(before - 1);
+    // hromadné smazání je jeden krok zpět
+    await expect(page.locator("#undoBtn")).toBeVisible();
+    await page.click("#undoBtn");
+    await expect(page.locator("#toast")).toContainText("Akce vrácena");
+    await expect(page.locator("#tripsBody tr.dayRow")).toHaveCount(before);
   });
 
   test("mobilní zobrazení má karty místo tabulky", async ({ browser }) => {

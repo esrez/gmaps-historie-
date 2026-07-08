@@ -205,3 +205,48 @@ def test_cities_resolver():
     assert city_for(50.08, 14.43) == "Praha"
     assert city_for(48.856, 16.05) == "Znojmo"
     assert city_for(0, 0) is None
+
+
+def test_version_endpoint(client):
+    v = client.get("/api/version").json()
+    assert v["version"] and isinstance(v["version"], str)
+
+
+def test_service_worker_has_version(client):
+    r = client.get("/sw.js")
+    assert r.status_code == 200
+    v = client.get("/api/version").json()["version"]
+    assert f"gmaps-historie-{v}" in r.text   # název cache verzován
+    assert "__VERSION__" not in r.text
+    assert r.headers["cache-control"] == "no-cache"
+
+
+def test_stats_records(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    rec = client.get("/api/stats").json()["records"]
+    assert rec["longest_day"]["km"] == 4.2
+    assert rec["longest_trip"]["km"] == 4.2
+    assert rec["longest_streak_days"] == 5   # 5 po sobě jdoucích dní s jízdou
+
+
+def test_backup_list_and_restore(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    assert client.get("/api/points").json()["total"] == 100
+    client.get("/api/backup")                       # záloha se 100 body
+    backups = client.get("/api/backups").json()["backups"]
+    assert backups and backups[0]["name"].startswith("history-")
+    name = backups[0]["name"]
+    # smazat data importem přes prázdno? jednodušší: přímý zásah do DB
+    with closing(test_db.connect()) as conn:
+        conn.execute("DELETE FROM points")
+        conn.commit()
+    assert client.get("/api/points").json()["total"] == 0
+    res = client.post("/api/restore", params={"name": name}).json()
+    assert res["restored"] == name and res["safety_backup"]
+    assert client.get("/api/points").json()["total"] == 100   # obnoveno
+
+
+def test_restore_rejects_path_traversal(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    assert client.post("/api/restore", params={"name": "../../etc/passwd"}).status_code == 400
+    assert client.post("/api/restore", params={"name": "history-nope.db"}).status_code == 404
