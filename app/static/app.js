@@ -7,6 +7,7 @@ import { typeLabel, tile, trend, sparkline, renderRecords,
          renderMonthlyChart, renderAnalysis } from "./charts.js";
 import { initEventStream } from "./sync-events.js";
 import { transportParam, renderNewPlaces } from "./map-filters.js";
+import { DayScrubber, initSpeedButtons, formatPlayClock, daySummaryText } from "./day-playback.js";
 
 initThemeToggle($("themeBtn"));
 mountIcons();
@@ -66,9 +67,102 @@ $("panelCollapse").addEventListener("click", () => {
   });
 })();
 
-$("timelineToggle").addEventListener("click", () => {
-  $("timelinePop").hidden = !$("timelinePop").hidden;
+// -------------------------------------------------------- přehrávání dne
+
+const play = {
+  points: [], day: null, dayStart: 0, dateVal: "",
+  timer: null, t: 0, marker: null, trail: null, idx: 1,
+};
+const dayScrubber = new DayScrubber($("dayScrubber"));
+initSpeedButtons($("playSpeedBtns"), $("playSpeed"));
+
+dayScrubber.onSeek((t) => {
+  if (!play.points.length) return;
+  const t0 = play.points[0][0], t1 = play.points[play.points.length - 1][0];
+  play.t = Math.max(t0, Math.min(t1, t));
+  renderPlayhead(play.t);
 });
+dayScrubber.onPauseDuringSeek(
+  () => !!play.timer,
+  () => pausePlayback(),
+  () => resumePlayback(),
+);
+
+$("timelineToggle").addEventListener("click", () => {
+  const pop = $("timelinePop");
+  pop.hidden = !pop.hidden;
+  $("timelineToggle").classList.toggle("active", !pop.hidden);
+});
+
+async function loadDayData(dateVal) {
+  const from_ts = dateToTs(dateVal, false);
+  const day = await api("/api/day", { from_ts, to_ts: from_ts + 86400 });
+  play.day = day;
+  play.dayStart = from_ts;
+  play.dateVal = dateVal;
+  play.points = day.points || [];
+  dayScrubber.setDay(day, from_ts);
+  $("playInfo").textContent = day.points.length < 2
+    ? "Pro tento den nejsou žádné body."
+    : daySummaryText(day) + " · barva stopy = rychlost";
+  renderDayTimeline(day);
+  return day;
+}
+
+async function playDay(autoplay = true) {
+  const dateVal = $("playDate").value;
+  if (!dateVal) { toast("Vyberte den k přehrání.", "error"); return; }
+  if (play.dateVal === dateVal && play.points.length >= 2) {
+    if (play.timer) pausePlayback();
+    else if (autoplay) resumePlayback();
+    return;
+  }
+  stopPlayback();
+  const day = await loadDayData(dateVal);
+  if (day.points.length < 2) {
+    playLayer.clearLayers();
+    return;
+  }
+  setupPlaybackMap(day);
+  if (autoplay) resumePlayback();
+  else setPlayUi(false);
+}
+
+$("playBtn").addEventListener("click", () => playDay(true));
+
+function shiftDay(delta) {
+  const val = $("playDate").value;
+  if (!val) return;
+  const wasPlaying = !!play.timer;
+  const d = new Date(dateToTs(val, false) * 1000);
+  d.setDate(d.getDate() + delta);
+  $("playDate").value = toDateStr(d);
+  stopPlayback();
+  play.dateVal = "";
+  playDay(wasPlaying);
+}
+$("dayPrev").addEventListener("click", () => shiftDay(-1));
+$("dayNext").addEventListener("click", () => shiftDay(1));
+$("playDate").addEventListener("change", () => {
+  stopPlayback();
+  play.dateVal = "";
+  playDay(false);
+});
+
+(function touchDaySwipe() {
+  const bar = $("playbackBar");
+  let sx = 0;
+  bar.addEventListener("touchstart", (e) => {
+    if (e.target.closest("#dayScrubber, button, input")) return;
+    sx = e.changedTouches[0].clientX;
+  }, { passive: true });
+  bar.addEventListener("touchend", (e) => {
+    if (!sx) return;
+    const dx = e.changedTouches[0].clientX - sx;
+    sx = 0;
+    if (Math.abs(dx) > 60) shiftDay(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 
 const tooltip = $("tooltip");
 
@@ -1246,52 +1340,6 @@ $("transportFilter")?.addEventListener("change", () => {
   if (state.loadedOnce) loadMapData();
 });
 
-// -------------------------------------------------------- přehrávání dne
-
-const play = { points: [], timer: null, t: 0, marker: null, trail: null, idx: 1 };
-window.play = play;   // pro ladění v konzoli
-
-async function playDay() {
-  stopPlayback();
-  const dateVal = $("playDate").value;
-  if (!dateVal) { toast("Vyberte den k přehrání.", "error"); return; }
-  const from_ts = dateToTs(dateVal, false);
-  const day = await api("/api/day", { from_ts, to_ts: from_ts + 86400 });
-  if (day.points.length < 2) {
-    playLayer.clearLayers();
-    $("playInfo").textContent = "Pro tento den nejsou žádné body.";
-    return;
-  }
-  startPlayback(day);
-}
-
-$("playBtn").addEventListener("click", () => {
-  if (play.timer) { stopPlayback(); return; }
-  playDay();
-});
-
-function shiftDay(delta) {
-  const val = $("playDate").value;
-  if (!val) return;
-  const d = new Date(dateToTs(val, false) * 1000);
-  d.setDate(d.getDate() + delta);
-  $("playDate").value = toDateStr(d);
-  playDay();
-}
-$("dayPrev").addEventListener("click", () => shiftDay(-1));
-$("dayNext").addEventListener("click", () => shiftDay(1));
-
-// mobilní swipe pro listování dny
-(function touchDaySwipe() {
-  const bar = $("playbackBar");
-  let sx = 0;
-  bar.addEventListener("touchstart", (e) => { sx = e.changedTouches[0].clientX; }, { passive: true });
-  bar.addEventListener("touchend", (e) => {
-    const dx = e.changedTouches[0].clientX - sx;
-    if (Math.abs(dx) > 60) shiftDay(dx < 0 ? 1 : -1);
-  }, { passive: true });
-})();
-
 // stopa dne je obarvená rychlostí – sekvenční modrá řada (světlá = pomalu)
 const SPEED_STEPS = [
   [6, "#9ec5f4"], [25, "#6da7ec"], [60, "#3987e5"],
@@ -1319,11 +1367,13 @@ function addTrailSegment(a, b) {
   }).addTo(play.trail);
 }
 
-function startPlayback(day) {
+function setupPlaybackMap(day) {
   playLayer.clearLayers();
   play.points = day.points;
   const pts = play.points;
-  play.t = pts[0][0];
+  if (!play.t || play.t < pts[0][0] || play.t > pts[pts.length - 1][0]) {
+    play.t = pts[0][0];
+  }
   play.idx = 1;
   play.trail = L.layerGroup().addTo(playLayer);
   play.marker = L.circleMarker([pts[0][1], pts[0][2]], {
@@ -1335,27 +1385,15 @@ function startPlayback(day) {
   for (const v of day.visits) {
     visitMarker(v).bindTooltip(v.name || v.semantic || "Místo").addTo(playLayer);
   }
-  const km = day.activities.reduce((a, x) => a + (x.distance_m || 0), 0) / 1000;
-  $("playInfo").textContent =
-    `${day.points.length} bodů, ${day.visits.length} návštěv` +
-    (km ? `, ${km.toFixed(1)} km dle aktivit` : "") +
-    " · barva stopy = rychlost (světlá pomalu, tmavá rychle)";
-  renderDayTimeline(day);
-
-  $("playBtn").innerHTML = icon("pause");
-  $("playBtn").dataset.state = "playing";
-  let last = performance.now();
-  play.timer = requestAnimationFrame(function frame(now) {
-    const speed = Number($("playSpeed").value);
-    play.t += ((now - last) / 1000) * speed;
-    last = now;
-    if (play.t >= pts[pts.length - 1][0]) { renderPlayhead(pts[pts.length - 1][0]); stopPlayback(); return; }
-    renderPlayhead(play.t);
-    play.timer = requestAnimationFrame(frame);
-  });
+  dayScrubber.setDay(day, play.dayStart);
+  renderPlayhead(play.t);
 }
 
-// Chronologický přehled dne: návštěvy a přesuny pod přehrávačem.
+function startPlayback(day) {
+  setupPlaybackMap(day);
+  resumePlayback();
+}
+
 function renderDayTimeline(day) {
   const hm = (ts) => new Date(ts * 1000)
     .toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" });
@@ -1364,32 +1402,44 @@ function renderDayTimeline(day) {
     ...day.activities.map((a) => ({ ...a, kind: "act" })),
   ].sort((a, b) => a.start_ts - b.start_ts);
   $("dayTimeline").innerHTML = events.map((ev, i) => {
+    const cls = ev.kind === "visit" ? "pb-ev-visit" : "pb-ev-move";
     if (ev.kind === "visit") {
       const hrs = ((ev.end_ts - ev.start_ts) / 3600).toFixed(1);
-      return `<li>${icon("pin", 12)} ${hm(ev.start_ts)}–${hm(ev.end_ts)} ` +
-        `<a data-i="${i}">${escapeHtml(ev.name || ev.semantic || "Místo")}</a> ` +
+      return `<li class="${cls}"><span class="ev-time">${hm(ev.start_ts)}–${hm(ev.end_ts)}</span> ` +
+        `${icon("pin", 12)} <a data-i="${i}" data-ts="${ev.start_ts}">` +
+        `${escapeHtml(ev.name || ev.semantic || "Místo")}</a> ` +
         `<span class="muted">(${hrs} h)</span></li>`;
     }
     const km = ((ev.distance_m || 0) / 1000).toFixed(1);
-    return `<li>${icon("chevR", 12)} ${hm(ev.start_ts)}–${hm(ev.end_ts)} ${escapeHtml(typeLabel(ev.type))}` +
-      (km > 0 ? ` <b>${km} km</b>` : "") + "</li>";
+    return `<li class="${cls}"><span class="ev-time">${hm(ev.start_ts)}–${hm(ev.end_ts)}</span> ` +
+      `${icon("chevR", 12)} ${escapeHtml(typeLabel(ev.type))}` +
+      (km > 0 ? ` <b>${km} km</b>` : "") +
+      ` <a href="#" data-ts="${ev.start_ts}" class="muted">přejít</a></li>`;
   }).join("");
   $("dayTimeline").querySelectorAll("a").forEach((a) =>
-    a.addEventListener("click", () => {
-      const ev = events[Number(a.dataset.i)];
-      if (ev.lat) map.flyTo([ev.lat, ev.lon], 16, { duration: 0.8 });
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const ts = Number(a.dataset.ts);
+      if (a.dataset.i != null) {
+        const ev = events[Number(a.dataset.i)];
+        if (ev.lat) map.flyTo([ev.lat, ev.lon], 16, { duration: 0.8 });
+      }
+      if (ts && play.points.length) {
+        pausePlayback();
+        play.t = ts;
+        renderPlayhead(ts);
+      }
     }));
 }
 
 function renderPlayhead(t) {
   const pts = play.points;
+  if (!pts.length) return;
   const last = pts.length - 1;
-  // posun zpět (slider) → kurzor a stopu postavit znovu od začátku
   if (t < pts[play.idx - 1][0]) {
     play.idx = 1;
     play.trail.clearLayers();
   }
-  // kurzor jde jen dopředu; stopa roste přidáváním úseků, ne přestavbou
   while (play.idx <= last && pts[play.idx][0] <= t) {
     addTrailSegment(pts[play.idx - 1], pts[play.idx]);
     play.idx++;
@@ -1405,27 +1455,57 @@ function renderPlayhead(t) {
     lon = a[2] + (b[2] - a[2]) * f;
     kmh = segmentSpeedKmh(a, b);
   }
-  play.marker.setLatLng([lat, lon]);
-  $("playClock").textContent = new Date(t * 1000).toLocaleTimeString("cs");
+  play.marker?.setLatLng([lat, lon]);
+  $("playClock").textContent = formatPlayClock(t);
   $("playSpeedNow").textContent = kmh >= 1 ? `${Math.round(kmh)} km/h` : "";
-  const t0 = pts[0][0], t1 = pts[last][0];
-  $("playSlider").value = t1 > t0 ? Math.round(((t - t0) / (t1 - t0)) * 1000) : 1000;
+  dayScrubber.setTime(t);
+  const scrub = $("dayScrubber");
+  const dayOff = t - play.dayStart;
+  scrub.setAttribute("aria-valuenow", String(Math.round(dayOff)));
+  scrub.setAttribute("aria-valuetext", formatPlayClock(t));
 }
 
-$("playSlider").addEventListener("input", () => {
-  if (!play.points.length) return;
-  const t0 = play.points[0][0], t1 = play.points[play.points.length - 1][0];
-  play.t = t0 + ((t1 - t0) * Number($("playSlider").value)) / 1000;
-  renderPlayhead(play.t);
-});
+function setPlayUi(playing) {
+  $("playBtn").innerHTML = icon(playing ? "pause" : "play");
+  $("playBtn").dataset.state = playing ? "playing" : "paused";
+}
 
-function stopPlayback() {
+function pausePlayback() {
   if (play.timer) cancelAnimationFrame(play.timer);
   play.timer = null;
-  $("playBtn").innerHTML = icon("play");
-  $("playBtn").dataset.state = "stopped";
+  setPlayUi(false);
+}
+
+function resumePlayback() {
+  if (!play.points.length || play.timer) return;
+  const pts = play.points;
+  if (play.t >= pts[pts.length - 1][0]) {
+    play.t = pts[0][0];
+    play.idx = 1;
+    play.trail?.clearLayers();
+  }
+  setPlayUi(true);
+  let last = performance.now();
+  play.timer = requestAnimationFrame(function frame(now) {
+    const speed = Number($("playSpeed").value);
+    play.t += ((now - last) / 1000) * speed;
+    last = now;
+    if (play.t >= pts[pts.length - 1][0]) {
+      renderPlayhead(pts[pts.length - 1][0]);
+      pausePlayback();
+      return;
+    }
+    renderPlayhead(play.t);
+    play.timer = requestAnimationFrame(frame);
+  });
+}
+
+function stopPlayback() {
+  pausePlayback();
   $("playSpeedNow").textContent = "";
 }
+
+window.play = play;
 
 // ------------------------------------------------------------ údržba dat
 

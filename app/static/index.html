@@ -274,22 +274,38 @@
     </div>
   </aside>
 
-  <!-- plovoucí lišta přehrávání dne (jako video přehrávač) -->
+  <!-- plovoucí přehrávač dne -->
   <div id="playbackBar" class="floating">
-    <button id="dayPrev" class="pb-btn" title="Předchozí den (šipka vlevo)">◀</button>
-    <input type="date" id="playDate">
-    <button id="dayNext" class="pb-btn" title="Další den (šipka vpravo)">▶</button>
-    <button id="playBtn" class="primary pb-play" title="Přehrát/zastavit (mezerník)"><span data-icon="play"></span></button>
-    <input type="range" id="playSlider" min="0" max="1000" value="0">
-    <span id="playClock" class="clock">–:–</span>
-    <span id="playSpeedNow" class="muted"></span>
-    <select id="playSpeed" title="Rychlost přehrávání">
-      <option value="60">1 min/s</option>
-      <option value="300" selected>5 min/s</option>
-      <option value="900">15 min/s</option>
-      <option value="3600">1 h/s</option>
-    </select>
-    <button id="timelineToggle" class="pb-btn" title="Časová osa dne"><span data-icon="calendar"></span></button>
+    <div class="pb-main">
+      <div class="pb-scrubber-wrap" title="Klikněte nebo táhněte pro posun v čase dne">
+        <span id="playClockStart" class="pb-edge-time">00:00</span>
+        <canvas id="dayScrubber" role="slider" aria-label="Čas v průběhu dne"
+                aria-valuemin="0" aria-valuemax="86400"></canvas>
+        <span id="playClockEnd" class="pb-edge-time">24:00</span>
+      </div>
+      <div class="pb-legend muted">
+        <span class="pb-leg-move">pohyb</span>
+        <span class="pb-leg-visit">pobyt</span>
+      </div>
+      <div class="pb-controls">
+        <div class="pb-day-nav">
+          <button id="dayPrev" class="pb-btn" type="button" title="Předchozí den (←)">◀</button>
+          <input type="date" id="playDate" aria-label="Vybraný den">
+          <button id="dayNext" class="pb-btn" type="button" title="Další den (→)">▶</button>
+        </div>
+        <button id="playBtn" class="primary pb-play" type="button"
+                title="Přehrát / pozastavit (mezerník)"><span data-icon="play"></span></button>
+        <div class="pb-now">
+          <span id="playClock" class="clock">–:–:–</span>
+          <span id="playSpeedNow" class="muted"></span>
+        </div>
+        <div id="playSpeedBtns" class="pb-speed" role="group" aria-label="Rychlost přehrávání"></div>
+        <input type="hidden" id="playSpeed" value="300">
+        <button id="timelineToggle" class="pb-btn pb-list-btn" type="button" title="Seznam událostí dne">
+          <span data-icon="calendar"></span> Seznam
+        </button>
+      </div>
+    </div>
     <div id="timelinePop" class="floating" hidden>
       <div id="playInfo" class="muted"></div>
       <ol id="dayTimeline"></ol>
