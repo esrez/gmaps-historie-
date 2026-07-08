@@ -49,7 +49,11 @@ minuty), nebo z příkazové řádky
   a stejnou cestou ho lze změnit; prázdný název ho smaže.
   Tlačítkem **⬠ Pojmenovat oblast (polygon)** lze místo kruhu obkreslit
   celý areál (min. 3 body, dvojklik/tlačítko dokončí, Esc zruší) – přesnější
-  pro velké objekty. Pojmenovaná místa zobrazuje vrstva „Moje místa".
+  pro velké objekty. Pojmenovaná místa zobrazuje vrstva „Moje místa" –
+  bublina po najetí ukazuje, kolikrát a jak dlouho jste tam ve zvoleném
+  období byli; najetí na značku návštěvy ukáže název a délku pobytu.
+  Sousední samostatné cesty se na mapě střídají dvěma odstíny modré
+  a uprostřed každé je směrová šipka.
 - Pohled i období se drží v adrese – funguje záložkování a obnovení stránky.
 
 ## 3. Kniha jízd (`/kniha`)
@@ -60,6 +64,11 @@ Typický postup na konci měsíce:
 2. **⚙ Generovat jízdy** – vytvoří jízdy z rozpoznaných cest autem; filtruje
    pracovní dny a hodiny, ignoruje mikro-jízdy, přeskakuje duplicity
    a už existující záznamy (ruční úpravy se nikdy nepřepíšou).
+   Volba **„Zapisovat po městech"** (výchozí): místní jízdy v rámci jednoho
+   města se sloučí do jednoho řádku s jeho jménem a sečtenými km
+   (Brno – Brno, 23 km), mezi městy se zapíše Brno → Praha. Města se
+   určují z vestavěného číselníku (offline). Vypnutím volby se zapisují
+   jednotlivé jízdy s názvy konkrétních míst.
 3. Zkontrolujte **upozornění** nad tabulkou: chybějící dny (tlačítko Doplnit),
    neúplné jízdy, překročený tachometr.
 4. Tabulka se zobrazuje **po dnech**: řádek dne ukazuje počet jízd, trasu

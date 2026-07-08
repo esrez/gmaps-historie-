@@ -252,11 +252,15 @@ function renderTracks() {
       color: casing, weight: 6, opacity: 1, interactive: false,
     }).addTo(trackLayer);
   }
-  for (const seg of segments) {
+  // dvě střídající se modré – sousední samostatné cesty jdou rozlišit
+  const shades = [css("--series-1"), isDarkTheme() ? "#6da7ec" : "#5598e7"];
+  let arrows = 0;
+  segments.forEach((seg, si) => {
     const from = new Date(seg[0][0] * 1000);
     const to = new Date(seg[seg.length - 1][0] * 1000);
+    const shade = shades[si % 2];
     const line = L.polyline(seg.map((p) => [p[1], p[2]]), {
-      color: css("--series-1"),
+      color: shade,
       weight: 2.5,
       opacity: 0.9,
     }).bindTooltip(
@@ -270,7 +274,26 @@ function renderTracks() {
     line.on("mouseover", () => line.setStyle({ weight: 4.5 }));
     line.on("mouseout", () => line.setStyle({ weight: 2.5 }));
     line.addTo(trackLayer);
-  }
+
+    // směrová šipka uprostřed cesty – je vidět, kterým směrem jsem jel
+    if (arrows < 150 && seg.length >= 6) {
+      const mi = Math.floor(seg.length / 2);
+      const a = seg[mi - 1], b = seg[mi + 1] || seg[mi];
+      const bearing = Math.atan2(
+        (b[2] - a[2]) * Math.cos((a[1] * Math.PI) / 180),
+        b[1] - a[1]) * 180 / Math.PI;
+      L.marker([seg[mi][1], seg[mi][2]], {
+        interactive: false,
+        icon: L.divIcon({
+          className: "trackArrow",
+          html: `<span style="transform:rotate(${Math.round(bearing - 90)}deg);color:${shade}">➤</span>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
+        }),
+      }).addTo(trackLayer);
+      arrows++;
+    }
+  });
 }
 
 // -------------------------------------------------- moje místa (názvy)
@@ -278,9 +301,15 @@ function renderTracks() {
 async function renderMyPlaces() {
   myPlacesLayer.clearLayers();
   if (!$("layerMyPlaces").checked) return;
-  let all;
+  let all, stats = {};
   try {
-    all = (await api("/api/places")).places;
+    const r = currentRange();
+    const [pl, st] = await Promise.all([
+      api("/api/places"),
+      api("/api/places/stats", r),
+    ]);
+    all = pl.places;
+    for (const s of st.stats) stats[s.id] = s;
   } catch (e) { return; }
   const color = isDarkTheme() ? "#9085e9" : "#4a3aa7";
   for (const p of all) {
@@ -289,7 +318,13 @@ async function renderMyPlaces() {
     const shape = p.polygon
       ? L.polygon(p.polygon, style)
       : L.circle([p.lat, p.lon], { radius: p.radius_m, ...style });
-    shape.bindTooltip(p.name, { sticky: true });
+    // bublina rovnou říká, jak dlouho jsem tu ve zvoleném období byl
+    const s = stats[p.id];
+    const info = s && s.count
+      ? `${s.count}×, ${(s.secs / 3600).toLocaleString("cs", { maximumFractionDigits: 1 })} h ve zvoleném období`
+      : "ve zvoleném období bez pobytu";
+    shape.bindTooltip(`<b>${escapeHtml(p.name)}</b><br>${info}<br><i>kliknutím zobrazíte pobyty</i>`,
+      { sticky: true });
     shape.on("click", (ev) => {
       L.DomEvent.stop(ev);
       whenIWasHere(p.lat, p.lon, p.name);
@@ -430,7 +465,9 @@ function renderVisits() {
     const from = new Date(v.start_ts * 1000), to = new Date(v.end_ts * 1000);
     const hours = ((v.end_ts - v.start_ts) / 3600).toFixed(1);
     const label = v.label || v.name || v.semantic || "Místo";
-    const m = visitMarker(v).bindPopup(
+    const m = visitMarker(v).bindTooltip(
+      `${escapeHtml(label)} · ${hours} h`, { direction: "top" }
+    ).bindPopup(
       `<b>${escapeHtml(label)}</b><br>` +
       (v.address ? escapeHtml(v.address) + "<br>" : "") +
       `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>${hours} h<br>` +

@@ -13,7 +13,7 @@ let rules = [];
 
 const SETTINGS = ["setPlate", "setDriver", "setPurpose", "setWorkdays",
                   "setHourFrom", "setHourTo", "setMinKm", "setRoundUp", "setAutoFill",
-                  "setFilterPlate", "setGroupDays"];
+                  "setFilterPlate", "setGroupDays", "setCityMode"];
 
 // ------------------------------------------------------------ našeptávač
 
@@ -461,6 +461,7 @@ $("generateBtn").addEventListener("click", async () => {
         hour_to: Number($("setHourTo").value),
         min_km: parseFloat($("setMinKm").value) || 0,
         round_up: roundUpOn(),
+        city_mode: $("setCityMode").checked,
         purpose: $("setPurpose").value,
         driver: $("setDriver").value,
         plate: $("setPlate").value,

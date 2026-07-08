@@ -48,9 +48,9 @@ def point_in_polygon(lat: float, lon: float, poly: list[list[float]]) -> bool:
     return inside
 
 
-def custom_label(places: list[dict], lat, lon) -> str | None:
-    """Vlastní název místa: bod uvnitř polygonu vyhrává, jinak nejbližší
-    název, v jehož okruhu souřadnice leží."""
+def custom_place(places: list[dict], lat, lon) -> dict | None:
+    """Vlastní místo, do kterého bod spadá: polygon vyhrává, jinak nejbližší
+    místo, v jehož okruhu souřadnice leží."""
     if lat is None or lon is None:
         return None
     best, best_d = None, float("inf")
@@ -59,12 +59,17 @@ def custom_label(places: list[dict], lat, lon) -> str | None:
             continue
         if p["polygon"]:
             if point_in_polygon(lat, lon, p["polygon"]):
-                return p["name"]
+                return p
             continue
         d = haversine_m(lat, lon, p["lat"], p["lon"])
         if d <= p["radius_m"] and d < best_d:
-            best, best_d = p["name"], d
+            best, best_d = p, d
     return best
+
+
+def custom_label(places: list[dict], lat, lon) -> str | None:
+    p = custom_place(places, lat, lon)
+    return p["name"] if p else None
 
 
 def visit_label(places: list[dict], lat, lon, name, semantic) -> str:
@@ -92,6 +97,27 @@ class PlaceIn(BaseModel):
 def list_places():
     with closing(db.connect()) as conn:
         return {"places": sorted(load_places(conn), key=lambda p: p["name"].lower())}
+
+
+@router.get("/stats")
+def place_stats(from_ts: int | None = None, to_ts: int | None = None,
+                min_stay_min: float = 2):
+    """Pobyt na pojmenovaných místech ve zvoleném období – pro bublinové
+    nápovědy na mapě (kolikrát a jak dlouho jsem tam byl)."""
+    from .common import ts_range
+    lo, hi = ts_range(from_ts, to_ts)
+    with closing(db.connect()) as conn:
+        pls = load_places(conn)
+        agg = {p["id"]: {"id": p["id"], "count": 0, "secs": 0} for p in pls}
+        for v in conn.execute(
+                "SELECT start_ts, end_ts, lat, lon FROM visits "
+                "WHERE start_ts BETWEEN ? AND ? AND end_ts - start_ts >= ?",
+                (lo, hi, int(min_stay_min * 60))):
+            hit = custom_place(pls, v["lat"], v["lon"])
+            if hit is not None:
+                agg[hit["id"]]["count"] += 1
+                agg[hit["id"]]["secs"] += v["end_ts"] - v["start_ts"]
+    return {"stats": list(agg.values())}
 
 
 @router.post("")

@@ -187,3 +187,21 @@ def test_polygon_place(client, test_db, tmp_path):
     # bod mimo polygon jméno nedostane
     from app import places as pl
     assert pl.custom_label(r["places"], 50.2, 14.5) is None
+
+
+def test_place_stats_for_tooltips(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    r = client.post("/api/places",
+                    json={"lat": 50.1, "lon": 14.39, "name": "Zákazník"}).json()
+    pid = r["places"][0]["id"]
+    st = client.get("/api/places/stats").json()["stats"]
+    mine = next(s for s in st if s["id"] == pid)
+    assert mine["count"] == 5 and mine["secs"] > 0
+
+
+def test_cities_resolver():
+    from app.cities import city_for
+    assert city_for(49.19, 16.61) == "Brno"
+    assert city_for(50.08, 14.43) == "Praha"
+    assert city_for(48.856, 16.05) == "Znojmo"
+    assert city_for(0, 0) is None

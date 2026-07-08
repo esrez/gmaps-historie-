@@ -21,7 +21,7 @@ from contextlib import closing
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from . import db, places
+from . import cities, db, places
 from .common import fmt_dt, haversine_m, local_dt, ts_range, xlsx_response
 
 router = APIRouter(prefix="/api/trips")
@@ -113,6 +113,7 @@ class GenerateParams(BaseModel):
     hour_to: int = 18
     min_km: float = 0.5
     round_up: bool = True
+    city_mode: bool = False   # zapisovat po městech a slučovat místní jízdy
     purpose: str = "Služební jízda"
     driver: str = ""
     plate: str = ""
@@ -272,15 +273,11 @@ def generate(p: GenerateParams):
         # ochrana proti duplicitám: intervaly už existujících jízd + nově přijatých
         covered = [(r["start_ts"], r["end_ts"]) for r in conn.execute(
             "SELECT start_ts, end_ts FROM trips WHERE start_ts BETWEEN ? AND ?", (lo, hi))]
-        created_ids: list[int] = []
         skipped_dup = 0
+
+        # 1) posbírat přijaté cesty (filtry dnů/hodin/duplicit; km i z GPS stopy)
+        entries: list[dict] = []
         for a in acts:
-            km = (a["distance_m"] or 0) / 1000
-            if km <= 0:
-                # aktivita bez vzdálenosti → spočítat ze skutečné GPS stopy
-                km = _km_from_points(conn, a["start_ts"], a["end_ts"])
-            if km < p.min_km:
-                continue
             local = local_dt(a["start_ts"])
             if p.workdays_only and local.weekday() >= 5:
                 continue
@@ -291,20 +288,54 @@ def generate(p: GenerateParams):
                    for s, e in covered):
                 skipped_dup += 1   # stejná cesta už v knize je (např. z druhého exportu)
                 continue
-            origin = namer.name(a["start_lat"], a["start_lon"])
-            destination = namer.name(a["end_lat"], a["end_lon"])
-            rule_km = _rule_km(rules, origin, destination)
-            km_final = _round_km(rule_km if rule_km is not None else km, p.round_up)
+            km = (a["distance_m"] or 0) / 1000
+            if km <= 0:
+                # aktivita bez vzdálenosti → spočítat ze skutečné GPS stopy
+                km = _km_from_points(conn, a["start_ts"], a["end_ts"])
+            if not p.city_mode and km < p.min_km:
+                continue
+            if p.city_mode:
+                origin = (cities.city_for(a["start_lat"], a["start_lon"])
+                          or namer.name(a["start_lat"], a["start_lon"]))
+                destination = (cities.city_for(a["end_lat"], a["end_lon"])
+                               or namer.name(a["end_lat"], a["end_lon"]))
+            else:
+                origin = namer.name(a["start_lat"], a["start_lon"])
+                destination = namer.name(a["end_lat"], a["end_lon"])
+            entries.append({"start_ts": a["start_ts"], "end_ts": a["end_ts"],
+                            "km": km, "origin": origin, "destination": destination,
+                            "day": local.date()})
+
+        # 2) režim měst: jízdy uvnitř téhož města se v rámci dne slučují
+        #    do jednoho řádku (Brno → Brno se sečtenými km)
+        if p.city_mode:
+            merged: list[dict] = []
+            for e in entries:
+                prev = merged[-1] if merged else None
+                if (prev is not None and prev["day"] == e["day"]
+                        and e["origin"] == e["destination"]
+                        and prev["origin"] == prev["destination"] == e["origin"]):
+                    prev["end_ts"] = e["end_ts"]
+                    prev["km"] += e["km"]
+                else:
+                    merged.append(dict(e))
+            entries = [e for e in merged if e["km"] >= p.min_km]
+
+        # 3) zápis: pravidla km, zaokrouhlení, undo
+        created_ids: list[int] = []
+        for e in entries:
+            rule_km = _rule_km(rules, e["origin"], e["destination"])
+            km_final = _round_km(rule_km if rule_km is not None else e["km"], p.round_up)
             cur = conn.execute(
                 "INSERT OR IGNORE INTO trips(start_ts, end_ts, km, origin, destination,"
                 " purpose, driver, plate, private, activity_ts)"
                 " VALUES(?,?,?,?,?,?,?,?,0,?)",
-                (a["start_ts"], a["end_ts"], km_final, origin, destination,
-                 p.purpose, p.driver, p.plate, a["start_ts"]))
+                (e["start_ts"], e["end_ts"], km_final, e["origin"], e["destination"],
+                 p.purpose, p.driver, p.plate, e["start_ts"]))
             if cur.rowcount:
                 created += 1
                 created_ids.append(cur.lastrowid)
-                covered.append((a["start_ts"], a["end_ts"]))
+                covered.append((e["start_ts"], e["end_ts"]))
         if created_ids:
             _save_undo(conn, "generate", created=created_ids)
         conn.commit()
