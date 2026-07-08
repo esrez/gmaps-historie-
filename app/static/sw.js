@@ -1,10 +1,11 @@
 /* Service worker: statické soubory z cache (rychlý start, offline UI),
    stránky network-first s offline fallbackem, API vždy ze sítě. */
-const CACHE = "gmaps-historie-v1";
+const CACHE = "gmaps-historie-__VERSION__";   // dosazuje server při vydání
 const STATIC_ASSETS = [
   "/", "/kniha",
   "/static/style.css", "/static/kniha.css",
-  "/static/common.js", "/static/app.js", "/static/kniha.js",
+  "/static/common.js", "/static/app.js", "/static/kniha.js", "/static/icons.js",
+  "/static/charts.js",
   "/static/vendor/leaflet.js", "/static/vendor/leaflet.css",
   "/static/vendor/leaflet-heat.js", "/static/vendor/leaflet.markercluster.js",
   "/static/vendor/MarkerCluster.css", "/static/vendor/MarkerCluster.Default.css",

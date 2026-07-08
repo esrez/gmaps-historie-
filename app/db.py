@@ -146,5 +146,7 @@ def connect() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    # při souběhu s importem na pozadí chvíli počkat místo "database is locked"
+    conn.execute("PRAGMA busy_timeout=5000")
     _ensure_schema(conn)
     return conn

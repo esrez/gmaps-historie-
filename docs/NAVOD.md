@@ -48,7 +48,12 @@ Když zvolené období nemá žádná data, mapa to řekne kartičkou s tlačít
 - **Statistiky / Analýza** (záložky) – km celkem a po měsících, rozpad podle
   dopravy, top místa; km podle dne v týdnu, aktivita podle hodiny, km po
   letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu stejně
-  dlouhému období) a miniaturní křivku km po měsících.
+  dlouhému období) a miniaturní křivku km po měsících. Blok **Rekordy
+  období** shrnuje nejvíc najetých km za den, nejdelší jednotlivou cestu
+  a nejdelší sérii po sobě jdoucích dní s jízdou.
+- **Porovnání období** – lze zapnout druhé období, které se vykreslí
+  oranžově přes hlavní modré trasy (tlačítko „Stejné období loni" nastaví
+  posun o rok) – pohodlné srovnání letos vs. loni.
 - **Přehrávání dne** – plovoucí lišta dole jako u video přehrávače:
   ◀ ▶ listování, rychlost přehrávání, stopa obarvená rychlostí
   (světlá = pomalu), aktuální km/h; ikona kalendáře otevře chronologickou
@@ -104,7 +109,8 @@ jízdy. Vypnout lze přepínačem „Po zadání km doplnit stejnou trasu".
 ### Tachometr, soukromé jízdy, více vozidel
 
 - **Tachometr**: zadejte roční nájezd → aplikace ukazuje „v knize X km,
-  zbývá Y km". Vede se zvlášť pro každou SPZ.
+  zbývá Y km". Vede se zvlášť pro každou SPZ. Nad tabulkou je navíc
+  kompaktní **ukazatel** s proužkem najeto/zbývá (červený při překročení).
 - **Soukr.** = soukromá jízda firemním autem (v knize zůstává označená).
 - **Vl. auto** = jízda vlastním autem – z knihy, součtů i exportů zmizí.
 - Více vozidel: zapněte „Zobrazovat jen jízdy tohoto vozidla" a přepínejte SPZ.
@@ -118,8 +124,15 @@ potvrzení; poté se soubor databáze zkomprimuje. Originální exporty od Googl
 si nechte – kdykoli je lze naimportovat znovu.
 
 **Zálohy**: automaticky každý den do `data/backups/` (14 posledních),
-ručně tlačítkem. Obnovení: zastavit kontejner, nahradit `data/history.db`
-souborem zálohy, spustit.
+ručně tlačítkem. **Obnova přímo v aplikaci**: vyberte zálohu z nabídky
+a klikněte na *Obnovit* – současná data se přepíšou, ale ještě předtím se
+sama zazálohují, takže obnovu lze vzít zpět. (Alternativně offline: zastavit
+kontejner, nahradit `data/history.db` souborem zálohy, spustit.)
+
+> **Off-site záloha:** `data/history.db` je kompletní historie vaší polohy
+> a žije jen na disku serveru. Doporučuji ji pravidelně kopírovat i mimo
+> server – např. šifrovaně nástrojem [restic](https://restic.net):
+> `restic -r /mnt/nas/gmaps backup /cesta/k/data/history.db`.
 
 ## 5. Instalace jako aplikace (PWA) a offline mapy
 
@@ -149,8 +162,12 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
   spouští/zastavuje přehrávání.
 - **Mobil**: kniha jízd se zobrazuje jako karty, panel mapy je vysouvací
   list; vše má větší dotykové plochy.
-- **Undo**: kniha jízd drží posledních 10 hromadných akcí – tlačítko
+- **Undo**: kniha jízd drží posledních 10 akcí (generování, propagace,
+  pravidla, mazání jednotlivých jízd i hromadné mazání) – tlačítko
   „Vrátit" lze použít opakovaně.
+- **Verze**: aktuální verzi frontendu ukazuje záložka Nástroje („O aplikaci").
+  Po `git pull && docker compose up -d --build` se díky ní sama zneplatní
+  cache PWA, takže nové UI naběhne bez ručního mazání mezipaměti prohlížeče.
 
 ## 7. Provoz
 

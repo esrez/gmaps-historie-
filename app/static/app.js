@@ -3,6 +3,8 @@ import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
          buildUrl, apiFetch, escapeHtml, toast,
          isDarkTheme, initThemeToggle } from "./common.js";
 import { icon, mountIcons } from "./icons.js";
+import { typeLabel, tile, trend, sparkline, renderRecords,
+         renderMonthlyChart, renderAnalysis } from "./charts.js";
 
 initThemeToggle($("themeBtn"));
 mountIcons();
@@ -78,6 +80,7 @@ const visitLayer = L.markerClusterGroup({
   showCoverageOnHover: false,
 }).addTo(map);
 const playLayer = L.layerGroup().addTo(map);
+const compareLayer = L.layerGroup().addTo(map);
 const locLayer = L.layerGroup().addTo(map);
 const canvasRenderer = L.canvas({ padding: 0.3 });
 let heatLayer = null;
@@ -325,6 +328,67 @@ function renderTracks() {
   });
 }
 
+// ------------------------------------------------- porovnání dvou období
+
+let compareAbort = null;
+
+function compareRange() {
+  const f = $("cmpFrom").value, t = $("cmpTo").value;
+  return {
+    from_ts: f ? dateToTs(f, false) : null,
+    to_ts: t ? dateToTs(t, true) : null,
+  };
+}
+
+async function loadCompare() {
+  compareLayer.clearLayers();
+  if (!$("layerCompare").checked) return;
+  const r = compareRange();
+  if (r.from_ts === null || r.to_ts === null) return;
+  compareAbort?.abort();
+  const ctrl = new AbortController();
+  compareAbort = ctrl;
+  try {
+    const pts = await api("/api/points",
+      { params: { ...r, limit: 60000 }, signal: ctrl.signal });
+    const color = css("--series-3");
+    for (const seg of splitSegments(pts.points)) {
+      L.polyline(seg.map((p) => [p[1], p[2]]), {
+        color, weight: 2.5, opacity: 0.85, dashArray: "5 4", interactive: false,
+      }).addTo(compareLayer);
+    }
+  } catch (e) {
+    if (e.name !== "AbortError") toast("Porovnání se nenačetlo: " + e.message, "error");
+  } finally {
+    if (compareAbort === ctrl) compareAbort = null;
+  }
+}
+
+$("layerCompare").addEventListener("change", () => {
+  const on = $("layerCompare").checked;
+  $("comparePanel").hidden = !on;
+  if (on && !$("cmpFrom").value) setComparePreset("prevYear");
+  else loadCompare();
+});
+["cmpFrom", "cmpTo"].forEach((id) =>
+  $(id).addEventListener("change", loadCompare));
+
+function setComparePreset(which) {
+  if (which === "prevYear") {
+    const r = currentRange();
+    const shift = (ts) => {
+      const d = new Date(ts * 1000);
+      d.setFullYear(d.getFullYear() - 1);
+      return d;
+    };
+    if (r.from_ts !== null) $("cmpFrom").value = toDateStr(shift(r.from_ts));
+    if (r.to_ts !== null) $("cmpTo").value = toDateStr(shift(r.to_ts));
+  }
+  loadCompare();
+}
+document.querySelectorAll("#comparePanel [data-cmp]").forEach((b) =>
+  b.addEventListener("click", () => setComparePreset(b.dataset.cmp)));
+
 // -------------------------------------------------- moje místa (názvy)
 
 async function renderMyPlaces() {
@@ -527,46 +591,6 @@ $("layerViewport").addEventListener("change", () => {
 
 // ------------------------------------------------------------ statistiky
 
-const TYPE_LABELS = {
-  IN_PASSENGER_VEHICLE: "Autem", DRIVING: "Autem", WALKING: "Pěšky",
-  RUNNING: "Běh", CYCLING: "Na kole", IN_BUS: "Autobusem", IN_TRAIN: "Vlakem",
-  IN_TRAM: "Tramvají", IN_SUBWAY: "Metrem", FLYING: "Letadlem",
-  MOTORCYCLING: "Na motorce", IN_FERRY: "Trajektem", SAILING: "Lodí",
-  SKIING: "Lyže", UNKNOWN: "Neznámé", UNKNOWN_ACTIVITY_TYPE: "Neznámé",
-};
-const typeLabel = (t) => TYPE_LABELS[t.replaceAll(" ", "_")]
-  || t.replaceAll("_", " ").toLowerCase();
-
-function tile(value, label, extra = "") {
-  return `<div class="tile"><div class="value">${value}${extra}</div><div class="label">${label}</div></div>`;
-}
-
-/* Šipka ↑/↓ s procenty oproti předchozímu stejně dlouhému období. */
-function trend(cur, prev) {
-  if (prev == null || !(prev > 0)) return "";
-  const pct = Math.round(((cur - prev) / prev) * 100);
-  if (!Number.isFinite(pct) || pct === 0) return "";
-  const up = pct > 0;
-  return `<span class="trend ${up ? "up" : "down"}" ` +
-    `title="oproti předchozímu stejně dlouhému období">${up ? "↑" : "↓"}${Math.abs(pct)} %</span>`;
-}
-
-/* Miniaturní křivka km po měsících v rohu dlaždice. */
-function sparkline(monthly) {
-  const vals = (monthly || []).map((m) => m.km);
-  if (vals.length < 3) return "";
-  const max = Math.max(...vals);
-  if (!(max > 0)) return "";
-  const W = 58, H = 16;
-  const step = W / (vals.length - 1);
-  const pts = vals
-    .map((v, i) => `${(i * step).toFixed(1)},${(H - 1.5 - (H - 3) * (v / max)).toFixed(1)}`)
-    .join(" ");
-  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">` +
-    `<polyline points="${pts}" fill="none" stroke="var(--series-1)" stroke-width="1.5" ` +
-    `stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-}
-
 function renderStats(s, prev) {
   const p = prev || {};
   $("statTiles").innerHTML =
@@ -589,6 +613,8 @@ function renderStats(s, prev) {
     .filter((t) => t.km > 0)
     .map((t) => `<div class="typeRow"><span>${escapeHtml(typeLabel(t.type))} (${t.count}×)</span><b>${t.km.toLocaleString("cs")} km</b></div>`)
     .join("");
+
+  renderRecords(s.records);
 
   $("topPlaces").innerHTML = s.top_places
     .map((p, i) =>
@@ -652,90 +678,6 @@ async function renamePlace(lat, lon, currentLabel) {
   toast(`Místo pojmenováno: ${name.trim()}`, "success");
   renderMyPlaces();
   loadAll();
-}
-
-// Obecný sloupcový graf – SVG, jedna řada (modrá), tooltip na hover.
-// items: [{label, value, tip?}]; opts: {unit, tickEvery, aria, decimals}
-function renderBarChart(el, items, opts = {}) {
-  if (!items || items.length < 2 || !items.some((it) => it.value > 0)) {
-    el.innerHTML = "";
-    return false;
-  }
-  const unit = opts.unit || "";
-  const dec = opts.decimals ?? 0;
-  const fmt = (v) => v.toLocaleString("cs", { maximumFractionDigits: dec });
-
-  const W = 308, H = 126, padL = 34, padB = 16, padT = 14;
-  const plotW = W - padL - 4, plotH = H - padT - padB;
-  const maxV = Math.max(...items.map((it) => it.value), 1e-9);
-  const n = items.length;
-  const slot = plotW / n;
-  const barW = Math.max(2, Math.min(18, slot - 2));
-  const y = (v) => padT + plotH * (1 - v / maxV);
-  const peakIdx = items.findIndex((it) => it.value === maxV);
-
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.aria || ""}">`;
-  for (const f of [0.5, 1]) {
-    const gy = y(maxV * f);
-    svg += `<line class="gridline" x1="${padL}" y1="${gy}" x2="${W - 4}" y2="${gy}"/>`;
-    svg += `<text x="${padL - 4}" y="${gy + 3}" text-anchor="end">${fmt(maxV * f)}</text>`;
-  }
-  items.forEach((it, i) => {
-    const x = padL + i * slot + (slot - barW) / 2;
-    const by = y(it.value);
-    const h = Math.max(0, padT + plotH - by);
-    const r = Math.min(4, barW / 2, h); // zaoblený jen horní konec, ukotveno k základně
-    svg += `<path class="bar" data-i="${i}" d="M${x},${padT + plotH} v${-(h - r)} q0,${-r} ${r},${-r} h${barW - 2 * r} q${r},0 ${r},${r} v${h - r} z"/>`;
-    if (i === peakIdx && h > 10)
-      svg += `<text class="peak" x="${x + barW / 2}" y="${by - 3}" text-anchor="middle">${fmt(it.value)}</text>`;
-  });
-  svg += `<line class="baseline" x1="${padL}" y1="${padT + plotH}" x2="${W - 4}" y2="${padT + plotH}"/>`;
-  const every = opts.tickEvery || Math.ceil(n / 6);
-  items.forEach((it, i) => {
-    if (i % every !== 0) return;
-    const x = padL + i * slot + slot / 2;
-    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle">${it.label}</text>`;
-  });
-  svg += "</svg>";
-  el.innerHTML = svg;
-
-  el.querySelectorAll(".bar").forEach((bar) => {
-    bar.addEventListener("mousemove", (ev) => {
-      const it = items[Number(bar.dataset.i)];
-      tooltip.innerHTML =
-        `<span class="t-label">${it.tip || it.label}</span> ` +
-        `<b>${it.value.toLocaleString("cs", { maximumFractionDigits: 1 })}${unit ? " " + unit : ""}</b>`;
-      tooltip.hidden = false;
-      tooltip.style.left = ev.clientX + 12 + "px";
-      tooltip.style.top = ev.clientY - 10 + "px";
-    });
-    bar.addEventListener("mouseleave", () => { tooltip.hidden = true; });
-  });
-  return true;
-}
-
-function renderMonthlyChart(monthly) {
-  const items = (monthly || []).map((m) => {
-    const [yy, mm] = m.month.split("-");
-    return { label: `${Number(mm)}/${yy.slice(2)}`, tip: m.month, value: m.km };
-  });
-  const shown = renderBarChart($("monthlyChart"), items,
-    { unit: "km", aria: "Kilometry po měsících" });
-  $("monthlyTitle").hidden = !shown;
-}
-
-function renderAnalysis(a) {
-  renderBarChart($("weekdayChart"),
-    a.weekday_km.map((d) => ({ label: d.day, value: d.km })),
-    { unit: "km", tickEvery: 1, aria: "Kilometry podle dne v týdnu" });
-  renderBarChart($("hourlyChart"),
-    a.hourly_points.map((h) => ({ label: String(h.hour), tip: `${h.hour}:00–${h.hour}:59`, value: h.count })),
-    { unit: "záznamů", tickEvery: 4, aria: "Počet GPS záznamů podle hodiny dne" });
-  $("yearlyList").innerHTML = a.yearly_km.length
-    ? a.yearly_km.map((y) =>
-        `<div class="typeRow"><span>${y.year} (${y.trips.toLocaleString("cs")} cest)</span>` +
-        `<b>${y.km.toLocaleString("cs")} km</b></div>`).join("")
-    : '<p class="muted">Žádné rozpoznané cesty v období.</p>';
 }
 
 // -------------------------------------------------------- kalendář roku
@@ -1233,6 +1175,33 @@ async function watchImport(jobId) {
 
 $("backupBtn").addEventListener("click", () => { location.href = "/api/backup"; });
 
+async function loadBackups() {
+  try {
+    const { backups } = await api("/api/backups");
+    const sel = $("restoreSelect");
+    sel.innerHTML = '<option value="">— vyberte zálohu —</option>' +
+      backups.map((b) =>
+        `<option value="${escapeHtml(b.name)}">${b.when} · ${(b.size / 1e6).toFixed(1)} MB</option>`
+      ).join("");
+  } catch (e) { /* nedostupné */ }
+}
+
+$("restoreBtn").addEventListener("click", async () => {
+  const name = $("restoreSelect").value;
+  if (!name) { toast("Nejdřív vyberte zálohu.", "error"); return; }
+  if (!confirm("Obnovit databázi z této zálohy? Současná data se přepíšou " +
+               "(předtím se ale sama zazálohují, obnovu lze vzít zpět).")) return;
+  try {
+    const res = await api("/api/restore", { method: "POST", params: { name } });
+    toast(`Databáze obnovena ze zálohy. Předchozí stav uložen jako ${res.safety_backup}.`,
+      "success");
+    loadBackups();
+    location.reload();
+  } catch (e) {
+    toast("Obnova selhala: " + e.message, "error");
+  }
+});
+
 async function showAutoImportLog() {
   try {
     const { log } = await api("/api/autoimport");
@@ -1263,7 +1232,16 @@ async function showAutoImportLog() {
       toast("Zatím nejsou žádná data – začněte importem exportu z Google Maps.");
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
+  showVersion();
+  loadBackups();
   showAutoImportLog();
   renderCalendar();
   loadAll();
 })();
+
+async function showVersion() {
+  try {
+    const { version } = await api("/api/version");
+    $("appVersion").textContent = `GMaps Historie · verze ${version}`;
+  } catch (e) { /* nedostupné */ }
+}

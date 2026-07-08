@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import math
 import os
 import secrets
@@ -29,6 +30,22 @@ app.include_router(trips.router)
 app.include_router(places.router)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+
+def _static_version() -> str:
+    """Otisk obsahu frontendu – mění se s každým vydáním, verzuje cache
+    service workeru (jinak by PWA po aktualizaci serveru zůstala na staré UI)."""
+    h = hashlib.sha1()
+    for root, _dirs, files in os.walk(STATIC_DIR):
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            h.update(name.encode())
+            with open(path, "rb") as f:
+                h.update(f.read())
+    return h.hexdigest()[:10]
+
+
+APP_VERSION = _static_version()
 
 MAX_TRACK_POINTS = 60_000
 MAX_HEAT_CELLS = 40_000
@@ -71,7 +88,14 @@ def make_backup() -> str:
     """Konzistentní kopie SQLite databáze (backup API) + rotace starých záloh."""
     backup_dir = os.path.join(_data_dir(), "backups")
     os.makedirs(backup_dir, exist_ok=True)
-    name = f"history-{datetime.now(tz=None):%Y%m%d-%H%M%S}.db"
+    base = f"history-{datetime.now(tz=None):%Y%m%d-%H%M%S}"
+    # zajistit unikátní jméno – jinak by dvě zálohy ve stejné sekundě
+    # (např. snímek před obnovou) přepsaly jedna druhou a přišlo by se o data
+    name = f"{base}.db"
+    n = 1
+    while os.path.exists(os.path.join(backup_dir, name)):
+        name = f"{base}-{n}.db"
+        n += 1
     dest = os.path.join(backup_dir, name)
     src = sqlite3.connect(db.DB_PATH)
     dst = sqlite3.connect(dest)
@@ -152,6 +176,51 @@ def api_backup():
     dest = make_backup()
     return FileResponse(dest, filename=os.path.basename(dest),
                         media_type="application/octet-stream")
+
+
+def _is_backup_name(name: str) -> bool:
+    """Bezpečné jméno zálohy (bez cesty, jen soubory z rotace)."""
+    return (name.startswith("history-") and name.endswith(".db")
+            and os.path.basename(name) == name)
+
+
+@app.get("/api/backups")
+def api_backups():
+    """Seznam dostupných záloh (pro obnovu bez zásahu do souborů)."""
+    backup_dir = os.path.join(_data_dir(), "backups")
+    items = []
+    if os.path.isdir(backup_dir):
+        for name in os.listdir(backup_dir):
+            if not _is_backup_name(name):
+                continue
+            st = os.stat(os.path.join(backup_dir, name))
+            items.append({"name": name, "size": st.st_size,
+                          "when": datetime.fromtimestamp(st.st_mtime)
+                          .strftime("%d.%m.%Y %H:%M")})
+    items.sort(key=lambda x: x["name"], reverse=True)
+    return {"backups": items}
+
+
+@app.post("/api/restore")
+def api_restore(name: str = Query(...)):
+    """Obnoví databázi z vybrané zálohy. Aktuální stav se předtím zazálohuje,
+    ať jde obnova případně vzít zpět. Kopíruje se přes SQLite backup API
+    (bezpečné i při zapnutém WAL), nezasahuje se do souborů za běhu."""
+    if not _is_backup_name(name):
+        raise HTTPException(400, "Neplatné jméno zálohy")
+    path = os.path.join(_data_dir(), "backups", name)
+    if not os.path.exists(path):
+        raise HTTPException(404, "Záloha nenalezena")
+    safety = make_backup()   # snímek současného stavu před přepsáním
+    src = sqlite3.connect(path)
+    dst = sqlite3.connect(db.DB_PATH)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    return {"restored": name, "safety_backup": os.path.basename(safety)}
 
 
 @app.get("/api/autoimport")
@@ -289,6 +358,44 @@ def _point_distances(conn, lo: int, hi: int):
     return monthly, step > 1
 
 
+def _compute_records(conn, lo: int, hi: int) -> dict:
+    """Zajímavé rekordy období: nejvíc najetých km za den, nejdelší jednotlivá
+    cesta a nejdelší série po sobě jdoucích dní s jízdou autem."""
+    from datetime import date, timedelta
+
+    day_rows = conn.execute(
+        "SELECT date(start_ts,'unixepoch','localtime') d, "
+        "SUM(COALESCE(distance_m,0)) dist FROM activities "
+        "WHERE start_ts BETWEEN ? AND ? GROUP BY d HAVING dist > 0 "
+        "ORDER BY dist DESC LIMIT 1", (lo, hi)).fetchone()
+    longest_day = ({"date": day_rows["d"], "km": round(day_rows["dist"] / 1000, 1)}
+                   if day_rows else None)
+
+    trip_row = conn.execute(
+        "SELECT start_ts, distance_m FROM activities "
+        "WHERE start_ts BETWEEN ? AND ? AND distance_m IS NOT NULL "
+        "ORDER BY distance_m DESC LIMIT 1", (lo, hi)).fetchone()
+    longest_trip = ({"date": local_dt(trip_row["start_ts"]).strftime("%Y-%m-%d"),
+                     "km": round(trip_row["distance_m"] / 1000, 1)}
+                    if trip_row and trip_row["distance_m"] else None)
+
+    car_days = [r["d"] for r in conn.execute(
+        "SELECT DISTINCT date(start_ts,'unixepoch','localtime') d FROM activities "
+        "WHERE start_ts BETWEEN ? AND ? "
+        f"AND REPLACE(UPPER(type),' ','_') IN ({','.join('?' * len(trips.CAR_TYPES))}) "
+        "ORDER BY d", (lo, hi, *trips.CAR_TYPES))]
+    best_streak = streak = 0
+    prev = None
+    for d in car_days:
+        cur = date.fromisoformat(d)
+        streak = streak + 1 if prev and cur - prev == timedelta(days=1) else 1
+        best_streak = max(best_streak, streak)
+        prev = cur
+
+    return {"longest_day": longest_day, "longest_trip": longest_trip,
+            "longest_streak_days": best_streak}
+
+
 @app.get("/api/stats")
 def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
               min_stay_min: float = Query(2, ge=0, le=120)):
@@ -350,6 +457,8 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
             monthly, approx = _point_distances(conn, lo, hi)
             monthly_source = "points"
 
+        records = _compute_records(conn, lo, hi)
+
     total_km = (activities_total if activities_total else sum(monthly.values())) / 1000
     return {
         "points": n_points,
@@ -366,6 +475,7 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
         "top_places": [{"label": r["label"], "lat": r["lat"], "lon": r["lon"],
                         "count": r["n"], "hours": round((r["secs"] or 0) / 3600, 1)}
                        for r in top_places],
+        "records": records,
     }
 
 
@@ -873,11 +983,21 @@ def kniha():
     return FileResponse(os.path.join(STATIC_DIR, "kniha.html"))
 
 
+@app.get("/api/version")
+def api_version():
+    """Verze frontendu (otisk statických souborů) – zobrazuje se v Nástrojích."""
+    return {"version": APP_VERSION}
+
+
 @app.get("/sw.js")
 def service_worker():
-    # service worker musí být servírovaný z kořene, aby měl scope na celou aplikaci
-    return FileResponse(os.path.join(STATIC_DIR, "sw.js"),
-                        media_type="application/javascript")
+    # service worker musí být servírovaný z kořene, aby měl scope na celou
+    # aplikaci; verze cache se dosazuje při každém startu, takže nové vydání
+    # automaticky zahodí starou cache (no-cache nutí prohlížeč soubor ověřit)
+    with open(os.path.join(STATIC_DIR, "sw.js"), encoding="utf-8") as f:
+        body = f.read().replace("__VERSION__", APP_VERSION)
+    return Response(body, media_type="application/javascript",
+                    headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/manifest.webmanifest")

@@ -162,3 +162,38 @@ def test_city_mode_merges_local_trips(client, test_db, tmp_path):
     assert routes[0] == ("Brno", "Brno", 9.0)      # 3+2+4 km sloučeno
     assert routes[1] == ("Brno", "Praha", 205.0)
     assert routes[2] == ("Praha", "Praha", 11.0)   # 5+6 km sloučeno
+
+
+def test_single_delete_is_undoable(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=3)
+    gen(client)
+    trips = client.get("/api/trips", params=RANGE).json()["trips"]
+    tid = trips[0]["id"]
+    assert client.delete(f"/api/trips/{tid}").json()["deleted"] == tid
+    assert len(client.get("/api/trips", params=RANGE).json()["trips"]) == 2
+    info = client.get("/api/trips/undo").json()
+    assert info["available"] and info["op"] == "delete"
+    client.post("/api/trips/undo")
+    back = client.get("/api/trips", params=RANGE).json()["trips"]
+    assert len(back) == 3 and any(t["id"] == tid for t in back)
+
+
+def test_bulk_delete_one_step_undo(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=5)
+    gen(client)
+    ids = [t["id"] for t in client.get("/api/trips", params=RANGE).json()["trips"][:3]]
+    res = client.post("/api/trips/bulk_delete", json={"ids": ids}).json()
+    assert res["deleted"] == 3
+    assert len(client.get("/api/trips", params=RANGE).json()["trips"]) == 2
+    info = client.get("/api/trips/undo").json()
+    assert info["op"] == "bulk_delete" and info["affected"] == 3
+    client.post("/api/trips/undo")   # jeden krok vrátí všechny tři
+    assert len(client.get("/api/trips", params=RANGE).json()["trips"]) == 5
+
+
+def test_bulk_delete_empty_is_noop(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=2)
+    gen(client)
+    before = len(client.get("/api/trips", params=RANGE).json()["trips"])
+    assert client.post("/api/trips/bulk_delete", json={"ids": []}).json()["deleted"] == 0
+    assert len(client.get("/api/trips", params=RANGE).json()["trips"]) == before

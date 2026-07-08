@@ -82,6 +82,14 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   odstíny pro rozlišení a bubliny míst ukazují délku pobytu v období
 - **Kalendářový přehled roku** – mřížka všech dnů obarvená podle najetých km
   (šedě dny se záznamem bez jízdy); kliknutí na den ho rovnou přehraje
+- **Rekordy období** – nejvíc km za den, nejdelší jednotlivá cesta a nejdelší
+  série po sobě jdoucích dní s jízdou, přímo ve statistikách
+- **Porovnání dvou období na mapě** – druhé období se vykreslí oranžově přes
+  hlavní modré trasy (předvolba „stejné období loni") pro srovnání letos/loni
+- **Widget tachometru v knize jízd** – proužek najeto/zbývá nad tabulkou,
+  červený při překročení ročního nájezdu
+- **Obnova zálohy přímo v aplikaci** – výběr z denních záloh a obnovení jedním
+  klikem; současný stav se předtím sám zazálohuje, takže obnovu lze vzít zpět
 - **Mobilní ovládání** – na telefonu se kniha jízd zobrazuje jako karty,
   boční panel mapy jako vysouvací sheet, větší dotykové plochy
 - **PWA** – aplikaci lze nainstalovat na plochu telefonu/počítače; UI se
@@ -92,8 +100,11 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   WebGL vrstva, plynulé i pro statisíce bodů
 - **Přepínač vzhledu** (auto/tmavý/světlý), **klávesové zkratky**
   (◀ ▶ = listování dnů, mezerník = přehrát/zastavit), **vícekrokové undo**
-  v knize jízd (10 kroků zpět), plynulé načítání dlouhých tabulek
-- **Automatické testy** – pytest (36 testů: importér, API, kniha jízd)
+  v knize jízd (10 kroků zpět – vč. mazání jednotlivých i vybraných jízd),
+  plynulé načítání dlouhých tabulek
+- **Verzovaná PWA cache** – po aktualizaci serveru se mezipaměť sama
+  zneplatní, nové UI naběhne bez ručního mazání cache (verze v Nástrojích)
+- **Automatické testy** – pytest (44 testů: importér, API, kniha jízd)
   + Playwright e2e testy UI, obojí v GitHub Actions při každém push
 - **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen

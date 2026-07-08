@@ -48,6 +48,33 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
 
 #knihaMain { flex: 1; min-width: 0; }
 
+#odoWidget {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+#odoWidget .odoTop { display: flex; justify-content: space-between; align-items: baseline; }
+#odoWidget .odoTop b { font-variant-numeric: tabular-nums; }
+#odoWidget .odoTop b.over { color: var(--accent-red); }
+#odoWidget .odoBar {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--grid);
+  margin: 6px 0 4px;
+  overflow: hidden;
+}
+#odoWidget .odoFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--series-1);
+  transition: width 0.3s ease;
+}
+#odoWidget .odoFill.over { background: var(--accent-red); }
+#odoWidget .odoSub { font-size: 11px; }
+
 .warnBox {
   border: 1px solid var(--baseline);
   border-left: 3px solid #eda100;
