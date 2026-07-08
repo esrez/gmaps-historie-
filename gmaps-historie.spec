@@ -14,6 +14,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 datas = [("app/static", "app/static")]
 binaries = []
 hiddenimports = collect_submodules("uvicorn")
+hiddenimports += collect_submodules("app")
 
 # balíčky s datovými soubory / dynamickými importy – přibalit kompletně
 for pkg in ("uvicorn", "reportlab", "openpyxl", "ijson", "tzdata", "anyio"):

@@ -764,3 +764,16 @@ button .ic { margin-right: 1px; }
 }
 #emptyState button { pointer-events: auto; }
 #emptyState .ic { display: block; margin: 0 auto 8px; opacity: 0.6; }
+
+
+.newPlaces {
+  margin: 8px 0 4px;
+  padding: 8px;
+  border: 1px dashed var(--baseline);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.newPlaces h3 { margin-top: 0; }
+.newPlaces ul { margin: 4px 0 0; padding-left: 16px; }
+.newPlaces a { color: var(--series-1); text-decoration: none; }
+.newPlaces a:hover { text-decoration: underline; }

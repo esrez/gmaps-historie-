@@ -100,6 +100,16 @@
         <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
         <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
         <label class="check"><input type="checkbox" id="layerMyPlaces" checked> Moje místa (názvy)</label>
+        <label class="check" title="Zobrazit jen body z vybraného způsobu dopravy">
+          Doprava
+          <select id="transportFilter">
+            <option value="">Vše</option>
+            <option value="CAR">Auto</option>
+            <option value="WALK">Chůze</option>
+            <option value="BIKE">Kolo</option>
+            <option value="TRANSIT">MHD</option>
+          </select>
+        </label>
         <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
           <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
         <button id="drawPolyBtn" title="Klikáním do mapy obkreslíte areál (zákazník, sklad…) a pojmenujete ho – přesnější než kruh">
@@ -155,6 +165,7 @@
         </div>
         <div id="byType"></div>
         <div id="records"></div>
+        <div id="newPlacesBox" class="newPlaces" hidden></div>
         <h3>Nejnavštěvovanější místa</h3>
         <ol id="topPlaces"></ol>
       </section>
@@ -193,7 +204,9 @@
         <div class="row">
           <button id="exportXlsx"><span data-icon="download"></span> Excel (.xlsx)</button>
           <button id="exportGpx"><span data-icon="download"></span> GPX</button>
+          <button id="exportGeojson"><span data-icon="download"></span> GeoJSON</button>
         </div>
+        <label class="check"><input type="checkbox" id="exportAnonymize"> Anonymizovat GeoJSON (zaokrouhlit souřadnice)</label>
         <p class="muted">Exportuje zvolené období: návštěvy, cesty, statistiky
            a GPS body do listů Excelu; GPX pro jiné mapové aplikace.</p>
       </section>
@@ -240,6 +253,17 @@
         <p class="muted">Tip: soubory nakopírované do <code>data/import/</code>
            se importují samy (do minuty).</p>
         <div id="dbInfo" class="muted"></div>
+      </section>
+
+      <section>
+        <h2>Profily a synchronizace</h2>
+        <div class="row">
+          <select id="profileSelect" title="Profil (oddělená databáze)"><option value="">— profil —</option></select>
+          <button id="profileCreateBtn">Nový profil</button>
+          <button id="profileSwitchBtn">Přepnout</button>
+        </div>
+        <p class="muted">OwnTracks: nastavte HTTP webhook na
+          <code>POST /api/sync/owntracks</code> (JSON s lat/lon/tst).</p>
       </section>
 
       <section>

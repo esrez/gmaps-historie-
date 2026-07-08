@@ -328,6 +328,8 @@ def import_path(path: str, conn=None, counters: Counters | None = None) -> Count
             print(f"  {os.path.basename(path)}: {fmt}")
     finally:
         if own_conn:
+            from . import db as _db
+            _db.after_import(conn)
             conn.close()
     return c
 

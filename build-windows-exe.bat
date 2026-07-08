@@ -18,7 +18,13 @@ python -m pip install -r requirements.txt pyinstaller || (echo Instalace selhala
 echo Sestavuji GMapsHistorie.exe ...
 pyinstaller --clean --noconfirm gmaps-historie.spec || (echo Build selhal. & pause & exit /b 1)
 
+echo Vytvarim update balik...
+python scripts\make_update_package.py || (echo Update balik selhal. & pause & exit /b 1)
+
 echo.
-echo Hotovo. Spustitelny soubor najdete zde:  dist\GMapsHistorie.exe
+echo Hotovo:
+echo   dist\GMapsHistorie.exe
+echo   dist\GMapsHistorie-update.zip
+echo   data\update\GMapsHistorie-update.zip
 echo (Prvni spusteni chvili trva - rozbaluje se do docasne slozky.)
 pause

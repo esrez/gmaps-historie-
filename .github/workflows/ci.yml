@@ -25,12 +25,18 @@ jobs:
 
       - name: Syntax-check frontend (ES modules)
         run: |
-          for f in app/static/common.js app/static/app.js app/static/kniha.js; do
+          for f in app/static/common.js app/static/app.js app/static/kniha.js \
+                  app/static/map-filters.js app/static/sync-events.js; do
             node --input-type=module --check < "$f" && echo "$f ok"
           done
 
       - name: Run tests
         run: pytest -q
+        env:
+          TZ: Europe/Prague
+
+      - name: Smoke test
+        run: python scripts/smoke_test.py
         env:
           TZ: Europe/Prague
 

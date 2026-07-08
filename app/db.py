@@ -1,9 +1,13 @@
 """SQLite úložiště pro historii polohy."""
+from __future__ import annotations
+
 import os
 import sqlite3
 import threading
 
-DB_PATH = os.environ.get("DB_PATH", os.path.join("data", "history.db"))
+_DATA_ROOT = os.environ.get("DATA_DIR", "data")
+_PROFILE = os.environ.get("PROFILE", "default")
+DB_PATH = os.environ.get("DB_PATH", os.path.join(_DATA_ROOT, "history.db"))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS points (
@@ -17,6 +21,10 @@ CREATE TABLE IF NOT EXISTS points (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_points_unique ON points(ts, lat, lon);
 CREATE INDEX IF NOT EXISTS idx_points_ts ON points(ts);
 CREATE INDEX IF NOT EXISTS idx_points_lat ON points(lat);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS points_rtree USING rtree(
+    id, min_lat, max_lat, min_lon, max_lon
+);
 
 CREATE TABLE IF NOT EXISTS visits (
     id       INTEGER PRIMARY KEY,
@@ -92,14 +100,76 @@ CREATE TABLE IF NOT EXISTS undo_log (
     op      TEXT NOT NULL,
     data    TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS import_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agg_monthly_km (
+    month  TEXT PRIMARY KEY,
+    km     REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'activities'
+);
+
+CREATE TABLE IF NOT EXISTS agg_daily_km (
+    date   TEXT PRIMARY KEY,
+    km     REAL NOT NULL DEFAULT 0,
+    points INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS profiles (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    created_ts INTEGER NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0
+);
 """
 
 _schema_lock = threading.Lock()
 _schema_done = False
+_profile_lock = threading.Lock()
+_active_profile = _PROFILE
+
+
+def profile_root() -> str:
+    return os.path.join(_DATA_ROOT, "profiles")
+
+
+def list_profiles() -> list[dict]:
+    root = profile_root()
+    os.makedirs(root, exist_ok=True)
+    out = []
+    for name in sorted(os.listdir(root)):
+        path = os.path.join(root, name)
+        if os.path.isdir(path) and os.path.exists(os.path.join(path, "history.db")):
+            st = os.stat(os.path.join(path, "history.db"))
+            out.append({"name": name, "size": st.st_size,
+                          "db_path": os.path.join(path, "history.db")})
+    if not out and os.path.exists(os.path.join(_DATA_ROOT, "history.db")):
+        out.append({"name": "default", "size": os.path.getsize(
+            os.path.join(_DATA_ROOT, "history.db")),
+            "db_path": os.path.join(_DATA_ROOT, "history.db"), "legacy": True})
+    return out
+
+
+def set_profile(name: str) -> str:
+    global DB_PATH, _active_profile, _schema_done
+    with _profile_lock:
+        safe = "".join(c for c in name if c.isalnum() or c in "-_").strip() or "default"
+        path = os.path.join(profile_root(), safe, "history.db")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        DB_PATH = path
+        _active_profile = safe
+        _schema_done = False
+        return safe
+
+
+def active_profile() -> str:
+    return _active_profile
 
 
 def _migrate(conn: sqlite3.Connection):
-    """Migrace databází založených staršími verzemi schématu."""
     cols = {r[1] for r in conn.execute("PRAGMA table_info(trips)")}
     if cols and "excluded" not in cols:
         conn.execute("ALTER TABLE trips ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0")
@@ -108,7 +178,6 @@ def _migrate(conn: sqlite3.Connection):
     if cols and "polygon" not in cols:
         conn.execute("ALTER TABLE place_names ADD COLUMN polygon TEXT")
 
-    # tachometr: dříve jen (year, km), nyní per vozidlo (year, plate, km)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(odometer)")}
     if cols and "plate" not in cols:
         conn.executescript("""
@@ -125,6 +194,21 @@ def _migrate(conn: sqlite3.Connection):
         """)
 
 
+def _sync_rtree(conn: sqlite3.Connection):
+    """Doplní R-tree index pro body, které v něm ještě nejsou."""
+    has = conn.execute(
+        "SELECT COUNT(*) c FROM sqlite_master WHERE type='table' AND name='points_rtree'"
+    ).fetchone()["c"]
+    if not has:
+        return
+    conn.execute("""
+        INSERT INTO points_rtree(id, min_lat, max_lat, min_lon, max_lon)
+        SELECT p.id, p.lat, p.lat, p.lon, p.lon FROM points p
+        WHERE p.id NOT IN (SELECT id FROM points_rtree)
+        LIMIT 500000
+    """)
+
+
 def _ensure_schema(conn: sqlite3.Connection):
     global _schema_done
     if _schema_done:
@@ -134,6 +218,7 @@ def _ensure_schema(conn: sqlite3.Connection):
             return
         _migrate(conn)
         conn.executescript(SCHEMA)
+        _sync_rtree(conn)
         conn.commit()
         _schema_done = True
 
@@ -146,7 +231,21 @@ def connect() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
-    # při souběhu s importem na pozadí chvíli počkat místo "database is locked"
     conn.execute("PRAGMA busy_timeout=5000")
     _ensure_schema(conn)
     return conn
+
+
+def after_import(conn: sqlite3.Connection | None = None):
+    """Po importu: R-tree sync + agregace."""
+    own = conn is None
+    if own:
+        conn = connect()
+    try:
+        _sync_rtree(conn)
+        conn.commit()
+        from .services.aggregations import refresh_aggregations
+        refresh_aggregations(conn)
+    finally:
+        if own:
+            conn.close()

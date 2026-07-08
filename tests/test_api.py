@@ -318,3 +318,27 @@ def test_restore_rejects_path_traversal(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     assert client.post("/api/restore", params={"name": "../../etc/passwd"}).status_code == 400
     assert client.post("/api/restore", params={"name": "history-nope.db"}).status_code == 404
+
+
+def test_update_metadata(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    meta = client.get("/api/update").json()
+    assert meta["current"]
+    assert meta["package_url"] == "/api/update/package"
+    assert client.get("/api/update/package").status_code == 404
+
+
+def test_update_package_served(client, test_db, tmp_path, monkeypatch):
+    seed(test_db, tmp_path)
+    import zipfile
+
+    from app.core import config
+    pkg_dir = tmp_path / "update"
+    pkg_dir.mkdir()
+    pkg = pkg_dir / "GMapsHistorie-update.zip"
+    with zipfile.ZipFile(pkg, "w") as zf:
+        zf.writestr("version.json", '{"release":"9.9.9"}')
+    monkeypatch.setattr(config, "data_dir", lambda: str(tmp_path))
+    r = client.get("/api/update/package")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"

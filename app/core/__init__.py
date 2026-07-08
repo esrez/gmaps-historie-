@@ -1,0 +1,1 @@
+"""Sdílená jádrová infrastruktura aplikace."""

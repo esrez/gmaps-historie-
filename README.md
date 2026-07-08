@@ -115,8 +115,8 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   plynulé načítání dlouhých tabulek
 - **Verzovaná PWA cache** – po aktualizaci serveru se mezipaměť sama
   zneplatní, nové UI naběhne bez ručního mazání cache (verze v Nástrojích)
-- **Automatické testy** – pytest (46 testů: importér, API, kniha jízd)
-  + Playwright e2e testy UI, obojí v GitHub Actions při každém push
+- **Automatické testy** – pytest (50 testů: importér, API, kniha jízd, update)
+  + smoke test (`scripts/smoke_test.py`) a Playwright e2e testy UI v GitHub Actions
 - **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen
     pracovní dny a pracovní doba (např. po–pá 6–18 h), s minimální délkou jízdy
@@ -237,10 +237,17 @@ závislosti a jen soubor spustí.
 
 Na Windows spusťte **`build-windows-exe.bat`** (nebo ručně
 `pip install pyinstaller` a `pyinstaller gmaps-historie.spec`). Výsledek je
-`dist\GMapsHistorie.exe`. Ten stačí zkopírovat kamkoli a spustit – nastartuje
+`dist\GMapsHistorie.exe` a automaticky i `dist\GMapsHistorie-update.zip`.
+Ten stačí zkopírovat kamkoli a spustit – nastartuje
 server, otevře prohlížeč a **data ukládá do složky `data\` vedle sebe**.
 Do balíčku je zahrnutý Python, všechny knihovny i webové rozhraní; PDF export
 s českou diakritikou i časová pásma fungují bez doinstalování.
+
+**Instalační program:** `build-windows-installer.bat` (vyžaduje [Inno Setup 6](https://jrsoftware.org/isinfo.php))
+vytvoří `dist\GMapsHistorie-Setup.exe`. Podrobnosti v
+[docs/WINDOWS_INSTALLER.md](docs/WINDOWS_INSTALLER.md).
+
+**Kontrola po buildu:** `python scripts\smoke_test.py --package dist\GMapsHistorie-update.zip`
 
 Pozn.: `.exe` sestavíte na Windows, na Linuxu/macOS vznikne obdobná binárka
 pro daný systém (PyInstaller nekřížově-nekompiluje). Antivirus někdy hlásí
@@ -265,12 +272,12 @@ Pokud ji vystavujete do internetu, přidejte navíc reverse proxy s HTTPS
 
 | Vrstva | Technologie |
 |---|---|
-| Backend | Python 3.11+ (type hints, zoneinfo), FastAPI + Pydantic v2, SQLite (WAL) |
-| Import | autodetekce formátu, streamované čtení přes `ijson`, běh na pozadí |
-| Frontend | ES moduly (vanilla JS, bez build kroku), Leaflet s canvas renderingem, leaflet.heat, markercluster |
+| Backend | Python 3.11+, FastAPI (routery v `app/routers/`, služby v `app/services/`), SQLite WAL |
+| Import | autodetekce formátu, streamované čtení přes `ijson`, běh na pozadí, SSE notifikace |
+| Frontend | ES moduly (`app.js`, `map-filters.js`, `sync-events.js`), Leaflet, PWA |
 | Zobrazování | data podle výřezu mapy s rušením rozpracovaných dotazů (AbortController), gzip API |
-| Kvalita | pytest (25 testů) + ruff lint v GitHub Actions |
-| Nasazení | Docker / docker-compose, healthcheck, denní zálohy |
+| Kvalita | pytest (50 testů) + ruff + smoke test v GitHub Actions |
+| Nasazení | Docker / docker-compose, PyInstaller `.exe`, Inno Setup installer, in-place updater |
 
 ## Vývoj
 
@@ -278,5 +285,6 @@ Pokud ji vystavujete do internetu, přidejte navíc reverse proxy s HTTPS
 pip install -r requirements.txt pytest httpx ruff
 ruff check app/ tests/   # lint
 pytest -q                # testy
+python scripts/smoke_test.py
 uvicorn app.main:app --reload
 ```

@@ -5,6 +5,8 @@ import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
 import { icon, mountIcons } from "./icons.js";
 import { typeLabel, tile, trend, sparkline, renderRecords,
          renderMonthlyChart, renderAnalysis } from "./charts.js";
+import { initEventStream } from "./sync-events.js";
+import { transportParam, renderNewPlaces } from "./map-filters.js";
 
 initThemeToggle($("themeBtn"));
 mountIcons();
@@ -189,7 +191,7 @@ async function loadMapData() {
   mapAbort?.abort();   // rozpracovaný starší dotaz rovnou zrušit (šetří server)
   const ctrl = new AbortController();
   mapAbort = ctrl;
-  const r = { ...currentRange(), ...viewportParams() };
+  const r = { ...currentRange(), ...viewportParams(), ...transportParam() };
   $("mapLoading").hidden = false;
   try {
     const [pts, heat] = await Promise.all([
@@ -250,6 +252,7 @@ async function loadAll() {
     $("loadBtn").disabled = false;
   }
 }
+window.loadAll = loadAll;
 
 map.on("moveend", debounce(() => {
   writeHash();
@@ -263,6 +266,7 @@ function writeHash() {
   const parts = [];
   if ($("dateFrom").value) parts.push("od=" + $("dateFrom").value);
   if ($("dateTo").value) parts.push("do=" + $("dateTo").value);
+  if ($("playDate").value) parts.push("play=" + $("playDate").value);
   parts.push(`ll=${c.lat.toFixed(5)},${c.lng.toFixed(5)}`, `z=${map.getZoom()}`);
   history.replaceState(null, "", "#" + parts.join("&"));
 }
@@ -271,6 +275,7 @@ function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   if (h.get("od")) $("dateFrom").value = h.get("od");
   if (h.get("do")) $("dateTo").value = h.get("do");
+  if (h.get("play")) $("playDate").value = h.get("play");
   const ll = (h.get("ll") || "").split(",").map(Number);
   if (ll.length === 2 && !ll.some(isNaN)) {
     map.setView(ll, Number(h.get("z")) || 12);
@@ -953,6 +958,7 @@ function renderStats(s, prev) {
     .join("");
 
   renderRecords(s.records);
+  renderNewPlaces(s.new_places);
 
   $("topPlaces").innerHTML = s.top_places
     .map((p, i) =>
@@ -1231,6 +1237,14 @@ $("exportXlsx").addEventListener("click", () => {
 $("exportGpx").addEventListener("click", () => {
   location.href = buildUrl("/api/export.gpx", currentRange());
 });
+$("exportGeojson")?.addEventListener("click", () => {
+  const anon = $("exportAnonymize")?.checked;
+  location.href = buildUrl("/api/export.geojson", { ...currentRange(), anonymize: anon ? 1 : 0 });
+});
+
+$("transportFilter")?.addEventListener("change", () => {
+  if (state.loadedOnce) loadMapData();
+});
 
 // -------------------------------------------------------- přehrávání dne
 
@@ -1266,6 +1280,17 @@ function shiftDay(delta) {
 }
 $("dayPrev").addEventListener("click", () => shiftDay(-1));
 $("dayNext").addEventListener("click", () => shiftDay(1));
+
+// mobilní swipe pro listování dny
+(function touchDaySwipe() {
+  const bar = $("playbackBar");
+  let sx = 0;
+  bar.addEventListener("touchstart", (e) => { sx = e.changedTouches[0].clientX; }, { passive: true });
+  bar.addEventListener("touchend", (e) => {
+    const dx = e.changedTouches[0].clientX - sx;
+    if (Math.abs(dx) > 60) shiftDay(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 
 // stopa dne je obarvená rychlostí – sekvenční modrá řada (světlá = pomalu)
 const SPEED_STEPS = [
@@ -1617,7 +1642,8 @@ async function showAutoImportLog() {
 // ------------------------------------------------------------------ start
 
 (async function init() {
-  readHash();   // obnovit pohled a období z adresy (záložky, sdílení, reload)
+  readHash();
+  initEventStream();
   $("playDate").value = toDateStr(new Date());
   try {
     const r = await api("/api/range");
@@ -1637,16 +1663,53 @@ async function showAutoImportLog() {
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   showVersion();
+  loadProfiles();
   loadBackups();
   loadPlaceSuggest();
   showAutoImportLog();
   renderCalendar();
   loadAll();
+  if (new URLSearchParams(location.hash.slice(1)).get("play")) playDay();
 })();
+
+async function loadProfiles() {
+  try {
+    const r = await api("/api/profiles");
+    const sel = $("profileSelect");
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— profil —</option>' +
+      (r.profiles || []).map((p) => `<option value="${p.name}">${p.name}</option>`).join("");
+    if (r.active) sel.value = r.active;
+  } catch (_) { /* nepodporováno */ }
+}
+
+$("profileCreateBtn")?.addEventListener("click", async () => {
+  const name = prompt("Název nového profilu:");
+  if (!name || !name.trim()) return;
+  try {
+    await apiFetch("/api/profiles", { method: "POST", body: { name: name.trim() } });
+    await loadProfiles();
+    toast("Profil vytvořen.", "success");
+  } catch (e) {
+    toast("Vytvoření profilu selhalo: " + e.message, "error");
+  }
+});
+
+$("profileSwitchBtn")?.addEventListener("click", async () => {
+  const sel = $("profileSelect");
+  if (!sel || !sel.value) { toast("Vyberte profil.", "error"); return; }
+  try {
+    await apiFetch("/api/profiles/switch", { method: "POST", body: { name: sel.value } });
+    toast(`Přepnuto na profil ${sel.value}.`, "success");
+    location.reload();
+  } catch (e) {
+    toast("Přepnutí profilu selhalo: " + e.message, "error");
+  }
+});
 
 async function showVersion() {
   try {
-    const { version } = await api("/api/version");
-    $("appVersion").textContent = `GMaps Historie · verze ${version}`;
+    const { version, release } = await api("/api/version");
+    $("appVersion").textContent = `Verze UI: ${version} · vydání ${release || "?"}`;
   } catch (e) { /* nedostupné */ }
 }
