@@ -12,8 +12,8 @@
 </head>
 <body class="kniha">
 <header id="knihaHeader">
-  <h1>🚗 Kniha jízd</h1>
-  <a href="/" class="navlink">← Mapa a statistiky</a>
+  <h1><span data-icon="car" data-size="17"></span> Kniha jízd</h1>
+  <a href="/" class="navlink"><span data-icon="map"></span> Mapa a statistiky</a>
   <button id="themeBtn" class="mini" type="button"></button>
 </header>
 
@@ -54,7 +54,7 @@
         <input type="checkbox" id="setCityMode" checked> Zapisovat po městech (Brno, Praha…)</label>
       <label class="check"><input type="checkbox" id="setRoundUp" checked> Zaokrouhlovat km nahoru</label>
       <label class="check"><input type="checkbox" id="setAutoFill" checked> Po zadání km doplnit stejnou trasu</label>
-      <button id="generateBtn" class="primary">⚙ Generovat jízdy</button>
+      <button id="generateBtn" class="primary"><span data-icon="wand"></span> Generovat jízdy</button>
       <p class="muted">Vytvoří jízdy z rozpoznaných cest autem ve zvoleném období.
          Už vytvořené jízdy se nepřepíšou – ruční úpravy zůstanou zachované.</p>
       <div id="genStatus" class="muted"></div>
@@ -71,8 +71,8 @@
         <input type="text" id="ruleDest" list="dlPlaces" placeholder="Kam">
         <input type="number" id="ruleKm" placeholder="km" min="0" step="1">
       </div>
-      <button id="ruleAddBtn">＋ Přidat pravidlo</button>
-      <button id="applyRulesBtn">⟳ Použít pravidla na období</button>
+      <button id="ruleAddBtn"><span data-icon="plus"></span> Přidat pravidlo</button>
+      <button id="applyRulesBtn"><span data-icon="refresh"></span> Použít pravidla na období</button>
     </details>
 
     <details class="sec">
@@ -81,17 +81,17 @@
         <label>Rok <input type="number" id="odoYear" min="2000" max="2100"></label>
         <label>Najeto za rok (km) <input type="number" id="odoKm" min="0" step="1"></label>
       </div>
-      <button id="odoSaveBtn">Uložit stav tachometru</button>
+      <button id="odoSaveBtn"><span data-icon="save"></span> Uložit stav tachometru</button>
       <div id="odoInfo" class="muted"></div>
     </details>
 
     <details class="sec" open>
       <summary>Akce</summary>
-      <button id="addBtn">＋ Přidat jízdu ručně</button>
+      <button id="addBtn"><span data-icon="plus"></span> Přidat jízdu ručně</button>
       <button id="undoBtn" hidden>↩ Vrátit poslední hromadnou akci</button>
-      <button id="exportBtn">📊 Export XLSX pro SPZ</button>
-      <button id="exportPdfBtn">📄 Export PDF (pro tisk)</button>
-      <button id="clearBtn" class="danger">🗑 Smazat jízdy v období</button>
+      <button id="exportBtn"><span data-icon="download"></span> Export XLSX pro SPZ</button>
+      <button id="exportPdfBtn"><span data-icon="file"></span> Export PDF (pro tisk)</button>
+      <button id="clearBtn" class="danger"><span data-icon="trash"></span> Smazat jízdy v období</button>
       <p class="muted">Export je xlsx pro univerzální import knihy jízd v programu
          SPZ (Milk Computers): SPZ, Datum, Odjezd, Příjezd, Odkud, Kam, Účel, Km,
          Řidič. Vozidlo s touto SPZ musí být v programu SPZ založené.</p>
@@ -102,6 +102,7 @@
     <div id="knihaAlerts"></div>
     <div class="row" id="viewBar">
       <div id="tripsSummary" class="muted"></div>
+      <button id="bulkDelBtn" class="danger" hidden></button>
       <label class="check" style="margin-left:auto">
         <input type="checkbox" id="setGroupDays" checked> Zobrazovat po dnech</label>
     </div>
@@ -109,6 +110,7 @@
       <table id="tripsTable">
         <thead>
           <tr>
+            <th class="selCell"><input type="checkbox" id="selAll" title="Vybrat vše"></th>
             <th>Datum</th><th>Odjezd</th><th>Příjezd</th><th>Odkud</th><th>Kam</th>
             <th class="num">Km</th><th>Účel</th>
             <th title="Soukromá jízda firemním autem – v knize zůstává">Soukr.</th>
@@ -118,7 +120,7 @@
         </thead>
         <tbody id="tripsBody"></tbody>
         <tfoot>
-          <tr><td colspan="5" class="right"><b>Celkem</b></td>
+          <tr><td colspan="6" class="right"><b>Celkem</b></td>
               <td class="num"><b id="totalKm">0</b></td><td colspan="4"></td></tr>
         </tfoot>
       </table>

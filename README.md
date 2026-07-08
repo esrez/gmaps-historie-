@@ -43,9 +43,13 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   a smaže až po potvrzení
 - **Upozornění v knize jízd** – dny s jízdou autem, které v knize chybí
   (s tlačítkem Doplnit nyní), neúplné jízdy a překročený roční tachometr
-- **Intuitivní ovládání** – sbalovací sekce, nenápadná oznámení místo
-  vyskakovacích oken, obrácené období se samo prohodí, potvrzení uložení
-  přímo v řádku tabulky, navádění k importu při prázdné databázi
+- **Moderní rozhraní** – mapa přes celou obrazovku, plovoucí panel se
+  záložkami (Mapa / Statistiky / Analýza / Nástroje), plovoucí lišta
+  přehrávání, legenda vrstev, jednotné SVG ikony, dlaždice statistik
+  s trendem oproti minulému období a mini-grafem, prázdné stavy s navigací
+- **Intuitivní ovládání** – nenápadná oznámení místo vyskakovacích oken,
+  obrácené období se samo prohodí, potvrzení uložení přímo v řádku tabulky,
+  navádění k importu při prázdné databázi
 - **Zálohování** – automatická denní záloha databáze do `data/backups/`
   (rotace 14 dní) + tlačítko pro okamžité stažení zálohy
 - **Volitelné heslo** – nastavením `AUTH_PASSWORD` v docker-compose se celá
@@ -68,8 +72,10 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   jízd a jdou kdykoli upravit (Home/Work se překládá na Domov/Práce);
   velké objekty lze obkreslit **polygonem** a vrstva „Moje místa" je ukazuje
 - **Kniha jízd po dnech** – řádek dne se součtem km a trasou, rozbalení na
-  editovatelné jízdy; pole s **našeptávačem** míst a účelů; km bez údaje od
-  Googlu se dopočítají ze skutečné GPS stopy, takže kniha souhlasí s mapou
+  editovatelné jízdy; mezisoučty měsíců, přilepená hlavička i celkový součet,
+  hromadný výběr a mazání jízd či celých dnů; pole s **našeptávačem** míst
+  a účelů; km bez údaje od Googlu se dopočítají ze skutečné GPS stopy,
+  takže kniha souhlasí s mapou
 - **Zápis po městech** – místní jízdy v rámci města se sloučí do řádku
   „Brno" se sečtenými km, mezi městy „Brno → Praha" (vestavěný offline
   číselník českých měst); na mapě mají cesty směrové šipky, střídavé
@@ -87,7 +93,7 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 - **Přepínač vzhledu** (auto/tmavý/světlý), **klávesové zkratky**
   (◀ ▶ = listování dnů, mezerník = přehrát/zastavit), **vícekrokové undo**
   v knize jízd (10 kroků zpět), plynulé načítání dlouhých tabulek
-- **Automatické testy** – pytest (27 testů: importér, API, kniha jízd)
+- **Automatické testy** – pytest (36 testů: importér, API, kniha jízd)
   + Playwright e2e testy UI, obojí v GitHub Actions při každém push
 - **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen

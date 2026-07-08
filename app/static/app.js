@@ -2,8 +2,29 @@
 import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
          buildUrl, apiFetch, escapeHtml, toast,
          isDarkTheme, initThemeToggle } from "./common.js";
+import { icon, mountIcons } from "./icons.js";
 
 initThemeToggle($("themeBtn"));
+mountIcons();
+
+// ------------------------------------------------------------- záložky
+
+document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#tabs .tab-btn").forEach((b) =>
+      b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".tab-page").forEach((p) =>
+      p.classList.toggle("active", p.dataset.page === btn.dataset.tab));
+  }));
+
+$("panelCollapse").addEventListener("click", () => {
+  const collapsed = $("panel").classList.toggle("collapsed");
+  $("panelCollapse").textContent = collapsed ? "▸" : "▾";
+});
+
+$("timelineToggle").addEventListener("click", () => {
+  $("timelinePop").hidden = !$("timelinePop").hidden;
+});
 
 const tooltip = $("tooltip");
 
@@ -156,16 +177,24 @@ async function loadAll() {
   const r = currentRange();
   $("loadBtn").disabled = true;
   try {
-    const [, visits, stats, analysis] = await Promise.all([
+    if (!$("statTiles").childElementCount) {
+      $("statTiles").innerHTML = '<div class="tile skeleton"></div>'.repeat(4);
+    }
+    const prevRange = (r.from_ts !== null && r.to_ts !== null)
+      ? { from_ts: 2 * r.from_ts - r.to_ts, to_ts: r.from_ts - 1 }
+      : null;
+    const [pts, visits, stats, analysis, prevStats] = await Promise.all([
       loadMapData(),
       api("/api/visits", r),
       api("/api/stats", r),
       api("/api/analysis", r),
+      prevRange ? api("/api/stats", prevRange).catch(() => null) : null,
     ]);
     state.visits = visits.visits;
     renderVisits();
     renderMyPlaces();
-    renderStats(stats);
+    renderStats(stats, prevStats);
+    renderEmptyState(pts);
     renderAnalysis(analysis);
     state.loadedOnce = true;
     if (!state.fitted) fitToData();
@@ -346,7 +375,7 @@ function drawCleanup() {
   locLayer.clearLayers();
   map.getContainer().style.cursor = "";
   map.doubleClickZoom.enable();
-  $("drawPolyBtn").textContent = "⬠ Pojmenovat oblast (polygon)";
+  $("drawPolyBtn").innerHTML = `${icon("polygon")} Pojmenovat oblast (polygon)`;
 }
 
 $("drawPolyBtn").addEventListener("click", () => {
@@ -354,7 +383,7 @@ $("drawPolyBtn").addEventListener("click", () => {
   drawState.active = true;
   map.doubleClickZoom.disable();
   map.getContainer().style.cursor = "crosshair";
-  $("drawPolyBtn").textContent = "✔ Dokončit oblast";
+  $("drawPolyBtn").innerHTML = `${icon("check")} Dokončit oblast`;
   toast("Klikáním do mapy obkreslete oblast (min. 3 body), pak Dokončit. Esc zruší.");
 });
 
@@ -471,7 +500,7 @@ function renderVisits() {
       `<b>${escapeHtml(label)}</b><br>` +
       (v.address ? escapeHtml(v.address) + "<br>" : "") +
       `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>${hours} h<br>` +
-      `<a href="#" class="renameLink">✏️ Pojmenovat místo</a>`
+      `<a href="#" class="renameLink">${icon("pencil", 11)} Pojmenovat místo</a>`
     ).addTo(visitLayer);
     m.on("popupopen", (ev) => {
       ev.popup.getElement().querySelector(".renameLink")
@@ -508,16 +537,47 @@ const TYPE_LABELS = {
 const typeLabel = (t) => TYPE_LABELS[t.replaceAll(" ", "_")]
   || t.replaceAll("_", " ").toLowerCase();
 
-function tile(value, label) {
-  return `<div class="tile"><div class="value">${value}</div><div class="label">${label}</div></div>`;
+function tile(value, label, extra = "") {
+  return `<div class="tile"><div class="value">${value}${extra}</div><div class="label">${label}</div></div>`;
 }
 
-function renderStats(s, pts) {
+/* Šipka ↑/↓ s procenty oproti předchozímu stejně dlouhému období. */
+function trend(cur, prev) {
+  if (prev == null || !(prev > 0)) return "";
+  const pct = Math.round(((cur - prev) / prev) * 100);
+  if (!Number.isFinite(pct) || pct === 0) return "";
+  const up = pct > 0;
+  return `<span class="trend ${up ? "up" : "down"}" ` +
+    `title="oproti předchozímu stejně dlouhému období">${up ? "↑" : "↓"}${Math.abs(pct)} %</span>`;
+}
+
+/* Miniaturní křivka km po měsících v rohu dlaždice. */
+function sparkline(monthly) {
+  const vals = (monthly || []).map((m) => m.km);
+  if (vals.length < 3) return "";
+  const max = Math.max(...vals);
+  if (!(max > 0)) return "";
+  const W = 58, H = 16;
+  const step = W / (vals.length - 1);
+  const pts = vals
+    .map((v, i) => `${(i * step).toFixed(1)},${(H - 1.5 - (H - 3) * (v / max)).toFixed(1)}`)
+    .join(" ");
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">` +
+    `<polyline points="${pts}" fill="none" stroke="var(--series-1)" stroke-width="1.5" ` +
+    `stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function renderStats(s, prev) {
+  const p = prev || {};
   $("statTiles").innerHTML =
-    tile(s.total_km.toLocaleString("cs"), "km celkem") +
-    tile(s.days_with_data.toLocaleString("cs"), "dní se záznamem") +
-    tile(s.visits.toLocaleString("cs"), "návštěv míst") +
-    tile(s.visit_hours.toLocaleString("cs"), "hodin na místech");
+    tile(s.total_km.toLocaleString("cs"), "km celkem",
+      trend(s.total_km, p.total_km) + sparkline(s.monthly_km)) +
+    tile(s.days_with_data.toLocaleString("cs"), "dní se záznamem",
+      trend(s.days_with_data, p.days_with_data)) +
+    tile(s.visits.toLocaleString("cs"), "návštěv míst",
+      trend(s.visits, p.visits)) +
+    tile(s.visit_hours.toLocaleString("cs"), "hodin na místech",
+      trend(s.visit_hours, p.visit_hours));
 
   renderMonthlyChart(s.monthly_km);
   $("monthlyNote").textContent =
@@ -533,18 +593,40 @@ function renderStats(s, pts) {
   $("topPlaces").innerHTML = s.top_places
     .map((p, i) =>
       `<li><a data-i="${i}">${escapeHtml(p.label)}</a> — ${p.count}×, ${p.hours.toLocaleString("cs")} h ` +
-      `<button class="renameBtn" data-i="${i}" title="Pojmenovat místo (zákazník, adresa…)">✏️</button></li>`)
+      `<button class="renameBtn" data-i="${i}" title="Pojmenovat místo (zákazník, adresa…)">${icon("pencil", 12)}</button></li>`)
     .join("");
   $("topPlaces").querySelectorAll("a").forEach((a) =>
     a.addEventListener("click", () => {
       const p = s.top_places[Number(a.dataset.i)];
-      map.setView([p.lat, p.lon], 15);
+      map.flyTo([p.lat, p.lon], 15, { duration: 0.8 });
     }));
   $("topPlaces").querySelectorAll(".renameBtn").forEach((b) =>
     b.addEventListener("click", () => {
       const p = s.top_places[Number(b.dataset.i)];
       renamePlace(p.lat, p.lon, p.label);
     }));
+}
+
+/* Kartička nad mapou, když zvolené období nemá žádná data. */
+function renderEmptyState(pts) {
+  if (!pts) return;   // dotaz zrušen novějším – stav neměnit
+  let el = document.getElementById("emptyState");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "emptyState";
+    el.className = "floating";
+    el.innerHTML =
+      `${icon("pin", 30)}<h3>Ve zvoleném období nejsou žádná data</h3>` +
+      '<p class="muted">Zkuste jiné datum, nebo naimportujte export v záložce Nástroje.</p>' +
+      '<button class="primary" id="emptyAllBtn">Zobrazit vše</button>';
+    document.getElementById("app").appendChild(el);
+    el.querySelector("#emptyAllBtn").addEventListener("click", () => {
+      $("dateFrom").value = "";
+      $("dateTo").value = "";
+      loadAll();
+    });
+  }
+  el.hidden = pts.total !== 0;
 }
 
 /* Pojmenování místa – název (zákazník, adresa…) se použije všude
@@ -766,7 +848,7 @@ async function doSearch() {
         ? mine.results[Number(a.dataset.i)]
         : world[Number(a.dataset.i)];
       const lat = Number(r.lat), lon = Number(r.lon);
-      map.setView([lat, lon], 15);
+      map.flyTo([lat, lon], 15, { duration: 0.8 });
       whenIWasHere(lat, lon, a.dataset.kind === "mine" ? r.label : r.display_name);
     }));
 }
@@ -879,7 +961,6 @@ async function playDay() {
   stopPlayback();
   const dateVal = $("playDate").value;
   if (!dateVal) { toast("Vyberte den k přehrání.", "error"); return; }
-  $("playDate").closest("details").open = true;
   const from_ts = dateToTs(dateVal, false);
   const day = await api("/api/day", { from_ts, to_ts: from_ts + 86400 });
   if (day.points.length < 2) {
@@ -956,7 +1037,8 @@ function startPlayback(day) {
     " · barva stopy = rychlost (světlá pomalu, tmavá rychle)";
   renderDayTimeline(day);
 
-  $("playBtn").textContent = "⏸ Zastavit";
+  $("playBtn").innerHTML = icon("pause");
+  $("playBtn").dataset.state = "playing";
   let last = performance.now();
   play.timer = requestAnimationFrame(function frame(now) {
     const speed = Number($("playSpeed").value);
@@ -979,18 +1061,18 @@ function renderDayTimeline(day) {
   $("dayTimeline").innerHTML = events.map((ev, i) => {
     if (ev.kind === "visit") {
       const hrs = ((ev.end_ts - ev.start_ts) / 3600).toFixed(1);
-      return `<li>📍 ${hm(ev.start_ts)}–${hm(ev.end_ts)} ` +
+      return `<li>${icon("pin", 12)} ${hm(ev.start_ts)}–${hm(ev.end_ts)} ` +
         `<a data-i="${i}">${escapeHtml(ev.name || ev.semantic || "Místo")}</a> ` +
         `<span class="muted">(${hrs} h)</span></li>`;
     }
     const km = ((ev.distance_m || 0) / 1000).toFixed(1);
-    return `<li>➜ ${hm(ev.start_ts)}–${hm(ev.end_ts)} ${escapeHtml(typeLabel(ev.type))}` +
+    return `<li>${icon("chevR", 12)} ${hm(ev.start_ts)}–${hm(ev.end_ts)} ${escapeHtml(typeLabel(ev.type))}` +
       (km > 0 ? ` <b>${km} km</b>` : "") + "</li>";
   }).join("");
   $("dayTimeline").querySelectorAll("a").forEach((a) =>
     a.addEventListener("click", () => {
       const ev = events[Number(a.dataset.i)];
-      if (ev.lat) map.setView([ev.lat, ev.lon], 16);
+      if (ev.lat) map.flyTo([ev.lat, ev.lon], 16, { duration: 0.8 });
     }));
 }
 
@@ -1035,7 +1117,8 @@ $("playSlider").addEventListener("input", () => {
 function stopPlayback() {
   if (play.timer) cancelAnimationFrame(play.timer);
   play.timer = null;
-  $("playBtn").textContent = "▶ Přehrát";
+  $("playBtn").innerHTML = icon("play");
+  $("playBtn").dataset.state = "stopped";
   $("playSpeedNow").textContent = "";
 }
 
@@ -1052,18 +1135,18 @@ $("qualityBtn").addEventListener("click", async () => {
     const q = await api("/api/quality", qualityParams());
     const fmt = (v) => v.toLocaleString("cs");
     const issues = [];
-    if (q.low_accuracy) issues.push(`⚠️ ${fmt(q.low_accuracy)} bodů s přesností horší než ${q.accuracy_limit} m`);
-    if (q.outliers) issues.push(`⚠️ ${fmt(q.outliers)} GPS „teleportů" (osamocené skoky)`);
+    if (q.low_accuracy) issues.push(`${icon("alert", 13)} ${fmt(q.low_accuracy)} bodů s přesností horší než ${q.accuracy_limit} m`);
+    if (q.outliers) issues.push(`${icon("alert", 13)} ${fmt(q.outliers)} GPS „teleportů" (osamocené skoky)`);
     if (q.outliers === null) issues.push("ℹ️ Příliš mnoho bodů – teleporty se vyhodnotí až při opravě");
-    if (q.bad_visits) issues.push(`⚠️ ${fmt(q.bad_visits)} vadných návštěv (konec před začátkem)`);
+    if (q.bad_visits) issues.push(`${icon("alert", 13)} ${fmt(q.bad_visits)} vadných návštěv (konec před začátkem)`);
     if (q.duplicate_activities) issues.push(
-      `⚠️ ${fmt(q.duplicate_activities)} duplicitních cest (překryv více exportů)`);
+      `${icon("alert", 13)} ${fmt(q.duplicate_activities)} duplicitních cest (překryv více exportů)`);
     if (q.gap_days) issues.push(
       `ℹ️ ${fmt(q.gap_days)} dní bez jakýchkoli dat` +
       (q.gap_samples.length ? ` (např. ${q.gap_samples.slice(0, 5).join(", ")}…)` : ""));
     $("qualityReport").innerHTML = issues.length
       ? `<ul class="issueList">${issues.map((i) => `<li>${i}</li>`).join("")}</ul>`
-      : '<p class="muted">✅ Žádné problémy nenalezeny.</p>';
+      : `<p class="muted">${icon("check", 13)} Žádné problémy nenalezeny.</p>`;
     const fixable = q.low_accuracy + (q.outliers ?? 1) + q.bad_visits + q.duplicate_activities;
     $("cleanupBtn").hidden = fixable === 0;
   } catch (e) {
@@ -1085,7 +1168,7 @@ $("cleanupBtn").addEventListener("click", async () => {
   try {
     const res = await apiFetch("/api/cleanup", { method: "POST", params: { ...qualityParams(), dry_run: false } });
     $("qualityReport").innerHTML =
-      `<p class="muted">🧹 Smazáno: ${res.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
+      `<p class="muted">${icon("wand", 13)} Smazáno: ${res.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
       + `${res.outliers.toLocaleString("cs")} teleportů, ${res.bad_visits.toLocaleString("cs")} návštěv, `
       + `${res.duplicate_activities.toLocaleString("cs")} duplicitních cest.</p>`;
     $("cleanupBtn").hidden = true;
@@ -1136,7 +1219,7 @@ async function watchImport(jobId) {
       $("importStatus").textContent =
         `Hotovo: +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, ` +
         `+${fmt(s.activities)} aktivit (${s.files} souborů).`;
-      toast("Import dokončen ✓", "success");
+      toast("Import dokončen.", "success");
       state.fitted = false;
       loadAll();
     } else {
@@ -1155,7 +1238,7 @@ async function showAutoImportLog() {
     const { log } = await api("/api/autoimport");
     $("autoImportLog").innerHTML = log.length
       ? "Auto-import: " + log.map((l) =>
-          `${escapeHtml(l.file)} (${l.when}) ${l.status === "ok" ? "✓" : "✗ " + escapeHtml(l.error || "")}`
+          `${escapeHtml(l.file)} (${l.when}) ${l.status === "ok" ? icon("check", 11) : icon("x", 11) + " " + escapeHtml(l.error || "")}`
         ).join("<br>")
       : "";
   } catch (e) { /* nedostupné */ }
@@ -1174,9 +1257,9 @@ async function showAutoImportLog() {
     }
     if (!r.points && !r.visits) {
       // prázdná databáze → navést uživatele rovnou k importu
-      $("importFile").closest("details").open = true;
+      document.querySelector('#tabs [data-tab="nastroje"]').click();
       $("importStatus").textContent =
-        "👋 Začněte zde: nahrajte Timeline.json z telefonu nebo ZIP z Takeoutu.";
+        "Začněte zde: nahrajte Timeline.json z telefonu nebo ZIP z Takeoutu.";
       toast("Zatím nejsou žádná data – začněte importem exportu z Google Maps.");
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }

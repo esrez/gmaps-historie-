@@ -1,8 +1,10 @@
 /* Kniha jízd – logika stránky (ES modul, sdílené helpery v common.js) */
 import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
          buildUrl, apiFetch, escapeHtml, toast, initThemeToggle } from "./common.js";
+import { icon, mountIcons } from "./icons.js";
 
 initThemeToggle($("themeBtn"));
+mountIcons();
 
 const api = apiFetch;
 const RENDER_CHUNK = 250;   // řádků najednou; zbytek se dokreslí při doskrolování
@@ -74,6 +76,9 @@ async function loadTrips() {
   try {
     const data = await api("/api/trips", { params: { ...currentRange(), ...plateFilter() } });
     trips = data.trips;
+    selectedIds.clear();
+    $("selAll").checked = false;
+    updateBulkBtn();
     renderTable(data.total_km);
     refreshOdometer(odoYear()); // rok podle zvoleného období
     refreshAlerts();
@@ -102,6 +107,7 @@ function buildRow(t, prevMonth) {
   const month = `${s.getFullYear()}-${s.getMonth()}`;
   if (prevMonth && month !== prevMonth) tr.classList.add("monthStart");
   tr.innerHTML = `
+      <td class="selCell"><input type="checkbox" class="selRow" ${selectedIds.has(t.id) ? "checked" : ""}></td>
       <td data-l="Datum"><input type="date" data-f="date" value="${toDateStr(s)}"></td>
       <td data-l="Odjezd"><input type="time" data-f="dep" value="${toTimeStr(s)}"></td>
       <td data-l="Příjezd"><input type="time" data-f="arr" value="${toTimeStr(e)}"></td>
@@ -111,12 +117,53 @@ function buildRow(t, prevMonth) {
       <td data-l="Účel"><input type="text" list="dlPurposes" data-f="purpose" value="${escapeHtml(t.purpose)}"></td>
       <td data-l="Soukromá" class="cbCell"><input type="checkbox" data-f="private" ${t.private ? "checked" : ""}></td>
       <td data-l="Vlastní auto" class="cbCell"><input type="checkbox" data-f="excluded" ${t.excluded ? "checked" : ""}></td>
-      <td class="delCell"><button class="del" title="Smazat jízdu">✕</button></td>`;
-  tr.querySelectorAll("input").forEach((inp) =>
+      <td class="delCell"><button class="del" title="Smazat jízdu">${icon("x", 13)}</button></td>`;
+  tr.querySelectorAll("input[data-f]").forEach((inp) =>
     inp.addEventListener("change", () => onCellChange(t, inp)));
+  tr.querySelector(".selRow").addEventListener("change", (ev) => {
+    if (ev.target.checked) selectedIds.add(t.id);
+    else selectedIds.delete(t.id);
+    updateBulkBtn();
+  });
   tr.querySelector(".del").addEventListener("click", () => onDelete(t, tr));
   return tr;
 }
+
+// ------------------------------------------------- hromadný výběr a mazání
+
+const selectedIds = new Set();
+
+function updateBulkBtn() {
+  const b = $("bulkDelBtn");
+  b.hidden = selectedIds.size === 0;
+  if (!b.hidden) {
+    b.innerHTML = `${icon("trash", 13)} Smazat vybrané (${selectedIds.size})`;
+  }
+}
+
+$("selAll").addEventListener("change", () => {
+  selectedIds.clear();
+  if ($("selAll").checked) for (const t of trips) selectedIds.add(t.id);
+  updateBulkBtn();
+  renderTable();
+});
+
+$("bulkDelBtn").addEventListener("click", async () => {
+  const n = selectedIds.size;
+  if (!n || !confirm(`Opravdu smazat ${n} vybraných jízd?`)) return;
+  try {
+    for (const id of selectedIds) {
+      await api(`/api/trips/${id}`, { method: "DELETE" });
+    }
+    toast(`Smazáno ${n} jízd.`, "success");
+  } catch (e) {
+    toast("Mazání selhalo: " + e.message, "error");
+  }
+  selectedIds.clear();
+  $("selAll").checked = false;
+  updateBulkBtn();
+  loadTrips();
+});
 
 // ------------------------------------------------- zobrazení po dnech
 
@@ -161,18 +208,43 @@ function buildDayRow(g) {
   tr.dataset.date = g.date;
   const d = new Date(g.date);
   const excl = g.items.filter((t) => t.excluded).length;
+  const allSel = g.items.every((t) => selectedIds.has(t.id));
   tr.innerHTML = `
-    <td colspan="5"><span class="chev">${open ? "▾" : "▸"}</span>
+    <td class="selCell"><input type="checkbox" class="selDay" title="Vybrat celý den" ${allSel ? "checked" : ""}></td>
+    <td colspan="4"><span class="chev">${open ? "▾" : "▸"}</span>
       <b>${d.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric", year: "numeric" })}</b>
       <span class="muted">· ${g.items.length} ${g.items.length === 1 ? "jízda" : g.items.length < 5 ? "jízdy" : "jízd"}
       ${escapeHtml(dayRoute(g))}</span></td>
     <td class="num" data-l="Km"><b>${dayKm(g).toLocaleString("cs", { maximumFractionDigits: 1 })}</b></td>
-    <td colspan="4" class="muted dayNote">${excl ? excl + "× vlastní auto" : ""}</td>`;
-  tr.addEventListener("click", () => {
+    <td colspan="5" class="muted dayNote">${excl ? excl + "× vlastní auto" : ""}</td>`;
+  tr.addEventListener("click", (ev) => {
+    if (ev.target.closest(".selCell")) return;   // klik na checkbox nerozbaluje
     if (open) expandedDays.delete(g.date);
     else expandedDays.add(g.date);
     renderTable();
   });
+  tr.querySelector(".selDay").addEventListener("change", (ev) => {
+    for (const t of g.items) {
+      if (ev.target.checked) selectedIds.add(t.id);
+      else selectedIds.delete(t.id);
+    }
+    updateBulkBtn();
+    if (expandedDays.has(g.date)) renderTable();
+  });
+  return tr;
+}
+
+/* Součtový řádek měsíce – zobrazuje se v pohledu po dnech, když období
+   pokrývá víc měsíců. */
+function buildMonthRow(monthKey, km) {
+  const tr = document.createElement("tr");
+  tr.className = "monthRow";
+  const d = new Date(monthKey + "-01");
+  const label = d.toLocaleDateString("cs", { month: "long", year: "numeric" });
+  tr.innerHTML = `
+    <td colspan="5">${label.charAt(0).toUpperCase() + label.slice(1)}</td>
+    <td class="num"><b>${km.toLocaleString("cs", { maximumFractionDigits: 1 })} km</b></td>
+    <td colspan="5"></td>`;
   return tr;
 }
 
@@ -197,6 +269,25 @@ function renderTable(totalKm) {
   renderObserver?.disconnect();
   const grouped = $("setGroupDays").checked;
 
+  if (!trips.length) {
+    body.innerHTML =
+      `<tr class="emptyRow"><td colspan="11">${icon("car", 26)}` +
+      '<p><b>Zatím žádné jízdy</b></p>' +
+      '<p class="muted">Zvolte období a klikněte na Generovat jízdy, nebo přidejte jízdu ručně.</p></td></tr>';
+    updateTotal(totalKm);
+    return;
+  }
+
+  // součty km po měsících – mezisoučtové řádky v pohledu po dnech
+  const monthKm = {};
+  for (const t of trips) {
+    if (t.excluded) continue;
+    const m = toDateStr(new Date(t.start_ts * 1000)).slice(0, 7);
+    monthKm[m] = (monthKm[m] || 0) + t.km;
+  }
+  const showMonths = grouped && Object.keys(monthKm).length > 1;
+  let lastMonth = "";
+
   // jednotný dávkový vykreslovač: položka = den (skupina) nebo jízda
   const units = grouped ? dayGroups() : trips;
   const chunkSize = grouped ? 40 : RENDER_CHUNK;
@@ -205,6 +296,11 @@ function renderTable(totalKm) {
   const appendUnit = (frag, i) => {
     if (grouped) {
       const g = units[i];
+      const m = g.date.slice(0, 7);
+      if (showMonths && m !== lastMonth) {
+        frag.appendChild(buildMonthRow(m, monthKm[m] || 0));
+        lastMonth = m;
+      }
       frag.appendChild(buildDayRow(g));
       if (expandedDays.has(g.date)) {
         for (const t of g.items) frag.appendChild(buildRow(t, ""));
@@ -226,7 +322,7 @@ function renderTable(totalKm) {
   };
   const sentinel = () => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="10" class="muted" style="text-align:center">… načítám další</td>`;
+    tr.innerHTML = `<td colspan="11" class="muted" style="text-align:center">… načítám další</td>`;
     body.appendChild(tr);
     renderObserver = new IntersectionObserver((entries) => {
       if (entries.some((en) => en.isIntersecting)) {
@@ -327,7 +423,7 @@ async function loadRules() {
   $("rulesList").innerHTML = rules.map((r) =>
     `<li>${r.origin ? escapeHtml(r.origin) + " ⇄ " : "→ "}` +
     `<b>${escapeHtml(r.destination)}</b>: ${r.km.toLocaleString("cs")} km ` +
-    `<button class="del" data-id="${r.id}" title="Smazat pravidlo">✕</button></li>`).join("")
+    `<button class="del" data-id="${r.id}" title="Smazat pravidlo">${icon("x", 11)}</button></li>`).join("")
     || '<li class="muted">Zatím žádná pravidla.</li>';
   $("rulesList").querySelectorAll("button.del").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -420,15 +516,15 @@ async function refreshAlerts() {
     if (missing.days.length) {
       const sample = missing.days.slice(0, 6)
         .map((d) => `${new Date(d.date).toLocaleDateString("cs")} (${d.km} km)`).join(", ");
-      items.push(`🚗 <b>${missing.days.length} dní s jízdou autem chybí v knize</b>: ` +
+      items.push(`${icon("car", 13)} <b>${missing.days.length} dní s jízdou autem chybí v knize</b>: ` +
         `${sample}${missing.days.length > 6 ? "…" : ""} ` +
-        `<button id="fillMissingBtn">⚙ Doplnit nyní</button>`);
+        `<button id="fillMissingBtn">${icon("wand", 12)} Doplnit nyní</button>`);
     }
     if (al.incomplete_trips) {
-      items.push(`✏️ <b>${al.incomplete_trips} jízd je neúplných</b> (chybí km nebo cíl).`);
+      items.push(`${icon("pencil", 13)} <b>${al.incomplete_trips} jízd je neúplných</b> (chybí km nebo cíl).`);
     }
     for (const o of al.odometer_exceeded) {
-      items.push(`⚠️ <b>Rok ${o.year}: v knize ${o.booked_km.toLocaleString("cs")} km, ` +
+      items.push(`${icon("alert", 13)} <b>Rok ${o.year}: v knize ${o.booked_km.toLocaleString("cs")} km, ` +
         `ale tachometr jen ${o.odometer_km.toLocaleString("cs")} km</b> – zkontrolujte km jízd.`);
     }
     box.innerHTML = items.length
@@ -532,7 +628,7 @@ async function refreshUndo() {
     if (u.available) {
       const OPS = { generate: "generování", propagate: "propagaci km",
                     apply_rules: "použití pravidel", delete_range: "smazání období" };
-      $("undoBtn").textContent = `↩ Vrátit ${OPS[u.op] || u.op} (${u.affected} jízd)` +
+      $("undoBtn").innerHTML = `${icon("undo", 13)} Vrátit ${OPS[u.op] || u.op} (${u.affected} jízd)` +
         (u.steps > 1 ? ` · ${u.steps} kroků zpět` : "");
     }
   } catch (e) { $("undoBtn").hidden = true; }

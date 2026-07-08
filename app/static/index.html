@@ -13,190 +13,224 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div id="layout">
-  <aside id="sidebar">
-    <h1>🗺️ GMaps Historie <a href="/kniha" class="navlink">Kniha jízd →</a>
-        <button id="themeBtn" class="mini" type="button"></button></h1>
+<div id="app">
+  <main id="map"><div id="mapLoading" hidden>Načítám…</div></main>
 
-    <details class="sec" open>
-      <summary>Období</summary>
-      <div class="row">
-        <label>Od <input type="date" id="dateFrom"></label>
-        <label>Do <input type="date" id="dateTo"></label>
-      </div>
-      <div class="presets">
-        <button data-days="7">7 dní</button>
-        <button data-days="30">30 dní</button>
-        <button data-days="90">90 dní</button>
-        <button data-days="365">Rok</button>
-        <button data-days="thisYear">Letos</button>
-        <button data-days="lastYear">Loni</button>
-        <button data-days="all">Vše</button>
-      </div>
-      <button id="loadBtn" class="primary">Načíst</button>
-    </details>
+  <!-- plovoucí hlavní panel nad mapou -->
+  <aside id="panel" class="floating">
+    <header id="panelHead">
+      <h1><span data-icon="pin" data-size="17"></span> GMaps Historie</h1>
+      <a href="/kniha" class="navlink"><span data-icon="car"></span> Kniha jízd</a>
+      <button id="themeBtn" class="mini" type="button"></button>
+      <button id="panelCollapse" class="mini" type="button" title="Sbalit panel">▾</button>
+    </header>
 
-    <details class="sec" open>
-      <summary>Hledání místa</summary>
-      <div class="row">
-        <input type="search" id="searchInput" placeholder="Obec, adresa, název místa…">
-        <button id="searchBtn">Hledat</button>
-      </div>
-      <div id="searchResults"></div>
-      <p class="muted">Klikněte do mapy a zvolte „Kdy jsem tu byl?" – zjistíte všechny
-         své pobyty v daném okruhu.</p>
-      <div id="locPanel" hidden>
-        <h3 id="locTitle"></h3>
+    <nav id="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="mapa"><span data-icon="map"></span> Mapa</button>
+      <button class="tab-btn" data-tab="stat"><span data-icon="chart"></span> Statistiky</button>
+      <button class="tab-btn" data-tab="analyza"><span data-icon="calendar"></span> Analýza</button>
+      <button class="tab-btn" data-tab="nastroje"><span data-icon="tools"></span> Nástroje</button>
+    </nav>
+
+    <div id="panelBody">
+    <!-- ===================== záložka MAPA ===================== -->
+    <div class="tab-page active" data-page="mapa">
+      <section>
+        <h2>Období</h2>
         <div class="row">
-          <label>Okruh
-            <select id="locRadius">
-              <option value="100">100 m</option>
-              <option value="200" selected>200 m</option>
-              <option value="500">500 m</option>
-              <option value="1000">1 km</option>
-            </select>
-          </label>
-          <label title="Kratší pobyty se nepočítají – jde jen o průjezd místem">
-            Min. pobyt
-            <select id="locMinStay">
-              <option value="0">vše</option>
-              <option value="2" selected>2 min</option>
-              <option value="5">5 min</option>
-              <option value="10">10 min</option>
-            </select>
-          </label>
-          <button id="locRenameBtn" title="Pojmenovat místo (zákazník, adresa…)">✏️</button>
-          <button id="locExportBtn">Excel</button>
-          <button id="locCloseBtn">✕</button>
+          <label>Od <input type="date" id="dateFrom"></label>
+          <label>Do <input type="date" id="dateTo"></label>
+          <button id="loadBtn" class="primary">Načíst</button>
         </div>
-        <div id="locSummary" class="muted"></div>
-        <ul id="locStays"></ul>
-      </div>
-    </details>
+        <div class="presets">
+          <button data-days="7">7 dní</button>
+          <button data-days="30">30 dní</button>
+          <button data-days="90">90 dní</button>
+          <button data-days="365">Rok</button>
+          <button data-days="thisYear">Letos</button>
+          <button data-days="lastYear">Loni</button>
+          <button data-days="all">Vše</button>
+        </div>
+      </section>
 
-    <details class="sec" open>
-      <summary>Vrstvy</summary>
-      <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
-      <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
-      <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
-      <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
-      <label class="check"><input type="checkbox" id="layerMyPlaces" checked> Moje místa (názvy)</label>
-      <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
-        <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
-      <button id="drawPolyBtn" title="Klikáním do mapy obkreslíte areál (zákazník, sklad…) a pojmenujete ho – přesnější než kruh">
-        ⬠ Pojmenovat oblast (polygon)</button>
-    </details>
+      <section>
+        <h2>Hledání místa</h2>
+        <div class="row">
+          <input type="search" id="searchInput" placeholder="Obec, adresa, název místa…">
+          <button id="searchBtn" title="Hledat"><span data-icon="search"></span></button>
+        </div>
+        <div id="searchResults"></div>
+        <p class="muted">Klikněte do mapy a zvolte „Kdy jsem tu byl?" – zjistíte všechny
+           své pobyty v daném okruhu.</p>
+        <div id="locPanel" hidden>
+          <h3 id="locTitle"></h3>
+          <div class="row">
+            <label>Okruh
+              <select id="locRadius">
+                <option value="100">100 m</option>
+                <option value="200" selected>200 m</option>
+                <option value="500">500 m</option>
+                <option value="1000">1 km</option>
+              </select>
+            </label>
+            <label title="Kratší pobyty se nepočítají – jde jen o průjezd místem">
+              Min. pobyt
+              <select id="locMinStay">
+                <option value="0">vše</option>
+                <option value="2" selected>2 min</option>
+                <option value="5">5 min</option>
+                <option value="10">10 min</option>
+              </select>
+            </label>
+            <button id="locRenameBtn" title="Pojmenovat místo (zákazník, adresa…)"><span data-icon="pencil"></span></button>
+            <button id="locExportBtn" title="Export pobytů do Excelu"><span data-icon="download"></span></button>
+            <button id="locCloseBtn" title="Zavřít"><span data-icon="x"></span></button>
+          </div>
+          <div id="locSummary" class="muted"></div>
+          <ul id="locStays"></ul>
+        </div>
+      </section>
 
-    <details class="sec" open>
-      <summary>Statistiky</summary>
-      <div id="statTiles" class="tiles"></div>
-      <div id="monthlyChartWrap">
-        <h3 id="monthlyTitle">Kilometry po měsících</h3>
-        <div id="monthlyChart" class="chart"></div>
-        <p id="monthlyNote" class="muted"></p>
-      </div>
-      <div id="byType"></div>
-      <h3>Nejnavštěvovanější místa</h3>
-      <ol id="topPlaces"></ol>
-    </details>
+      <section>
+        <h2>Vrstvy</h2>
+        <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
+        <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
+        <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
+        <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
+        <label class="check"><input type="checkbox" id="layerMyPlaces" checked> Moje místa (názvy)</label>
+        <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
+          <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
+        <button id="drawPolyBtn" title="Klikáním do mapy obkreslíte areál (zákazník, sklad…) a pojmenujete ho – přesnější než kruh">
+          <span data-icon="polygon"></span> Pojmenovat oblast (polygon)</button>
+      </section>
+    </div>
 
-    <details class="sec" open>
-      <summary>Kalendář roku</summary>
-      <div class="row calNav">
-        <button id="calPrev" title="Předchozí rok">◀</button>
-        <b id="calYear"></b>
-        <button id="calNext" title="Další rok">▶</button>
-        <span class="muted" id="calLegend">km/den</span>
-      </div>
-      <div id="calendar"></div>
-      <p class="muted">Kliknutím na den ho přehrajete na mapě.
-         Šedé dny mají záznam polohy bez rozpoznané jízdy.</p>
-    </details>
+    <!-- ===================== záložka STATISTIKY ===================== -->
+    <div class="tab-page" data-page="stat">
+      <section>
+        <h2>Statistiky</h2>
+        <div id="statTiles" class="tiles"></div>
+        <div id="monthlyChartWrap">
+          <h3 id="monthlyTitle">Kilometry po měsících</h3>
+          <div id="monthlyChart" class="chart"></div>
+          <p id="monthlyNote" class="muted"></p>
+        </div>
+        <div id="byType"></div>
+        <h3>Nejnavštěvovanější místa</h3>
+        <ol id="topPlaces"></ol>
+      </section>
 
-    <details class="sec">
-      <summary>Analýza</summary>
-      <h3>Km podle dne v týdnu</h3>
-      <div id="weekdayChart" class="chart"></div>
-      <h3>Aktivita podle hodiny</h3>
-      <div id="hourlyChart" class="chart"></div>
-      <h3>Kilometry po letech</h3>
-      <div id="yearlyList"></div>
-    </details>
+      <section>
+        <h2>Kalendář roku</h2>
+        <div class="row calNav">
+          <button id="calPrev" title="Předchozí rok">◀</button>
+          <b id="calYear"></b>
+          <button id="calNext" title="Další rok">▶</button>
+          <span class="muted" id="calLegend">km/den</span>
+        </div>
+        <div id="calendar"></div>
+        <p class="muted">Kliknutím na den ho přehrajete na mapě.
+           Šedé dny mají záznam polohy bez rozpoznané jízdy.</p>
+      </section>
+    </div>
 
-    <details class="sec">
-      <summary>Přehrávání dne</summary>
-      <div class="row">
-        <button id="dayPrev" title="Předchozí den">◀</button>
-        <input type="date" id="playDate">
-        <button id="dayNext" title="Další den">▶</button>
-        <select id="playSpeed">
-          <option value="60">1 min/s</option>
-          <option value="300" selected>5 min/s</option>
-          <option value="900">15 min/s</option>
-          <option value="3600">1 h/s</option>
-        </select>
-      </div>
-      <div class="row">
-        <button id="playBtn" class="primary">▶ Přehrát</button>
-        <span id="playClock" class="clock">–:–</span>
-        <span id="playSpeedNow" class="muted"></span>
-      </div>
-      <input type="range" id="playSlider" min="0" max="1000" value="0">
-      <div id="playInfo" class="muted"></div>
-      <ol id="dayTimeline"></ol>
-    </details>
+    <!-- ===================== záložka ANALÝZA ===================== -->
+    <div class="tab-page" data-page="analyza">
+      <section>
+        <h2>Analýza</h2>
+        <h3>Km podle dne v týdnu</h3>
+        <div id="weekdayChart" class="chart"></div>
+        <h3>Aktivita podle hodiny</h3>
+        <div id="hourlyChart" class="chart"></div>
+        <h3>Kilometry po letech</h3>
+        <div id="yearlyList"></div>
+      </section>
+    </div>
 
-    <details class="sec">
-      <summary>Export</summary>
-      <div class="row">
-        <button id="exportXlsx">📊 Excel (.xlsx)</button>
-        <button id="exportGpx">🛰 GPX</button>
-      </div>
-      <p class="muted">Exportuje zvolené období: návštěvy, cesty, statistiky
-         a GPS body do listů Excelu; GPX pro jiné mapové aplikace.</p>
-    </details>
+    <!-- ===================== záložka NÁSTROJE ===================== -->
+    <div class="tab-page" data-page="nastroje">
+      <section>
+        <h2>Export</h2>
+        <div class="row">
+          <button id="exportXlsx"><span data-icon="download"></span> Excel (.xlsx)</button>
+          <button id="exportGpx"><span data-icon="download"></span> GPX</button>
+        </div>
+        <p class="muted">Exportuje zvolené období: návštěvy, cesty, statistiky
+           a GPS body do listů Excelu; GPX pro jiné mapové aplikace.</p>
+      </section>
 
-    <details class="sec">
-      <summary>Údržba dat</summary>
-      <p class="muted">Najde a opraví chyby v datech: GPS „teleporty",
-         nepřesné body a vadné záznamy návštěv. Upozorní i na dny bez dat.</p>
-      <div class="row">
-        <button id="qualityBtn">🔍 Zkontrolovat data</button>
-        <label>Limit přesnosti
-          <select id="accLimit">
-            <option value="50">50 m</option>
-            <option value="100" selected>100 m</option>
-            <option value="200">200 m</option>
-          </select>
-        </label>
-      </div>
-      <div id="qualityReport"></div>
-      <button id="cleanupBtn" hidden class="danger">🧹 Opravit (smazat vadné záznamy)</button>
-      <h3>Záloha</h3>
-      <button id="backupBtn">💾 Stáhnout zálohu (.db)</button>
-      <p class="muted">Záloha se navíc vytváří automaticky každý den do
-         <code>data/backups/</code> (drží se posledních 14).</p>
-    </details>
+      <section>
+        <h2>Údržba dat</h2>
+        <p class="muted">Najde a opraví chyby v datech: GPS „teleporty",
+           nepřesné body a vadné záznamy návštěv. Upozorní i na dny bez dat.</p>
+        <div class="row">
+          <button id="qualityBtn"><span data-icon="search"></span> Zkontrolovat data</button>
+          <label>Limit přesnosti
+            <select id="accLimit">
+              <option value="50">50 m</option>
+              <option value="100" selected>100 m</option>
+              <option value="200">200 m</option>
+            </select>
+          </label>
+        </div>
+        <div id="qualityReport"></div>
+        <button id="cleanupBtn" hidden class="danger"><span data-icon="wand"></span> Opravit (smazat vadné záznamy)</button>
+        <h3>Záloha</h3>
+        <button id="backupBtn"><span data-icon="save"></span> Stáhnout zálohu (.db)</button>
+        <p class="muted">Záloha se navíc vytváří automaticky každý den do
+           <code>data/backups/</code> (drží se posledních 14).</p>
+      </section>
 
-    <details class="sec">
-      <summary>Import dat</summary>
-      <p class="muted">Nahrajte <b>Timeline.json</b> (export z telefonu), <b>Records.json</b>,
-         měsíční JSON ze Semantic Location History, nebo celý <b>ZIP</b> z Takeoutu.
-         Formát se rozpozná automaticky, duplicity se přeskočí.</p>
-      <input type="file" id="importFile" accept=".json,.zip">
-      <button id="importBtn">Importovat</button>
-      <div id="importStatus" class="muted"></div>
-      <div id="autoImportLog" class="muted"></div>
-      <p class="muted">Tip: soubory nakopírované do <code>data/import/</code>
-         se importují samy (do minuty).</p>
-      <div id="dbInfo" class="muted"></div>
-    </details>
+      <section>
+        <h2>Import dat</h2>
+        <p class="muted">Nahrajte <b>Timeline.json</b> (export z telefonu), <b>Records.json</b>,
+           měsíční JSON ze Semantic Location History, nebo celý <b>ZIP</b> z Takeoutu.
+           Formát se rozpozná automaticky, duplicity se přeskočí.</p>
+        <input type="file" id="importFile" accept=".json,.zip">
+        <button id="importBtn"><span data-icon="upload"></span> Importovat</button>
+        <div id="importStatus" class="muted"></div>
+        <div id="autoImportLog" class="muted"></div>
+        <p class="muted">Tip: soubory nakopírované do <code>data/import/</code>
+           se importují samy (do minuty).</p>
+        <div id="dbInfo" class="muted"></div>
+      </section>
+    </div>
+    </div>
   </aside>
 
-  <main id="map"><div id="mapLoading" hidden>Načítám…</div></main>
+  <!-- plovoucí lišta přehrávání dne (jako video přehrávač) -->
+  <div id="playbackBar" class="floating">
+    <button id="dayPrev" class="pb-btn" title="Předchozí den (šipka vlevo)">◀</button>
+    <input type="date" id="playDate">
+    <button id="dayNext" class="pb-btn" title="Další den (šipka vpravo)">▶</button>
+    <button id="playBtn" class="primary pb-play" title="Přehrát/zastavit (mezerník)"><span data-icon="play"></span></button>
+    <input type="range" id="playSlider" min="0" max="1000" value="0">
+    <span id="playClock" class="clock">–:–</span>
+    <span id="playSpeedNow" class="muted"></span>
+    <select id="playSpeed" title="Rychlost přehrávání">
+      <option value="60">1 min/s</option>
+      <option value="300" selected>5 min/s</option>
+      <option value="900">15 min/s</option>
+      <option value="3600">1 h/s</option>
+    </select>
+    <button id="timelineToggle" class="pb-btn" title="Časová osa dne"><span data-icon="calendar"></span></button>
+    <div id="timelinePop" class="floating" hidden>
+      <div id="playInfo" class="muted"></div>
+      <ol id="dayTimeline"></ol>
+    </div>
+  </div>
+
+  <!-- legenda vrstev -->
+  <div id="mapLegend" class="floating">
+    <div><span class="lg-line" style="background:var(--series-1)"></span><span class="lg-line lg-alt"></span> cesty (střídání = jednotlivé jízdy)</div>
+    <div><span class="lg-dot" style="background:var(--series-2)"></span> navštívená místa (velikost = čas)</div>
+    <div><span class="lg-dot lg-poly"></span> moje pojmenovaná místa</div>
+    <div><span class="lg-grad"></span> stopa přehrávání: pomalu → rychle</div>
+  </div>
 </div>
 <div id="tooltip" hidden></div>
 
+<datalist id="dlPlaces"></datalist>
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/leaflet-heat.js"></script>
 <script src="/static/vendor/leaflet.markercluster.js"></script>

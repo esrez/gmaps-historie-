@@ -3,6 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("mapa", () => {
   test("načte statistiky, grafy a kalendář", async ({ page }) => {
     await page.goto("/");
+    await page.click('#tabs [data-tab="stat"]');
     await expect(page.locator("#statTiles .tile")).toHaveCount(4);
     await expect(page.locator("#statTiles")).toContainText("km celkem");
     await expect(page.locator("#monthlyChart svg")).toBeVisible();
@@ -12,11 +13,13 @@ test.describe("mapa", () => {
 
   test("kalendář spustí přehrávání dne", async ({ page }) => {
     await page.goto("/");
+    await page.click('#tabs [data-tab="stat"]');
     await page.locator("#calendar svg").waitFor();
     // najdi den s jízdou (tmavá výplň) a klikni
     const day = page.locator('#calendar rect[data-d]:not([fill="transparent"])').first();
     await day.click();
-    await expect(page.locator("#playBtn")).toContainText("Zastavit");
+    await expect(page.locator("#playBtn")).toHaveAttribute("data-state", "playing");
+    await page.click("#timelineToggle");
     await expect(page.locator("#dayTimeline li").first()).toBeVisible();
   });
 
@@ -31,7 +34,7 @@ test.describe("mapa", () => {
 
   test("kontrola kvality dat proběhne", async ({ page }) => {
     await page.goto("/");
-    await page.locator("details:has(#qualityBtn)").evaluate((d) => { d.open = true; });
+    await page.click('#tabs [data-tab="nastroje"]');
     await page.click("#qualityBtn");
     await expect(page.locator("#qualityReport")).not.toBeEmpty({ timeout: 15000 });
   });
@@ -76,6 +79,18 @@ test.describe("kniha jízd", () => {
       const res = await page.request.get(url);
       expect(res.status(), url).toBe(200);
     }
+  });
+
+  test("hromadný výběr dne nabídne smazání", async ({ page }) => {
+    await page.goto("/kniha");
+    await page.fill("#dateFrom", "2025-06-01");
+    await page.fill("#dateTo", "2025-06-30");
+    await page.dispatchEvent("#dateTo", "change");
+    await page.locator("#tripsBody tr.dayRow").first().waitFor();
+    await expect(page.locator("#bulkDelBtn")).toBeHidden();
+    await page.locator("#tripsBody tr.dayRow .selDay").first().check();
+    await expect(page.locator("#bulkDelBtn")).toBeVisible();
+    await expect(page.locator("#bulkDelBtn")).toContainText("Smazat vybrané");
   });
 
   test("mobilní zobrazení má karty místo tabulky", async ({ browser }) => {
