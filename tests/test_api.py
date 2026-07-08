@@ -215,6 +215,25 @@ def test_place_stays_detail(client, test_db, tmp_path):
     assert client.get("/api/places/9999/stays").status_code == 404
 
 
+def test_place_stays_from_gps_only(client, test_db, tmp_path):
+    """Pobyt jen z GPS bodů (bez záznamu návštěvy) se musí v přehledu ukázat –
+    dřív se místo tvářilo „bez pobytu"."""
+    lat, lon, base = 49.20, 16.60, 1_749_000_000
+    with closing(test_db.connect()) as conn:
+        for i in range(40):                       # ~2 h bodů, žádná visit
+            conn.execute("INSERT INTO points(ts,lat,lon,accuracy) VALUES(?,?,?,?)",
+                         (base + i * 180, lat, lon, 10))
+        conn.commit()
+    pid = client.post("/api/places",
+                      json={"lat": lat, "lon": lon, "name": "Jen GPS"}).json()["places"][0]["id"]
+    rng = {"from_ts": base - 1000, "to_ts": base + 40 * 180 + 1000}
+    st = next(s for s in client.get("/api/places/stats", params=rng).json()["stats"]
+              if s["id"] == pid)
+    assert st["count"] == 1 and st["secs"] > 3600      # ~2 h, ne „bez pobytu"
+    d = client.get(f"/api/places/{pid}/stays", params=rng).json()
+    assert d["count"] == 1 and d["secs"] == st["secs"]
+
+
 def test_place_patch_rename(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     pid = client.post("/api/places",
