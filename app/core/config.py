@@ -13,6 +13,9 @@ MAX_DIST_ROWS = 3_000_000
 BACKUP_KEEP = 14
 OUTLIER_SPEED = 70.0
 DEFAULT_ACC_LIMIT = 100.0
+TRACK_SIMPLIFY_EPSILON_M = float(os.environ.get("TRACK_SIMPLIFY_EPSILON_M", "12"))
+TRACK_GAP_S = 1800          # 30 min – shodně s frontendem
+TRACK_GAP_KM = 50.0
 IMPORT_RATE_LIMIT = int(os.environ.get("IMPORT_RATE_LIMIT", "10"))  # za hodinu
 SESSION_MAX_AGE = 30 * 24 * 3600  # 30 dní
 

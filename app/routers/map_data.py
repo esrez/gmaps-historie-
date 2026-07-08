@@ -10,6 +10,7 @@ from .. import db, places
 from ..common import haversine_m, ts_range
 from ..core.config import MAX_HEAT_CELLS, MAX_TRACK_POINTS
 from ..services.geo import bbox_sql, points_data
+from ..services.simplify import rows_to_api, simplify_track
 
 router = APIRouter(tags=["mapa"])
 
@@ -89,7 +90,8 @@ def api_day(from_ts: int = Query(...), to_ts: int = Query(...)):
         acts = conn.execute(
             "SELECT start_ts, end_ts, type, distance_m FROM activities "
             "WHERE end_ts >= ? AND start_ts <= ? ORDER BY start_ts", (from_ts, to_ts)).fetchall()
-    return {"points": [[r["ts"], r["lat"], r["lon"]] for r in pts],
+    simplified = simplify_track(pts, 50_000) if len(pts) > 50_000 else pts
+    return {"points": rows_to_api(simplified),
             "visits": [dict(r) for r in vis],
             "activities": [dict(r) for r in acts]}
 

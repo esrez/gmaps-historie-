@@ -153,6 +153,20 @@ class Writer:
         self.conn.commit()
 
 
+class TimelineCoverage:
+    """Časové intervaly pokryté timelinePath – rawSignals se do nich neimportují."""
+
+    def __init__(self):
+        self._ranges: list[tuple[int, int]] = []
+
+    def add(self, start: int | None, end: int | None) -> None:
+        if start is not None and end is not None and end >= start:
+            self._ranges.append((start, end))
+
+    def covers(self, ts: int) -> bool:
+        return any(lo <= ts <= hi for lo, hi in self._ranges)
+
+
 # ------------------------------------------------- jednotlivé formáty
 
 def _import_records_stream(fileobj, w: Writer):
@@ -214,13 +228,16 @@ def _import_timeline_objects(data: dict, w: Writer):
                     w.point(start + span * i // max(n - 1, 1), ll[0], ll[1])
 
 
-def _import_semantic_segments(segments, w: Writer):
+def _import_semantic_segments(segments, w: Writer,
+                              coverage: TimelineCoverage | None = None):
     """Nový export z telefonu (Android objekt i iOS pole)."""
     for seg in segments:
         start = parse_ts(seg.get("startTime"))
         end = parse_ts(seg.get("endTime"))
+        path = seg.get("timelinePath") or []
+        had_timeline = False
 
-        for p in seg.get("timelinePath") or []:
+        for p in path:
             ll = parse_latlng(p.get("point"))
             ts = parse_ts(p.get("time"))
             if ts is None and start is not None:
@@ -229,6 +246,10 @@ def _import_semantic_segments(segments, w: Writer):
                     ts = start + int(float(off)) * 60
             if ll and ts:
                 w.point(ts, ll[0], ll[1])
+                had_timeline = True
+
+        if coverage is not None and had_timeline:
+            coverage.add(start, end)
 
         visit = seg.get("visit")
         if visit:
@@ -246,16 +267,19 @@ def _import_semantic_segments(segments, w: Writer):
                        parse_latlng(act.get("end")))
 
 
-def _import_raw_signals(signals, w: Writer):
+def _import_raw_signals(signals, w: Writer, coverage: TimelineCoverage | None = None):
     for sig in signals or []:
         pos = sig.get("position")
         if not pos:
             continue
         ll = parse_latlng(pos.get("LatLng") or pos.get("latLng"))
         ts = parse_ts(pos.get("timestamp"))
-        if ll and ts:
-            acc = pos.get("accuracyMeters")
-            w.point(ts, ll[0], ll[1], float(acc) if acc is not None else None)
+        if not ll or ts is None:
+            continue
+        if coverage is not None and coverage.covers(ts):
+            continue
+        acc = pos.get("accuracyMeters")
+        w.point(ts, ll[0], ll[1], float(acc) if acc is not None else None)
 
 
 # ------------------------------------------------------------ dispatcher
@@ -285,8 +309,9 @@ def _import_json_stream(fileobj, w: Writer, label: str):
             _import_timeline_objects(data, w)
             return "Semantic Location History"
         if "semanticSegments" in data or "rawSignals" in data:
-            _import_semantic_segments(data.get("semanticSegments") or [], w)
-            _import_raw_signals(data.get("rawSignals"), w)
+            coverage = TimelineCoverage()
+            _import_semantic_segments(data.get("semanticSegments") or [], w, coverage)
+            _import_raw_signals(data.get("rawSignals"), w, coverage)
             return "Timeline export (Android)"
         if "locations" in data:
             for loc in data["locations"]:

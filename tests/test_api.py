@@ -15,7 +15,9 @@ def test_range_and_points(client, test_db, tmp_path):
     r = client.get("/api/range").json()
     assert r["points"] == 100 and r["visits"] == 5
     pts = client.get("/api/points").json()
-    assert pts["total"] == 100 and len(pts["points"]) == 100
+    assert pts["total"] == 100
+    assert pts["simplified"] is True
+    assert 0 < len(pts["points"]) < 100
     assert client.get("/api/points?limit=0").status_code == 422
 
 

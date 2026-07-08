@@ -6,6 +6,7 @@ from contextlib import closing
 from .. import db
 from ..common import ts_range
 from ..core.config import MAX_TRACK_POINTS
+from .simplify import rows_to_api, simplify_track
 
 
 def bbox_sql(min_lat, max_lat, min_lon, max_lon) -> tuple[str, tuple]:
@@ -34,6 +35,37 @@ def _use_rtree(conn) -> bool:
   return bool(row and row["c"])
 
 
+def _fetch_points(conn, lo, hi, bsql, bargs, pre_limit: int) -> tuple[int, list]:
+  """Načte body v rozsahu; u velkých sad předvzorkuje pro DP."""
+  n = conn.execute(
+    f"SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?{bsql}",
+    (lo, hi, *bargs)).fetchone()["c"]
+  if n == 0:
+    return 0, []
+  if n <= pre_limit:
+    rows = conn.execute(
+      f"SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ?{bsql} ORDER BY ts",
+      (lo, hi, *bargs)).fetchall()
+    return n, rows
+  step = max(1, -(-n // pre_limit))
+  rows = conn.execute(
+    f"SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ?{bsql} "
+    f"AND (id % ?) = 0 ORDER BY ts",
+    (lo, hi, *bargs, step)).fetchall()
+  return n, rows
+
+
+def _simplify_response(rows: list, total: int, limit: int) -> dict:
+  simplified = simplify_track(rows, limit)
+  return {
+    "total": total,
+    "sampled": len(simplified),
+    "step": 1,
+    "simplified": True,
+    "points": rows_to_api(simplified),
+  }
+
+
 def points_data(from_ts, to_ts, limit=MAX_TRACK_POINTS,
                 min_lat=None, max_lat=None, min_lon=None, max_lon=None,
                 transport: str | None = None):
@@ -46,17 +78,10 @@ def points_data(from_ts, to_ts, limit=MAX_TRACK_POINTS,
   if transport:
     return _points_by_transport(lo, hi, limit, bsql, bargs, transport)
 
+  pre_limit = min(limit * 4, 250_000)
   with closing(db.connect()) as conn:
-    n = conn.execute(
-      f"SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?{bsql}",
-      (lo, hi, *bargs)).fetchone()["c"]
-    step = max(1, -(-n // limit))
-    rows = conn.execute(
-      f"SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ?{bsql} "
-      f"AND (id % ?) = 0 ORDER BY ts",
-      (lo, hi, *bargs, step)).fetchall()
-  return {"total": n, "sampled": len(rows), "step": step,
-          "points": [[r["ts"], round(r["lat"], 6), round(r["lon"], 6)] for r in rows]}
+    n, rows = _fetch_points(conn, lo, hi, bsql, bargs, pre_limit)
+  return _simplify_response(rows, n, limit)
 
 
 def _points_by_transport(lo, hi, limit, bsql, bargs, transport: str):
@@ -71,19 +96,26 @@ def _points_by_transport(lo, hi, limit, bsql, bargs, transport: str):
       f"AND REPLACE(UPPER(type),' ','_') IN ({ph}) ORDER BY start_ts",
       (lo, hi, *types)).fetchall()
     if not acts:
-      return {"total": 0, "sampled": 0, "step": 1, "points": []}
+      return {"total": 0, "sampled": 0, "step": 1, "simplified": True, "points": []}
     parts, args = [], []
     for a in acts:
       parts.append(f"(ts BETWEEN ? AND ?{bsql})")
       args.extend([a["start_ts"], a["end_ts"], *bargs])
     where = " OR ".join(parts)
     n = conn.execute(f"SELECT COUNT(*) c FROM points WHERE {where}", args).fetchone()["c"]
-    step = max(1, -(-n // limit))
-    rows = conn.execute(
-      f"SELECT ts, lat, lon FROM points WHERE ({where}) AND (id % ?) = 0 ORDER BY ts",
-      [*args, step]).fetchall()
-  return {"total": n, "sampled": len(rows), "step": step,
-          "points": [[r["ts"], round(r["lat"], 6), round(r["lon"], 6)] for r in rows]}
+    pre_limit = min(limit * 4, 250_000)
+    if n == 0:
+      return {"total": 0, "sampled": 0, "step": 1, "simplified": True, "points": []}
+    if n <= pre_limit:
+      rows = conn.execute(
+        f"SELECT ts, lat, lon FROM points WHERE ({where}) ORDER BY ts",
+        args).fetchall()
+    else:
+      step = max(1, -(-n // pre_limit))
+      rows = conn.execute(
+        f"SELECT ts, lat, lon FROM points WHERE ({where}) AND (id % ?) = 0 ORDER BY ts",
+        [*args, step]).fetchall()
+  return _simplify_response(rows, n, limit)
 
 
 def _transport_types(mode: str) -> list[str]:
