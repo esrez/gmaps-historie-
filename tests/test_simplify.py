@@ -2,10 +2,9 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-from conftest import HOME, WORK, iso
-
 from app import importer
 from app.services.simplify import _douglas_peucker, simplify_track, split_track_segments
+from tests.fixtures import HOME, WORK, iso
 
 
 def test_douglas_peucker_reduces_collinear_points():
