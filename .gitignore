@@ -2,7 +2,11 @@ data/
 __pycache__/
 *.pyc
 .venv/
+.venv-build/
 node_modules/
 .e2e-data/
 test-results/
 playwright-report/
+# PyInstaller výstupy
+build/
+dist/

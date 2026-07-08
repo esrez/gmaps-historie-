@@ -176,19 +176,71 @@ cp Timeline.json data/
 docker compose exec gmaps-historie python -m app.importer /data/Timeline.json
 ```
 
-## Spuštění bez Dockeru
+## Spuštění bez Dockeru (Windows / Linux / macOS)
 
-Vyžaduje Python 3.11+.
+Aplikace je čistě Python + SQLite, takže běží i jako běžná aplikace bez
+Dockeru. Vyžaduje jen **Python 3.11+**.
+
+### Windows (dvojklik)
+
+1. Nainstalujte [Python 3.11+](https://www.python.org/downloads/) a při
+   instalaci zaškrtněte **„Add python.exe to PATH"**.
+2. Stáhněte projekt (tlačítko *Code → Download ZIP* a rozbalte, nebo
+   `git clone`).
+3. Dvojklik na **`start-windows.bat`**. Při prvním spuštění se jednorázově
+   vytvoří prostředí a nainstalují závislosti; pak se aplikace spustí a sama
+   otevře prohlížeč na `http://127.0.0.1:8000`.
+
+Databáze i zálohy zůstávají ve složce `data\` vedle programu. Pro příště stačí
+`start-windows.bat` spustit znovu.
+
+### Linux / macOS (a Windows z příkazové řádky)
 
 ```bash
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+python run.py            # nastartuje server a otevře prohlížeč
+# nebo přímo:
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 # import z CLI:
 python -m app.importer cesta/k/Timeline.json
 ```
 
-Cestu k databázi lze změnit proměnnou prostředí `DB_PATH`
-(výchozí `data/history.db`).
+### Nastavení (proměnné prostředí)
+
+| Proměnná | Význam | Výchozí |
+|---|---|---|
+| `HOST` | adresa naslouchání; `0.0.0.0` = dostupné v domácí síti | `127.0.0.1` |
+| `PORT` | port | `8000` |
+| `DB_PATH` | umístění databáze | `data/history.db` |
+| `TZ` | časové pásmo (řeší letní čas) | `Europe/Prague` |
+| `AUTH_PASSWORD` | když je nastaveno, vyžaduje heslo (HTTP Basic) | – |
+| `OPEN_BROWSER` | `0` = neotvírat prohlížeč při startu | `1` |
+
+Na Windows se proměnná nastaví např. `set HOST=0.0.0.0` před spuštěním
+(nebo odkomentováním řádku v `start-windows.bat`). Zálohy, auto-import ze
+složky `data\import\` i offline PMTiles fungují stejně jako v Dockeru.
+
+> **Automatický start s Windows (volitelné):** zástupce na `start-windows.bat`
+> vložte do složky po spuštění `shell:startup` (Win+R). Pro běh na pozadí bez
+> okna lze použít Správce úloh → naplánovaná úloha spouštějící
+> `.venv\Scripts\python.exe run.py`.
+
+### Vytvoření jednoho `.exe` (uživatel nepotřebuje Python)
+
+Pro rozdání ostatním lze aplikaci zabalit do **jediného spustitelného souboru**
+pomocí [PyInstaller](https://pyinstaller.org) – uživatel pak nemá žádné
+závislosti a jen soubor spustí.
+
+Na Windows spusťte **`build-windows-exe.bat`** (nebo ručně
+`pip install pyinstaller` a `pyinstaller gmaps-historie.spec`). Výsledek je
+`dist\GMapsHistorie.exe`. Ten stačí zkopírovat kamkoli a spustit – nastartuje
+server, otevře prohlížeč a **data ukládá do složky `data\` vedle sebe**.
+Do balíčku je zahrnutý Python, všechny knihovny i webové rozhraní; PDF export
+s českou diakritikou i časová pásma fungují bez doinstalování.
+
+Pozn.: `.exe` sestavíte na Windows, na Linuxu/macOS vznikne obdobná binárka
+pro daný systém (PyInstaller nekřížově-nekompiluje). Antivirus někdy hlásí
+neznámý spustitelný soubor – jde o běžný falešný poplach u PyInstaller balíčků.
 
 ## Bezpečnost
 

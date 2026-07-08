@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import sqlite3
+import sys
 import tempfile
 import threading
 import uuid
@@ -29,7 +30,11 @@ app.add_middleware(GZipMiddleware, minimum_size=2048)  # JSON s body/heatmapou j
 app.include_router(trips.router)
 app.include_router(places.router)
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+# u zabaleného .exe (PyInstaller) leží statika v dočasné složce _MEIPASS
+if getattr(sys, "frozen", False):
+    STATIC_DIR = os.path.join(sys._MEIPASS, "app", "static")  # type: ignore[attr-defined]
+else:
+    STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 
 def _static_version() -> str:

@@ -686,16 +686,31 @@ def export_spz(from_ts: int | None = Query(None), to_ts: int | None = Query(None
     return xlsx_response(wb, "kniha-jizd-spz.xlsx")
 
 
-_FONT_DIRS = ("/usr/share/fonts/truetype/dejavu", "/usr/share/fonts/dejavu")
+_APP_FONTS = os.path.join(os.path.dirname(__file__), "fonts")
+
+# Kandidátní dvojice (obyčejný, tučný) TTF s plnou českou diakritikou, hledané
+# napříč OS – první existující se použije. Pro jistou shodu bez ohledu na systém
+# lze fonty přiložit do app/fonts/ (DejaVuSans.ttf + DejaVuSans-Bold.ttf).
+_FONT_CANDIDATES = (
+    (os.path.join(_APP_FONTS, "DejaVuSans.ttf"), os.path.join(_APP_FONTS, "DejaVuSans-Bold.ttf")),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    ("/usr/share/fonts/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf"),
+    # Windows (Arial i Segoe UI pokrývají češtinu)
+    (r"C:\Windows\Fonts\arial.ttf", r"C:\Windows\Fonts\arialbd.ttf"),
+    (r"C:\Windows\Fonts\segoeui.ttf", r"C:\Windows\Fonts\segoeuib.ttf"),
+    # macOS
+    ("/System/Library/Fonts/Supplemental/Arial.ttf",
+     "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+    ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf"),
+)
 
 
 def _pdf_fonts() -> tuple[str, str]:
-    """Zaregistruje TTF s českou diakritikou; fallback na Helveticu."""
+    """Zaregistruje TTF s českou diakritikou napříč OS; fallback na Helveticu."""
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    for d in _FONT_DIRS:
-        reg = os.path.join(d, "DejaVuSans.ttf")
-        bold = os.path.join(d, "DejaVuSans-Bold.ttf")
+    for reg, bold in _FONT_CANDIDATES:
         if os.path.exists(reg) and os.path.exists(bold):
             pdfmetrics.registerFont(TTFont("Deja", reg))
             pdfmetrics.registerFont(TTFont("DejaB", bold))
