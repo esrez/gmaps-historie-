@@ -1,5 +1,7 @@
 /* Sdílené pomocné funkce pro obě stránky (mapa i kniha jízd) – ES modul. */
 
+import { icon } from "./icons.js";
+
 export const $ = (id) => document.getElementById(id);
 
 /* ------------------------------------------------------------- téma
@@ -14,9 +16,13 @@ export function isDarkTheme() {
 }
 
 export function initThemeToggle(btn) {
-  const LABELS = { "": "🌓 auto", dark: "🌙 tmavý", light: "☀️ světlý" };
+  const LABELS = {
+    "": icon("contrast", 13) + " auto",
+    dark: icon("moon", 13) + " tmavý",
+    light: icon("sun", 13) + " světlý",
+  };
   const current = () => localStorage.getItem("theme") || "";
-  btn.textContent = LABELS[current()];
+  btn.innerHTML = LABELS[current()];
   btn.title = "Přepnout vzhled (auto / tmavý / světlý)";
   btn.addEventListener("click", () => {
     const order = ["", "dark", "light"];

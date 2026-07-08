@@ -5,7 +5,8 @@ Podrobný průvodce aplikací GMaps Historie. Rychlý přehled je v [README](../
 ## 1. První spuštění
 
 1. `docker compose up -d --build` → aplikace běží na `http://server:8000`.
-2. Při prázdné databázi se sama otevře sekce **Import dat** s nápovědou.
+2. Při prázdné databázi se sama otevře záložka **Nástroje** s nápovědou
+   k importu.
 3. Nahrajte export z Googlu (viz níže) – formát se pozná automaticky.
 
 ### Kde vzít data z Googlu
@@ -26,6 +27,12 @@ minuty), nebo z příkazové řádky
 
 ## 2. Mapa
 
+Mapa zabírá celou obrazovku; ovládání je v plovoucím panelu vlevo se
+záložkami **Mapa · Statistiky · Analýza · Nástroje** (panel lze šipkou
+sbalit). Dole je plovoucí lišta přehrávání dne, vpravo dole legenda vrstev.
+Když zvolené období nemá žádná data, mapa to řekne kartičkou s tlačítkem
+„Zobrazit vše".
+
 - **Období** – od/do nebo předvolby (7/30/90 dní, Rok, Letos, Loni, Vše).
 - **Vrstvy** – Trasy (klik = přehrát den), Jednotlivé body (čas po najetí),
   Heatmapa, Navštívená místa (velikost = strávený čas; při oddálení se shlukují).
@@ -38,10 +45,14 @@ minuty), nebo z příkazové řádky
   Pobyty kratší než zvolený **min. pobyt** (výchozí 2 min) se nepočítají –
   pouhý průjezd místem se tak neoznačí jako návštěva; totéž platí pro
   statistiky návštěv a top místa.
-- **Statistiky / Analýza** – km celkem a po měsících, rozpad podle dopravy,
-  top místa; km podle dne v týdnu, aktivita podle hodiny, km po letech.
-- **Přehrávání dne** – ◀ ▶ listování, rychlost přehrávání, stopa obarvená
-  rychlostí (světlá = pomalu), aktuální km/h, chronologická osa dne.
+- **Statistiky / Analýza** (záložky) – km celkem a po měsících, rozpad podle
+  dopravy, top místa; km podle dne v týdnu, aktivita podle hodiny, km po
+  letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu stejně
+  dlouhému období) a miniaturní křivku km po měsících.
+- **Přehrávání dne** – plovoucí lišta dole jako u video přehrávače:
+  ◀ ▶ listování, rychlost přehrávání, stopa obarvená rychlostí
+  (světlá = pomalu), aktuální km/h; ikona kalendáře otevře chronologickou
+  osu dne.
 - **Vlastní názvy míst** – nový export z telefonu jména míst nenese, proto
   lze každé místo pojmenovat (zákazník, adresa…): tužkou ✏️ u top míst,
   odkazem v bublině místa na mapě, nebo v panelu „Kdy jsem tu byl?".
@@ -74,8 +85,12 @@ Typický postup na konci měsíce:
 4. Tabulka se zobrazuje **po dnech**: řádek dne ukazuje počet jízd, trasu
    a součet km; kliknutím se den rozbalí na jednotlivé jízdy k úpravě
    (přepínač „Zobrazovat po dnech" vpravo nahoře vrátí plochý seznam).
-   Pole Odkud/Kam/Účel mají **našeptávač** známých míst a účelů.
-   Uložení potvrdí zelené bliknutí.
+   Období přes více měsíců dostane **mezisoučtové řádky měsíců**; hlavička
+   tabulky, řádek dne i celkový součet zůstávají při rolování **přilepené**.
+   Pole Odkud/Kam/Účel mají **našeptávač** známých míst a účelů;
+   Soukr./Vl. auto jsou přepínače. Uložení potvrdí zelené bliknutí.
+   Checkboxem vlevo lze vybrat jízdy či celé dny a smazat je najednou
+   tlačítkem **Smazat vybrané**.
 5. **Export XLSX pro SPZ** (import v programu SPZ od Milk Computers – vozidlo
    s toutéž SPZ musí být v SPZ založené) nebo **Export PDF** pro tisk.
 

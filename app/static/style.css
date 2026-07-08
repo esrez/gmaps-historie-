@@ -3,7 +3,7 @@
   --page: #f9f9f7;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --muted: #898781;
+  --muted: #75736b;
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.10);
@@ -19,7 +19,7 @@
     --page: #0d0d0d;
     --text-primary: #ffffff;
     --text-secondary: #c3c2b7;
-    --muted: #898781;
+    --muted: #75736b;
     --grid: #2c2c2a;
     --baseline: #383835;
     --border: rgba(255, 255, 255, 0.10);
@@ -33,7 +33,7 @@
   --page: #0d0d0d;
   --text-primary: #ffffff;
   --text-secondary: #c3c2b7;
-  --muted: #898781;
+  --muted: #75736b;
   --grid: #2c2c2a;
   --baseline: #383835;
   --border: rgba(255, 255, 255, 0.10);
@@ -51,16 +51,132 @@ body {
   font-size: 14px;
 }
 
-#layout { display: flex; height: 100vh; }
-#sidebar {
-  width: 340px;
-  min-width: 340px;
-  overflow-y: auto;
-  background: var(--surface-1);
-  border-right: 1px solid var(--border);
-  padding: 14px 16px 40px;
+/* ------------- mapová stránka: mapa přes vše, panely plavou nad ní ------ */
+#app { position: fixed; inset: 0; }
+#map { position: absolute; inset: 0; background: var(--page); }
+
+.floating {
+  background: color-mix(in srgb, var(--surface-1) 86%, transparent);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
 }
-#map { flex: 1; min-height: 300px; background: var(--page); position: relative; }
+
+#panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  width: 372px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+}
+#panelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 8px;
+}
+#panelHead h1 { display: flex; align-items: center; gap: 6px; }
+#panelHead .navlink { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+#panelBody { overflow-y: auto; padding: 0 14px 14px; }
+#panel.collapsed #panelBody,
+#panel.collapsed #tabs { display: none; }
+
+/* záložky */
+#tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--grid);
+}
+.tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: none;
+  background: none;
+  padding: 7px 4px;
+  font-size: 12px;
+  color: var(--muted);
+  border-radius: 8px 8px 0 0;
+  border-bottom: 2px solid transparent;
+}
+.tab-btn:hover { color: var(--text-primary); background: var(--grid); }
+.tab-btn.active {
+  color: var(--series-1);
+  border-bottom-color: var(--series-1);
+  font-weight: 600;
+}
+.tab-page { display: none; animation: pageIn 0.18s ease-out; }
+.tab-page.active { display: block; }
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* lišta přehrávání dne */
+#playbackBar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#playbackBar input[type="range"] { width: 180px; }
+#playbackBar input[type="date"] { padding: 3px 5px; }
+.pb-btn { padding: 4px 8px; }
+.pb-play { display: inline-flex; align-items: center; padding: 6px 12px; }
+#timelinePop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  width: 300px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+/* legenda */
+#mapLegend {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  z-index: 900;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: grid;
+  gap: 4px;
+}
+#mapLegend > div { display: flex; align-items: center; gap: 6px; }
+.lg-line { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+.lg-alt { background: #5598e7; margin-left: -3px; }
+.lg-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.lg-poly {
+  background: transparent;
+  border: 2px dashed #4a3aa7;
+  border-radius: 3px;
+  width: 12px; height: 12px;
+}
+:root[data-theme="dark"] .lg-poly { border-color: #9085e9; }
+.lg-grad {
+  width: 26px; height: 5px; border-radius: 3px; display: inline-block;
+  background: linear-gradient(90deg, #9ec5f4, #3987e5, #0d366b);
+}
 #mapLoading {
   position: absolute;
   top: 10px;
@@ -313,31 +429,33 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
 #tooltip .t-label { color: var(--muted); }
 
 @media (max-width: 800px) {
-  #layout { flex-direction: column; }
-  /* mapa nahoře, panel jako vysouvací „bottom sheet" s úchytem */
-  #map { height: 58vh; order: 1; }
-  #sidebar {
+  /* panel jako vysouvací „bottom sheet" s úchytem, playback lišta nad ním */
+  #panel {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
-    min-width: 0;
-    max-height: 42vh;
-    order: 2;
-    border-right: none;
-    border-top: 1px solid var(--border);
+    max-width: none;
+    max-height: 52vh;
     border-radius: 16px 16px 0 0;
-    margin-top: -14px;
-    z-index: 1100;
-    position: relative;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.2);
   }
-  #sidebar::before {
+  #panelHead::before {
     content: "";
-    display: block;
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
     width: 44px;
     height: 4px;
     border-radius: 2px;
     background: var(--baseline);
-    margin: 2px auto 10px;
   }
+  #panelHead { position: relative; padding-top: 14px; }
+  #playbackBar { bottom: calc(52vh + 10px); padding: 6px 8px; gap: 5px; }
+  #playbackBar input[type="range"] { width: 110px; }
+  #mapLegend { display: none; }
   h1 { font-size: 16px; }
 }
 
@@ -363,3 +481,49 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
   text-shadow: 0 0 3px var(--surface-1), 0 0 3px var(--surface-1);
   pointer-events: none;
 }
+
+/* ---------------- ikony, focus, mikrointerakce ---------------- */
+.ic { vertical-align: -2px; }
+button .ic { margin-right: 1px; }
+
+:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* dlaždice: jemné najetí + trend + sparkline */
+.tile { animation: pageIn 0.25s ease-out; position: relative; }
+.tile .trend { font-size: 11px; font-weight: 600; margin-left: 5px; }
+.tile .trend.up { color: #006300; }
+.tile .trend.down { color: var(--accent-red); }
+:root[data-theme="dark"] .tile .trend.up { color: #0ca30c; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tile .trend.up { color: #0ca30c; }
+}
+.tile .spark { position: absolute; right: 8px; bottom: 6px; opacity: 0.9; }
+
+/* skeleton při načítání */
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--grid) 25%, var(--baseline) 50%, var(--grid) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.1s infinite linear;
+  min-height: 52px;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* prázdný stav nad mapou */
+#emptyState {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 950;
+  text-align: center;
+  padding: 22px 30px;
+}
+#emptyState .ic { display: block; margin: 0 auto 8px; opacity: 0.6; }
