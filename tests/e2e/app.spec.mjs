@@ -55,11 +55,13 @@ test.describe("kniha jízd", () => {
     await page.dispatchEvent("#setPlate", "change");
     await page.click("#generateBtn");
     await expect(page.locator("#genStatus")).toContainText("Vytvořeno", { timeout: 15000 });
-    await expect(page.locator("#tripsBody tr").first()).toBeVisible();
-    expect(await page.locator("#tripsBody tr").count()).toBeGreaterThan(3);
+    // výchozí zobrazení po dnech: den se souhrnem km, rozbalit kliknutím
+    await expect(page.locator("#tripsBody tr.dayRow").first()).toBeVisible();
+    expect(await page.locator("#tripsBody tr.dayRow").count()).toBeGreaterThan(3);
+    await page.locator("#tripsBody tr.dayRow").first().click();
 
     // úprava km → propagace na stejnou trasu + pravidlo
-    const km = page.locator("#tripsBody tr").first().locator("input.km");
+    const km = page.locator("#tripsBody tr:not(.dayRow) input.km").first();
     await km.fill("9,4");
     await km.dispatchEvent("change");
     await expect(page.locator("#toast")).toContainText("Doplněno 10 km");
@@ -84,9 +86,10 @@ test.describe("kniha jízd", () => {
     await page.fill("#dateTo", "2025-06-30");
     await page.dispatchEvent("#dateTo", "change");
     await page.locator("#tripsBody tr").first().waitFor();
-    // thead je skrytý a buňky mají popisky (karty)
+    // thead je skrytý a buňky mají popisky (karty); rozbalit den na jízdy
     await expect(page.locator("#tripsTable thead")).toBeHidden();
-    const label = await page.locator('#tripsBody td[data-l="Km"]').first()
+    await page.locator("#tripsBody tr.dayRow").first().click();
+    const label = await page.locator('#tripsBody tr:not(.dayRow) td[data-l="Km"]').first()
       .evaluate((td) => getComputedStyle(td, "::before").content);
     expect(label).toContain("Km");
     await ctx.close();

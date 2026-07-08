@@ -198,6 +198,49 @@ def _save_undo(conn, op: str, rows=(), created=()):
         "(SELECT id FROM undo_log ORDER BY id DESC LIMIT ?)", (UNDO_DEPTH,))
 
 
+def _km_from_points(conn, start_ts: int, end_ts: int) -> float:
+    """Vzdálenost jízdy podle skutečné GPS stopy – použije se, když aktivita
+    z Googlu vzdálenost nenese. Díky tomu kniha jízd souhlasí s mapou."""
+    prev = None
+    total = 0.0
+    for ts, lat, lon in conn.execute(
+            "SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ? ORDER BY ts",
+            (start_ts, end_ts)):
+        if prev is not None:
+            dt = ts - prev[0]
+            if 0 < dt <= 600:
+                d = haversine_m(prev[1], prev[2], lat, lon)
+                if d / dt <= 70:      # nereálné skoky (chyby GPS) nepočítat
+                    total += d
+        prev = (ts, lat, lon)
+    return total / 1000
+
+
+@router.get("/suggest")
+def suggest():
+    """Našeptávač pro pole knihy jízd: známá místa a používané účely."""
+    with closing(db.connect()) as conn:
+        names = {p["name"] for p in places.load_places(conn)}
+        for col in ("origin", "destination"):
+            for r in conn.execute(
+                    f"SELECT DISTINCT TRIM({col}) v FROM trips "
+                    f"WHERE COALESCE(TRIM({col}),'') <> ''"):
+                names.add(r["v"])
+        for r in conn.execute(
+                "SELECT DISTINCT name FROM visits "
+                "WHERE COALESCE(name,'') <> '' LIMIT 300"):
+            names.add(r["name"])
+        names.update(SEMANTIC_CZ[k] for k in ("HOME", "WORK"))
+        purposes = {"Služební jízda", "Jednání u zákazníka", "Servis",
+                    "Nákup materiálu", "Rozvoz zboží"}
+        for r in conn.execute(
+                "SELECT DISTINCT TRIM(purpose) v FROM trips "
+                "WHERE COALESCE(TRIM(purpose),'') <> ''"):
+            purposes.add(r["v"])
+    return {"places": sorted(n for n in names if n),
+            "purposes": sorted(purposes)}
+
+
 # --------------------------------------------------------------- jízdy
 
 @router.get("")
@@ -233,6 +276,9 @@ def generate(p: GenerateParams):
         skipped_dup = 0
         for a in acts:
             km = (a["distance_m"] or 0) / 1000
+            if km <= 0:
+                # aktivita bez vzdálenosti → spočítat ze skutečné GPS stopy
+                km = _km_from_points(conn, a["start_ts"], a["end_ts"])
             if km < p.min_km:
                 continue
             local = local_dt(a["start_ts"])

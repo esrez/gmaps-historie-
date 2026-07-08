@@ -111,3 +111,22 @@ def test_exports(client, test_db, tmp_path):
     assert xlsx.status_code == 200
     pdf = client.get("/api/trips/export.pdf", params=RANGE)
     assert pdf.status_code == 200 and pdf.content[:5] == b"%PDF-"
+
+
+def test_suggest(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=3)
+    gen(client)
+    s = client.get("/api/trips/suggest").json()
+    assert "Práce" in s["places"] and "Domov" in s["places"]
+    assert "Služební jízda" in s["purposes"]
+
+
+def test_km_fallback_from_gps(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=3)
+    with closing(test_db.connect()) as conn:   # aktivita bez vzdálenosti
+        conn.execute("UPDATE activities SET distance_m = NULL")
+        conn.commit()
+    res = gen(client, round_up=False)
+    assert res["created"] == 3
+    trips = client.get("/api/trips", params=RANGE).json()["trips"]
+    assert all(3.0 < t["km"] < 5.0 for t in trips)   # ~4.2 km dle GPS stopy

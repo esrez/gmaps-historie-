@@ -13,7 +13,19 @@ let rules = [];
 
 const SETTINGS = ["setPlate", "setDriver", "setPurpose", "setWorkdays",
                   "setHourFrom", "setHourTo", "setMinKm", "setRoundUp", "setAutoFill",
-                  "setFilterPlate"];
+                  "setFilterPlate", "setGroupDays"];
+
+// ------------------------------------------------------------ našeptávač
+
+async function loadSuggest() {
+  try {
+    const s = await api("/api/trips/suggest");
+    $("dlPlaces").innerHTML =
+      s.places.map((v) => `<option value="${escapeHtml(v)}">`).join("");
+    $("dlPurposes").innerHTML =
+      s.purposes.map((v) => `<option value="${escapeHtml(v)}">`).join("");
+  } catch (e) { /* nedostupné */ }
+}
 
 // aktivní filtr vozidla (prázdný objekt = všechna vozidla)
 function plateFilter() {
@@ -93,10 +105,10 @@ function buildRow(t, prevMonth) {
       <td data-l="Datum"><input type="date" data-f="date" value="${toDateStr(s)}"></td>
       <td data-l="Odjezd"><input type="time" data-f="dep" value="${toTimeStr(s)}"></td>
       <td data-l="Příjezd"><input type="time" data-f="arr" value="${toTimeStr(e)}"></td>
-      <td data-l="Odkud"><input type="text" data-f="origin" value="${escapeHtml(t.origin)}"></td>
-      <td data-l="Kam"><input type="text" data-f="destination" value="${escapeHtml(t.destination)}"></td>
+      <td data-l="Odkud"><input type="text" list="dlPlaces" data-f="origin" value="${escapeHtml(t.origin)}"></td>
+      <td data-l="Kam"><input type="text" list="dlPlaces" data-f="destination" value="${escapeHtml(t.destination)}"></td>
       <td data-l="Km"><input type="text" inputmode="decimal" class="km" data-f="km" value="${t.km}"></td>
-      <td data-l="Účel"><input type="text" data-f="purpose" value="${escapeHtml(t.purpose)}"></td>
+      <td data-l="Účel"><input type="text" list="dlPurposes" data-f="purpose" value="${escapeHtml(t.purpose)}"></td>
       <td data-l="Soukromá" class="cbCell"><input type="checkbox" data-f="private" ${t.private ? "checked" : ""}></td>
       <td data-l="Vlastní auto" class="cbCell"><input type="checkbox" data-f="excluded" ${t.excluded ? "checked" : ""}></td>
       <td class="delCell"><button class="del" title="Smazat jízdu">✕</button></td>`;
@@ -104,6 +116,75 @@ function buildRow(t, prevMonth) {
     inp.addEventListener("change", () => onCellChange(t, inp)));
   tr.querySelector(".del").addEventListener("click", () => onDelete(t, tr));
   return tr;
+}
+
+// ------------------------------------------------- zobrazení po dnech
+
+const expandedDays = new Set();   // rozbalené dny (přežije překreslení)
+
+function dayGroups() {
+  const groups = [];
+  let cur = null;
+  for (const t of trips) {
+    const date = toDateStr(new Date(t.start_ts * 1000));
+    if (!cur || cur.date !== date) {
+      cur = { date, items: [] };
+      groups.push(cur);
+    }
+    cur.items.push(t);
+  }
+  return groups;
+}
+
+function dayKm(g) {
+  return g.items.reduce((a, t) => a + (t.excluded ? 0 : t.km), 0);
+}
+
+function dayRoute(g) {
+  const seq = [];
+  for (const t of g.items) {
+    if (t.excluded) continue;
+    for (const v of [t.origin, t.destination]) {
+      const s = (v || "").trim();
+      if (s && seq[seq.length - 1] !== s) seq.push(s);
+    }
+  }
+  let s = seq.join(" → ");
+  if (s.length > 72) s = s.slice(0, 69) + "…";
+  return s;
+}
+
+function buildDayRow(g) {
+  const open = expandedDays.has(g.date);
+  const tr = document.createElement("tr");
+  tr.className = "dayRow" + (open ? " open" : "");
+  tr.dataset.date = g.date;
+  const d = new Date(g.date);
+  const excl = g.items.filter((t) => t.excluded).length;
+  tr.innerHTML = `
+    <td colspan="5"><span class="chev">${open ? "▾" : "▸"}</span>
+      <b>${d.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric", year: "numeric" })}</b>
+      <span class="muted">· ${g.items.length} ${g.items.length === 1 ? "jízda" : g.items.length < 5 ? "jízdy" : "jízd"}
+      ${escapeHtml(dayRoute(g))}</span></td>
+    <td class="num" data-l="Km"><b>${dayKm(g).toLocaleString("cs", { maximumFractionDigits: 1 })}</b></td>
+    <td colspan="4" class="muted dayNote">${excl ? excl + "× vlastní auto" : ""}</td>`;
+  tr.addEventListener("click", () => {
+    if (open) expandedDays.delete(g.date);
+    else expandedDays.add(g.date);
+    renderTable();
+  });
+  return tr;
+}
+
+function refreshDayHeader(t) {
+  const date = toDateStr(new Date(t.start_ts * 1000));
+  const g = dayGroups().find((x) => x.date === date);
+  const tr = $("tripsBody").querySelector(`tr.dayRow[data-date="${date}"]`);
+  if (!g || !tr) return;
+  tr.querySelector("td.num b").textContent =
+    dayKm(g).toLocaleString("cs", { maximumFractionDigits: 1 });
+  const excl = g.items.filter((x) => x.excluded).length;
+  tr.querySelector(".dayNote").textContent = excl ? excl + "× vlastní auto" : "";
 }
 
 // Dlouhá období se vykreslují po dávkách – tabulka s tisíci řádky by jinak
@@ -114,23 +195,38 @@ function renderTable(totalKm) {
   const body = $("tripsBody");
   body.innerHTML = "";
   renderObserver?.disconnect();
+  const grouped = $("setGroupDays").checked;
 
+  // jednotný dávkový vykreslovač: položka = den (skupina) nebo jízda
+  const units = grouped ? dayGroups() : trips;
+  const chunkSize = grouped ? 40 : RENDER_CHUNK;
   let rendered = 0;
+
+  const appendUnit = (frag, i) => {
+    if (grouped) {
+      const g = units[i];
+      frag.appendChild(buildDayRow(g));
+      if (expandedDays.has(g.date)) {
+        for (const t of g.items) frag.appendChild(buildRow(t, ""));
+      }
+    } else {
+      const prev = i > 0
+        ? `${new Date(units[i - 1].start_ts * 1000).getFullYear()}-${new Date(units[i - 1].start_ts * 1000).getMonth()}`
+        : "";
+      frag.appendChild(buildRow(units[i], prev));
+    }
+  };
+
   const renderChunk = () => {
     const frag = document.createDocumentFragment();
-    const end = Math.min(rendered + RENDER_CHUNK, trips.length);
-    for (; rendered < end; rendered++) {
-      const prev = rendered > 0
-        ? `${new Date(trips[rendered - 1].start_ts * 1000).getFullYear()}-${new Date(trips[rendered - 1].start_ts * 1000).getMonth()}`
-        : "";
-      frag.appendChild(buildRow(trips[rendered], prev));
-    }
+    const end = Math.min(rendered + chunkSize, units.length);
+    for (; rendered < end; rendered++) appendUnit(frag, rendered);
     body.appendChild(frag);
-    if (rendered < trips.length) sentinel();
+    if (rendered < units.length) sentinel();
   };
   const sentinel = () => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="10" class="muted" style="text-align:center">… načítám dalších ${Math.min(RENDER_CHUNK, trips.length - rendered)} jízd</td>`;
+    tr.innerHTML = `<td colspan="10" class="muted" style="text-align:center">… načítám další</td>`;
     body.appendChild(tr);
     renderObserver = new IntersectionObserver((entries) => {
       if (entries.some((en) => en.isIntersecting)) {
@@ -144,6 +240,8 @@ function renderTable(totalKm) {
   renderChunk();
   updateTotal(totalKm);
 }
+
+$("setGroupDays").addEventListener("change", () => renderTable());
 
 async function onCellChange(t, inp) {
   const f = inp.dataset.f;
@@ -186,6 +284,8 @@ async function onCellChange(t, inp) {
       return; // propagate překreslí tabulku i pravidla
     }
     updateTotal();
+    refreshDayHeader(t);
+    if (f === "origin" || f === "destination" || f === "purpose") loadSuggest();
   } catch (e) {
     toast("Uložení selhalo: " + e.message, "error");
   }
@@ -396,6 +496,7 @@ $("addBtn").addEventListener("click", async () => {
   });
   trips.push(t);
   trips.sort((a, b) => a.start_ts - b.start_ts);
+  expandedDays.add(toDateStr(new Date(t.start_ts * 1000)));   // rovnou k editaci
   renderTable();
 });
 
@@ -450,4 +551,5 @@ $("undoBtn").addEventListener("click", async () => {
 
 loadSettings();
 loadRules();
+loadSuggest();
 setMonthPreset("thisMonth");

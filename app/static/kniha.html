@@ -35,7 +35,7 @@
       <summary>Vozidlo a řidič</summary>
       <label>SPZ vozidla <input type="text" id="setPlate" placeholder="1AB 2345"></label>
       <label>Řidič <input type="text" id="setDriver" placeholder="Jméno Příjmení"></label>
-      <label>Výchozí účel <input type="text" id="setPurpose" value="Služební jízda"></label>
+      <label>Výchozí účel <input type="text" id="setPurpose" list="dlPurposes" value="Služební jízda"></label>
       <label class="check"><input type="checkbox" id="setFilterPlate">
         Zobrazovat jen jízdy tohoto vozidla</label>
       <p class="muted">Tachometr a při zapnutém filtru i tabulka a exporty se
@@ -65,8 +65,8 @@
          Pravidlo vznikne i automaticky při zadání km v tabulce.</p>
       <ul id="rulesList"></ul>
       <div class="row">
-        <input type="text" id="ruleOrigin" placeholder="Odkud (nepovinné)">
-        <input type="text" id="ruleDest" placeholder="Kam">
+        <input type="text" id="ruleOrigin" list="dlPlaces" placeholder="Odkud (nepovinné)">
+        <input type="text" id="ruleDest" list="dlPlaces" placeholder="Kam">
         <input type="number" id="ruleKm" placeholder="km" min="0" step="1">
       </div>
       <button id="ruleAddBtn">＋ Přidat pravidlo</button>
@@ -98,7 +98,11 @@
 
   <main id="knihaMain">
     <div id="knihaAlerts"></div>
-    <div id="tripsSummary" class="muted"></div>
+    <div class="row" id="viewBar">
+      <div id="tripsSummary" class="muted"></div>
+      <label class="check" style="margin-left:auto">
+        <input type="checkbox" id="setGroupDays" checked> Zobrazovat po dnech</label>
+    </div>
     <div id="tableWrap">
       <table id="tripsTable">
         <thead>
@@ -120,6 +124,8 @@
   </main>
 </div>
 
+<datalist id="dlPlaces"></datalist>
+<datalist id="dlPurposes"></datalist>
 <script type="module" src="/static/kniha.js"></script>
 </body>
 </html>

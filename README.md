@@ -65,7 +65,11 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   použití pravidel i smazání období)
 - **Vlastní názvy míst** – místa lze pojmenovat (zákazník, adresa…) místo
   souřadnic; názvy se použijí v top místech, na mapě, v hledání i v knize
-  jízd a jdou kdykoli upravit (Home/Work se překládá na Domov/Práce)
+  jízd a jdou kdykoli upravit (Home/Work se překládá na Domov/Práce);
+  velké objekty lze obkreslit **polygonem** a vrstva „Moje místa" je ukazuje
+- **Kniha jízd po dnech** – řádek dne se součtem km a trasou, rozbalení na
+  editovatelné jízdy; pole s **našeptávačem** míst a účelů; km bez údaje od
+  Googlu se dopočítají ze skutečné GPS stopy, takže kniha souhlasí s mapou
 - **Kalendářový přehled roku** – mřížka všech dnů obarvená podle najetých km
   (šedě dny se záznamem bez jízdy); kliknutí na den ho rovnou přehraje
 - **Mobilní ovládání** – na telefonu se kniha jízd zobrazuje jako karty,

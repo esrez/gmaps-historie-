@@ -118,6 +118,21 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
 }
 #tripsTable .del:hover { color: var(--accent-red); }
 #tripsTable tr.monthStart td { border-top: 2px solid var(--baseline); }
+
+#tripsTable tr.dayRow {
+  cursor: pointer;
+  background: var(--page);
+  user-select: none;
+}
+#tripsTable tr.dayRow:hover td { background: var(--grid); }
+#tripsTable tr.dayRow td {
+  padding: 7px 8px;
+  border-top: 1px solid var(--baseline);
+  font-size: 13px;
+}
+#tripsTable tr.dayRow .chev { color: var(--muted); margin-right: 2px; }
+#tripsTable tr.dayRow.open td { border-bottom: 1px dashed var(--baseline); }
+#viewBar { margin-bottom: 8px; }
 #tripsTable tr.excludedRow { opacity: 0.45; }
 @keyframes rowSaved {
   0% { background: rgba(12, 163, 12, 0.25); }
