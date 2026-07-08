@@ -15,9 +15,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
@@ -65,8 +69,9 @@ def make_package(release: str | None = None) -> Path:
         zf.writestr("version.json", json.dumps(manifest, indent=2, ensure_ascii=False))
 
     shutil.copy2(out_zip, data_zip)
-    print(f"Vytvořeno: {out_zip} ({out_zip.stat().st_size // 1024} KB)")
-    print(f"Zkopírováno: {data_zip}")
+    size_kb = out_zip.stat().st_size // 1024
+    print(f"Created: {out_zip} ({size_kb} KB)")
+    print(f"Copied: {data_zip}")
     return out_zip
 
 

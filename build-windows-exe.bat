@@ -4,7 +4,13 @@ rem Spustte na Windows s nainstalovanym Pythonem. Vysledek: dist\GMapsHistorie.e
 setlocal
 cd /d "%~dp0"
 
-where py >nul 2>nul && (set "PY=py") || (set "PY=python")
+rem GitHub Actions: setup-python prida python 3.12 do PATH; py launcher muze vybrat jinou verzi
+if defined GITHUB_ACTIONS (
+  set "PY=python"
+) else (
+  where py >nul 2>nul && (set "PY=py") || (set "PY=python")
+)
+set PYTHONUTF8=1
 
 if not exist ".venv-build\Scripts\python.exe" (
   echo Vytvarim build prostredi...

@@ -22,6 +22,8 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      PYTHONUTF8: "1"
 
     steps:
       - uses: actions/checkout@v4
