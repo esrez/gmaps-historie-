@@ -84,9 +84,15 @@ období. Umožňuje:
   názvu);
 - **klik na místo** ho ukáže na mapě (u polygonu přiblíží celý areál)
   a rozbalí **jednotlivé pobyty** – u každého datum, čas od–do a délku;
-- **přejmenovat** místo přímo v seznamu (tužka → pole s uložením) a **smazat**
-  (koš). Změna se hned promítne všude, kde se místo zobrazuje.
+  v záhlaví detailu se navíc dopočítá **adresa** místa (ze souřadnic);
+- **upravit** místo přímo v seznamu (tužka): změna názvu, u kruhových míst
+  **okruhu v metrech** (s živým náhledem na mapě) a **vymezené oblasti** –
+  tlačítko „Vymezit / Překreslit oblast na mapě" spustí obkreslení nového
+  polygonu, „Zpět na kruh" oblast zruší;
+- **smazat** místo (koš). Změna se hned promítne všude, kde se místo zobrazuje.
 
+Pole pro název má **našeptávač** (dosud použité názvy míst i nabídnutá adresa
+místa). Na mapě se po najetí na místo v **bublině** zobrazí i jeho adresa.
 Každá karta rozlišuje, zda jde o **kruh** (okruh kolem bodu) nebo **oblast**
 (polygon). Místa bez pobytu v období jsou označena jako „bez pobytu".
 

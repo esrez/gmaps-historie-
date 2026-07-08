@@ -236,12 +236,13 @@ def upsert_place(p: PlaceIn):
 class PlacePatch(BaseModel):
     name: str | None = None
     radius_m: float | None = None
+    polygon: list[list[float]] | None = None   # [[lat,lon],…]; [] zruší → kruh
 
 
 @router.patch("/{place_id}")
 def patch_place(place_id: int, p: PlacePatch):
-    """Úprava konkrétního místa podle id (přejmenování, změna okruhu) –
-    spolehlivé z přehledu míst, nezávisí na blízkosti jako upsert."""
+    """Úprava konkrétního místa podle id: přejmenování, změna okruhu i úprava
+    vyhrazené oblasti (polygonu). Prázdný polygon oblast zruší (zpět na kruh)."""
     sets, args = [], []
     if p.name is not None:
         name = p.name.strip()
@@ -254,6 +255,18 @@ def patch_place(place_id: int, p: PlacePatch):
             raise HTTPException(400, "Okruh musí být kladný")
         sets.append("radius_m=?")
         args.append(p.radius_m)
+    if p.polygon is not None:
+        if p.polygon == []:                       # zrušení oblasti → zůstane kruh
+            sets.append("polygon=NULL")
+        else:
+            if len(p.polygon) < 3:
+                raise HTTPException(400, "Oblast potřebuje alespoň 3 body")
+            poly = [[round(a, 6), round(b, 6)] for a, b in p.polygon]
+            # střed pro popisek a předvýběr přepočítat na těžiště oblasti
+            clat = round(sum(v[0] for v in poly) / len(poly), 6)
+            clon = round(sum(v[1] for v in poly) / len(poly), 6)
+            sets += ["polygon=?", "lat=?", "lon=?"]
+            args += [json.dumps(poly), clat, clon]
     if not sets:
         raise HTTPException(400, "Nic k úpravě")
     with closing(db.connect()) as conn:

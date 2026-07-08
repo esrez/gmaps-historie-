@@ -57,7 +57,7 @@
       <section>
         <h2>Hledání místa</h2>
         <div class="row">
-          <input type="search" id="searchInput" placeholder="Obec, adresa, název místa…">
+          <input type="search" id="searchInput" list="dlPlaceNames" placeholder="Obec, adresa, název místa…">
           <button id="searchBtn" title="Hledat"><span data-icon="search"></span></button>
         </div>
         <div id="searchResults"></div>
@@ -281,6 +281,7 @@
 <div id="tooltip" hidden></div>
 
 <datalist id="dlPlaces"></datalist>
+<datalist id="dlPlaceNames"></datalist>
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/leaflet-heat.js"></script>
 <script src="/static/vendor/leaflet.markercluster.js"></script>

@@ -406,6 +406,57 @@ button:disabled { opacity: 0.5; cursor: default; }
 #placesEmpty { padding: 18px 6px; text-align: center; color: var(--muted); }
 #placesEmpty .ic { display: block; margin: 0 auto 6px; opacity: 0.5; }
 
+/* adresa místa (reverzní geokódování) v detailu karty */
+.placeAddr {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 5px 10px 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.placeAddr .ic { flex: 0 0 auto; margin-top: 1px; }
+
+/* editační panel místa (název, okruh, oblast) */
+.placeEditPanel {
+  border-top: 1px dashed var(--baseline);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.placeEditPanel .peRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.placeEditPanel .peRow input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--series-1);
+  border-radius: 6px;
+  padding: 5px 7px;
+}
+.placeEditPanel .peRow input.peRadius { flex: 0 0 90px; }
+.placeEditPanel .peActions, .placeEditPanel .peSave { display: flex; gap: 6px; }
+.placeEditPanel .peActions button, .placeEditPanel .peCancel {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.placeEditPanel .peSave .peOk { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+
+/* adresa v bublině na mapě */
+.tipAddr { color: var(--muted); font-size: 11px; display: inline-block; max-width: 240px; }
+
 .clock { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; }
 
 input[type="search"] {
