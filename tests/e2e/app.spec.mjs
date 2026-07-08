@@ -59,24 +59,28 @@ test.describe("mapa", () => {
     await expect(page.locator('#panelHead a.navlink')).toHaveAttribute("href", "/kniha");
   });
 
-  test("moje místa: přehled, pobyty a přejmenování", async ({ page }) => {
+  test("moje místa: přehled, pobyty, přejmenování a okruh", async ({ page }) => {
     await page.goto("/");
     // pojmenovat místo přes API, ať máme co zobrazit
     await page.request.post("/api/places",
-      { data: { lat: 50.1, lon: 14.39, name: "Zákazník Test" } });
+      { data: { lat: 50.1, lon: 14.39, name: "Zákazník Test", radius_m: 250 } });
     await page.click('#tabs [data-tab="mista"]');
     const card = page.locator(".placeCard").filter({ hasText: "Zákazník Test" });
     await expect(card).toBeVisible();
     // rozbalit → seznam pobytů
     await card.locator(".placeHead").click();
     await expect(card.locator(".placeBody li").first()).toBeVisible();
-    // přejmenovat inline (název je pak v hodnotě inputu, proto cílíme globálně)
+    // editace: přejmenování + změna okruhu (panel; cílíme globálně)
     await card.locator(".pact.edit").click();
-    await page.locator("#placesList .placeEdit input").fill("Zákazník Přejmenovaný");
-    await page.locator("#placesList .pact.save").click();
-    await expect(page.locator("#toast")).toContainText("Název upraven");
+    await page.locator("#placesList .peName").fill("Zákazník Přejmenovaný");
+    await page.locator("#placesList .peRadius").fill("500");
+    await page.locator("#placesList .peOk").click();
+    await expect(page.locator("#toast")).toContainText("Místo upraveno");
     await expect(page.locator(".placeCard").filter({ hasText: "Zákazník Přejmenovaný" }))
       .toBeVisible();
+    // okruh se opravdu uložil
+    const places = await (await page.request.get("/api/places")).json();
+    expect(places.places.find((p) => p.name === "Zákazník Přejmenovaný").radius_m).toBe(500);
   });
 
   test("exporty odpovídají", async ({ page }) => {

@@ -458,8 +458,15 @@ async function renderMyPlaces() {
     const info = s && s.count
       ? `${s.count}×, ${(s.secs / 3600).toLocaleString("cs", { maximumFractionDigits: 1 })} h ve zvoleném období`
       : "ve zvoleném období bez pobytu";
-    shape.bindTooltip(`<b>${escapeHtml(p.name)}</b><br>${info}<br><i>kliknutím zobrazíte pobyty</i>`,
-      { sticky: true });
+    const base = `<b>${escapeHtml(p.name)}</b><br>${info}`;
+    const tail = "<br><i>kliknutím zobrazíte pobyty</i>";
+    shape.bindTooltip(base + tail, { sticky: true });
+    // adresa (reverzní geokódování) se doplní do bubliny až při najetí
+    shape.on("tooltipopen", async () => {
+      const addr = await reverseGeocode(p.lat, p.lon);
+      if (addr) shape.setTooltipContent(
+        `${base}<br><span class="tipAddr">${escapeHtml(addr)}</span>${tail}`);
+    });
     shape.on("click", (ev) => {
       L.DomEvent.stop(ev);
       whenIWasHere(p.lat, p.lon, p.name);
@@ -479,6 +486,50 @@ function fmtDur(secs) {
   if (h && m) return `${h} h ${m} min`;
   if (h) return `${h} h`;
   return `${m} min`;
+}
+
+// ---------- reverzní geokódování (souřadnice → adresa) s mezipamětí ----------
+// Šetrné k Nominatim: výsledky se drží v localStorage a stahují jen na vyžádání.
+let geoStore = {};
+try { geoStore = JSON.parse(localStorage.getItem("revgeo") || "{}"); } catch (e) { geoStore = {}; }
+const geoInflight = new Map();
+
+async function reverseGeocode(lat, lon) {
+  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+  if (key in geoStore) return geoStore[key];
+  if (geoInflight.has(key)) return geoInflight.get(key);
+  const pr = (async () => {
+    try {
+      const r = await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2" +
+        `&lat=${lat}&lon=${lon}&accept-language=cs&zoom=18`);
+      const d = await r.json();
+      const addr = d.display_name || null;
+      geoStore[key] = addr;
+      try { localStorage.setItem("revgeo", JSON.stringify(geoStore)); } catch (e) { /* plno */ }
+      return addr;
+    } catch (e) { return null; }
+  })();
+  geoInflight.set(key, pr);
+  return pr;
+}
+
+// ---------- našeptávač názvů míst (datalist sdílený všemi poli) ----------
+const suggestSet = new Set();
+
+function addSuggestion(value) {
+  const v = (value || "").trim();
+  if (!v || suggestSet.has(v)) return;
+  suggestSet.add(v);
+  const opt = document.createElement("option");
+  opt.value = v;
+  $("dlPlaceNames").appendChild(opt);
+}
+
+async function loadPlaceSuggest() {
+  try {
+    const s = await api("/api/trips/suggest");
+    for (const v of s.places) addSuggestion(v);
+  } catch (e) { /* nedostupné */ }
 }
 
 async function loadPlacesTab() {
@@ -553,21 +604,34 @@ $("placesList").addEventListener("click", async (ev) => {
     loadPlacesTab();
     return;
   }
-  if (ev.target.closest(".placeEdit")) return;   // klik do editačního pole
+  if (ev.target.closest(".placeEditPanel")) return;   // klik uvnitř editace
 
   // klik na kartu: přepnout detail s pobyty + doletět na mapě
   if (p.polygon) map.flyToBounds(p.polygon, { maxZoom: 16, duration: 0.7 });
   else map.flyTo([p.lat, p.lon], 15, { duration: 0.7 });
   const open = card.querySelector(".placeBody");
-  if (open) { open.remove(); return; }
+  if (open) { open.remove(); card.querySelector(".placeAddr")?.remove(); return; }
   await expandPlace(card, id);
 });
 
 async function expandPlace(card, id) {
+  const p = placesData.find((x) => x.id === id);
   const body = document.createElement("div");
   body.className = "placeBody";
   body.innerHTML = '<p class="muted">Načítám pobyty…</p>';
   card.appendChild(body);
+  // adresa místa (reverzní geokódování) v záhlaví detailu
+  if (p) {
+    const addrEl = document.createElement("div");
+    addrEl.className = "placeAddr muted";
+    addrEl.innerHTML = `${icon("pin", 12)} zjišťuji adresu…`;
+    reverseGeocode(p.lat, p.lon).then((addr) => {
+      addrEl.innerHTML = `${icon("pin", 12)} ${addr ? escapeHtml(addr)
+        : `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`}`;
+      addSuggestion(addr);
+    });
+    card.insertBefore(addrEl, body);
+  }
   try {
     const d = await api(`/api/places/${id}/stays`, currentRange());
     if (!d.stays.length) {
@@ -584,34 +648,88 @@ async function expandPlace(card, id) {
   }
 }
 
+let radiusPreview = null;
+
+function clearRadiusPreview() {
+  if (radiusPreview) { map.removeLayer(radiusPreview); radiusPreview = null; }
+}
+
 function startPlaceEdit(card, p) {
-  const meta = card.querySelector(".pmeta");
-  if (card.querySelector(".placeEdit")) return;
-  const orig = meta.innerHTML;
-  meta.innerHTML =
-    `<div class="placeEdit"><input type="text" value="${escapeHtml(p.name)}">` +
-    `<button class="pact save" title="Uložit">${icon("check", 14)}</button>` +
-    `<button class="pact cancel" title="Zrušit">${icon("x", 14)}</button></div>`;
-  const input = meta.querySelector("input");
-  input.focus();
-  input.select();
-  const cancel = () => { meta.innerHTML = orig; };
+  if (card.querySelector(".placeEditPanel")) return;
+  card.querySelector(".placeBody")?.remove();   // zavřít případný detail pobytů
+  const circle = !p.polygon;
+  const panel = document.createElement("div");
+  panel.className = "placeEditPanel";
+  panel.innerHTML =
+    `<label class="peRow">Název<input class="peName" type="text" list="dlPlaceNames" value="${escapeHtml(p.name)}"></label>` +
+    (circle
+      ? `<label class="peRow">Okruh (m)<input class="peRadius" type="number" min="20" step="10" value="${Math.round(p.radius_m)}"></label>`
+      : "") +
+    `<div class="peActions">` +
+      `<button type="button" class="peArea">${icon("polygon", 13)} ${p.polygon ? "Překreslit oblast" : "Vymezit oblast na mapě"}</button>` +
+      (p.polygon ? `<button type="button" class="peToCircle">${icon("refresh", 13)} Zpět na kruh</button>` : "") +
+    `</div>` +
+    `<div class="peSave"><button type="button" class="primary peOk">${icon("check", 13)} Uložit</button>` +
+    `<button type="button" class="peCancel">Zrušit</button></div>`;
+  card.appendChild(panel);
+  const nameI = panel.querySelector(".peName");
+  const radiusI = panel.querySelector(".peRadius");
+  nameI.focus();
+  nameI.select();
+
+  // adresu místa nabídnout jako možný název (našeptávač)
+  reverseGeocode(p.lat, p.lon).then((addr) => { if (addr) addSuggestion(addr); });
+
+  // živý náhled okruhu při psaní
+  if (radiusI) {
+    const preview = () => {
+      clearRadiusPreview();
+      const rv = Number(radiusI.value);
+      if (rv >= 20) {
+        radiusPreview = L.circle([p.lat, p.lon], { radius: rv, color: css("--series-2"),
+          weight: 1.5, dashArray: "4 4", fillOpacity: 0.06 }).addTo(map);
+      }
+    };
+    radiusI.addEventListener("input", preview);
+  }
+
+  const close = () => { clearRadiusPreview(); panel.remove(); };
   const save = async () => {
-    const name = input.value.trim();
+    const name = nameI.value.trim();
     if (!name) { toast("Název nesmí být prázdný.", "error"); return; }
-    if (name === p.name) { cancel(); return; }
+    const body = {};
+    if (name !== p.name) body.name = name;
+    if (radiusI) {
+      const rv = Number(radiusI.value);
+      if (!(rv >= 20)) { toast("Okruh musí být alespoň 20 m.", "error"); return; }
+      if (Math.round(rv) !== Math.round(p.radius_m)) body.radius_m = rv;
+    }
+    if (!Object.keys(body).length) { close(); return; }
     try {
-      await apiFetch(`/api/places/${p.id}`, { method: "PATCH", body: { name } });
-      toast("Název upraven.", "success");
+      await apiFetch(`/api/places/${p.id}`, { method: "PATCH", body });
+      toast("Místo upraveno.", "success");
+      close();
       renderMyPlaces();
       loadPlacesTab();
     } catch (e) { toast("Úprava selhala: " + e.message, "error"); }
   };
-  meta.querySelector(".save").addEventListener("click", save);
-  meta.querySelector(".cancel").addEventListener("click", cancel);
-  input.addEventListener("keydown", (e) => {
+
+  panel.querySelector(".peOk").addEventListener("click", save);
+  panel.querySelector(".peCancel").addEventListener("click", close);
+  panel.querySelector(".peArea").addEventListener("click", () => { close(); startAreaRedraw(p); });
+  panel.querySelector(".peToCircle")?.addEventListener("click", async () => {
+    if (!confirm("Zrušit vymezenou oblast? Místo se vrátí na kruhový okruh.")) return;
+    try {
+      await apiFetch(`/api/places/${p.id}`, { method: "PATCH", body: { polygon: [] } });
+      toast("Oblast zrušena, místo je nyní kruhové.", "success");
+      close();
+      renderMyPlaces();
+      loadPlacesTab();
+    } catch (e) { toast("Úprava selhala: " + e.message, "error"); }
+  });
+  nameI.addEventListener("keydown", (e) => {
     if (e.key === "Enter") save();
-    else if (e.key === "Escape") cancel();
+    else if (e.key === "Escape") close();
   });
 }
 
@@ -620,11 +738,13 @@ $("placeSort").addEventListener("change", drawPlacesList);
 
 // ------------------------------------------- kreslení oblasti (polygon)
 
-const drawState = { active: false, pts: [], preview: null };
+const drawState = { active: false, pts: [], preview: null, editPlaceId: null, editName: "" };
 
 function drawCleanup() {
   drawState.active = false;
   drawState.pts = [];
+  drawState.editPlaceId = null;
+  drawState.editName = "";
   if (drawState.preview) { map.removeLayer(drawState.preview); drawState.preview = null; }
   locLayer.clearLayers();
   map.getContainer().style.cursor = "";
@@ -632,14 +752,36 @@ function drawCleanup() {
   $("drawPolyBtn").innerHTML = `${icon("polygon")} Pojmenovat oblast (polygon)`;
 }
 
-$("drawPolyBtn").addEventListener("click", () => {
-  if (drawState.active) { finishPolygonDraw(); return; }
+function beginDraw() {
   drawState.active = true;
+  drawState.pts = [];
   map.doubleClickZoom.disable();
   map.getContainer().style.cursor = "crosshair";
   $("drawPolyBtn").innerHTML = `${icon("check")} Dokončit oblast`;
-  toast("Klikáním do mapy obkreslete oblast (min. 3 body), pak Dokončit. Esc zruší.");
+  toast(drawState.editPlaceId
+    ? `Obkreslete novou oblast pro „${drawState.editName}", pak Dokončit (dvojklik). Esc zruší.`
+    : "Klikáním do mapy obkreslete oblast (min. 3 body), pak Dokončit. Esc zruší.");
+}
+
+$("drawPolyBtn").addEventListener("click", () => {
+  if (drawState.active) { finishPolygonDraw(); return; }
+  drawState.editPlaceId = null;   // nová oblast
+  beginDraw();
 });
+
+// Spustí překreslení oblasti existujícího místa (z editace v záložce Místa).
+function startAreaRedraw(p) {
+  document.querySelector('#tabs [data-tab="mapa"]').click();   // cleanup proběhne dřív, než začneme
+  if (p.polygon) map.flyToBounds(p.polygon, { maxZoom: 16, duration: 0.6 });
+  else map.flyTo([p.lat, p.lon], 16, { duration: 0.6 });
+  if (p.polygon) {   // ukázat stávající oblast jako vodítko
+    L.polygon(p.polygon, { color: css("--series-2"), weight: 1.5, dashArray: "2 4",
+                           fill: false, interactive: false }).addTo(locLayer);
+  }
+  drawState.editPlaceId = p.id;
+  drawState.editName = p.name;
+  beginDraw();
+}
 
 function addDrawVertex(lat, lng) {
   drawState.pts.push([lat, lng]);
@@ -656,14 +798,20 @@ async function finishPolygonDraw() {
     toast("Oblast potřebuje alespoň 3 body.", "error");
     return;
   }
-  const name = prompt("Název oblasti (zákazník, sklad, areál…):");
-  if (name === null || !name.trim()) { drawCleanup(); return; }
   try {
-    await apiFetch("/api/places", {
-      method: "POST",
-      body: { name: name.trim(), polygon: drawState.pts },
-    });
-    toast(`Oblast pojmenována: ${name.trim()}`, "success");
+    if (drawState.editPlaceId) {
+      await apiFetch(`/api/places/${drawState.editPlaceId}`, {
+        method: "PATCH", body: { polygon: drawState.pts },
+      });
+      toast(`Oblast upravena: ${drawState.editName}`, "success");
+    } else {
+      const name = prompt("Název oblasti (zákazník, sklad, areál…):");
+      if (name === null || !name.trim()) { drawCleanup(); return; }
+      await apiFetch("/api/places", {
+        method: "POST", body: { name: name.trim(), polygon: drawState.pts },
+      });
+      toast(`Oblast pojmenována: ${name.trim()}`, "success");
+    }
   } catch (e) {
     toast("Uložení oblasti selhalo: " + e.message, "error");
   }
@@ -1424,6 +1572,7 @@ async function showAutoImportLog() {
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   showVersion();
   loadBackups();
+  loadPlaceSuggest();
   showAutoImportLog();
   renderCalendar();
   loadAll();

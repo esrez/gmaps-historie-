@@ -244,6 +244,29 @@ def test_place_patch_rename(client, test_db, tmp_path):
     assert client.patch("/api/places/9999", json={"name": "x"}).status_code == 404
 
 
+def test_place_patch_area(client, test_db, tmp_path):
+    """Editace vyhrazeného prostoru: okruh i polygon, včetně zrušení oblasti."""
+    seed(test_db, tmp_path)
+    pid = client.post("/api/places",
+                      json={"lat": 50.1, "lon": 14.39, "name": "Areál", "radius_m": 250}
+                      ).json()["places"][0]["id"]
+    get = lambda: next(p for p in client.get("/api/places").json()["places"] if p["id"] == pid)  # noqa: E731
+    # změna okruhu
+    client.patch(f"/api/places/{pid}", json={"radius_m": 600})
+    assert get()["radius_m"] == 600
+    assert client.patch(f"/api/places/{pid}", json={"radius_m": 0}).status_code == 400
+    # nastavení oblasti (polygon) – centroid se přepočítá
+    poly = [[50.098, 14.386], [50.102, 14.386], [50.102, 14.394], [50.098, 14.394]]
+    client.patch(f"/api/places/{pid}", json={"polygon": poly})
+    p = get()
+    assert p["polygon"] and len(p["polygon"]) == 4
+    assert abs(p["lat"] - 50.1) < 1e-6 and abs(p["lon"] - 14.39) < 1e-6
+    assert client.patch(f"/api/places/{pid}", json={"polygon": [[0, 0], [1, 1]]}).status_code == 400
+    # zrušení oblasti → zpět kruh
+    client.patch(f"/api/places/{pid}", json={"polygon": []})
+    assert get()["polygon"] is None
+
+
 def test_cities_resolver():
     from app.cities import city_for
     assert city_for(49.19, 16.61) == "Brno"
