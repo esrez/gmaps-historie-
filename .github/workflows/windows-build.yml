@@ -58,7 +58,8 @@ jobs:
           "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Smoke test update package
-        run: python scripts/smoke_test.py --package dist/GMapsHistorie-update.zip
+        shell: cmd
+        run: .venv-build\Scripts\python.exe scripts\smoke_test.py --package dist\GMapsHistorie-update.zip
         env:
           TZ: Europe/Prague
 
