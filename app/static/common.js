@@ -33,9 +33,21 @@ export function initThemeToggle(btn) {
   });
 }
 
-/* PWA: registrace service workeru (offline UI, instalace na plochu). */
+/* PWA: registrace service workeru (offline UI, instalace na plochu).
+   updateViaCache:"none" + reload při převzetí novým SW zajistí, že se po
+   nasazení nové verze prohlížeč sám přepne na aktuální kód (jinak by starý
+   SW mohl donekonečna servírovat zastaralé soubory z mezipaměti). */
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").catch(() => { /* http bez TLS */ });
+  const hadController = !!navigator.serviceWorker.controller;
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || refreshing) return;   // první převzetí není aktualizace
+    refreshing = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+    .then((reg) => reg.update())
+    .catch(() => { /* http bez TLS */ });
 }
 
 export function toDateStr(d) {
