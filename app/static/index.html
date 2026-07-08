@@ -103,6 +103,23 @@
         <button id="drawPolyBtn" title="Klikáním do mapy obkreslíte areál (zákazník, sklad…) a pojmenujete ho – přesnější než kruh">
           <span data-icon="polygon"></span> Pojmenovat oblast (polygon)</button>
       </section>
+
+      <section>
+        <h2>Porovnání období</h2>
+        <label class="check"><input type="checkbox" id="layerCompare">
+          Zobrazit druhé období pro srovnání</label>
+        <div id="comparePanel" hidden>
+          <div class="row">
+            <label>Od <input type="date" id="cmpFrom"></label>
+            <label>Do <input type="date" id="cmpTo"></label>
+          </div>
+          <div class="presets">
+            <button data-cmp="prevYear">Stejné období loni</button>
+          </div>
+          <p class="muted">Druhé období se vykreslí <b style="color:var(--series-3)">oranžově</b>
+             přes hlavní modré trasy – hodí se na srovnání „letos vs. loni".</p>
+        </div>
+      </section>
     </div>
 
     <!-- ===================== záložka STATISTIKY ===================== -->
@@ -116,6 +133,7 @@
           <p id="monthlyNote" class="muted"></p>
         </div>
         <div id="byType"></div>
+        <div id="records"></div>
         <h3>Nejnavštěvovanější místa</h3>
         <ol id="topPlaces"></ol>
       </section>

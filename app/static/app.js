@@ -78,6 +78,7 @@ const visitLayer = L.markerClusterGroup({
   showCoverageOnHover: false,
 }).addTo(map);
 const playLayer = L.layerGroup().addTo(map);
+const compareLayer = L.layerGroup().addTo(map);
 const locLayer = L.layerGroup().addTo(map);
 const canvasRenderer = L.canvas({ padding: 0.3 });
 let heatLayer = null;
@@ -324,6 +325,67 @@ function renderTracks() {
     }
   });
 }
+
+// ------------------------------------------------- porovnání dvou období
+
+let compareAbort = null;
+
+function compareRange() {
+  const f = $("cmpFrom").value, t = $("cmpTo").value;
+  return {
+    from_ts: f ? dateToTs(f, false) : null,
+    to_ts: t ? dateToTs(t, true) : null,
+  };
+}
+
+async function loadCompare() {
+  compareLayer.clearLayers();
+  if (!$("layerCompare").checked) return;
+  const r = compareRange();
+  if (r.from_ts === null || r.to_ts === null) return;
+  compareAbort?.abort();
+  const ctrl = new AbortController();
+  compareAbort = ctrl;
+  try {
+    const pts = await api("/api/points",
+      { params: { ...r, limit: 60000 }, signal: ctrl.signal });
+    const color = css("--series-3");
+    for (const seg of splitSegments(pts.points)) {
+      L.polyline(seg.map((p) => [p[1], p[2]]), {
+        color, weight: 2.5, opacity: 0.85, dashArray: "5 4", interactive: false,
+      }).addTo(compareLayer);
+    }
+  } catch (e) {
+    if (e.name !== "AbortError") toast("Porovnání se nenačetlo: " + e.message, "error");
+  } finally {
+    if (compareAbort === ctrl) compareAbort = null;
+  }
+}
+
+$("layerCompare").addEventListener("change", () => {
+  const on = $("layerCompare").checked;
+  $("comparePanel").hidden = !on;
+  if (on && !$("cmpFrom").value) setComparePreset("prevYear");
+  else loadCompare();
+});
+["cmpFrom", "cmpTo"].forEach((id) =>
+  $(id).addEventListener("change", loadCompare));
+
+function setComparePreset(which) {
+  if (which === "prevYear") {
+    const r = currentRange();
+    const shift = (ts) => {
+      const d = new Date(ts * 1000);
+      d.setFullYear(d.getFullYear() - 1);
+      return d;
+    };
+    if (r.from_ts !== null) $("cmpFrom").value = toDateStr(shift(r.from_ts));
+    if (r.to_ts !== null) $("cmpTo").value = toDateStr(shift(r.to_ts));
+  }
+  loadCompare();
+}
+document.querySelectorAll("#comparePanel [data-cmp]").forEach((b) =>
+  b.addEventListener("click", () => setComparePreset(b.dataset.cmp)));
 
 // -------------------------------------------------- moje místa (názvy)
 
@@ -590,6 +652,8 @@ function renderStats(s, prev) {
     .map((t) => `<div class="typeRow"><span>${escapeHtml(typeLabel(t.type))} (${t.count}×)</span><b>${t.km.toLocaleString("cs")} km</b></div>`)
     .join("");
 
+  renderRecords(s.records);
+
   $("topPlaces").innerHTML = s.top_places
     .map((p, i) =>
       `<li><a data-i="${i}">${escapeHtml(p.label)}</a> — ${p.count}×, ${p.hours.toLocaleString("cs")} h ` +
@@ -605,6 +669,32 @@ function renderStats(s, prev) {
       const p = s.top_places[Number(b.dataset.i)];
       renamePlace(p.lat, p.lon, p.label);
     }));
+}
+
+/* Rekordy období: nejdelší den, nejdelší cesta, nejdelší série dní s jízdou. */
+function renderRecords(r) {
+  const box = $("records");
+  if (!r) { box.innerHTML = ""; return; }
+  const fmtDay = (d) => new Date(d).toLocaleDateString("cs",
+    { day: "numeric", month: "numeric", year: "numeric" });
+  const rows = [];
+  if (r.longest_day) {
+    rows.push([icon("calendar", 13), "Nejvíc za den",
+      `${r.longest_day.km.toLocaleString("cs")} km`, fmtDay(r.longest_day.date)]);
+  }
+  if (r.longest_trip) {
+    rows.push([icon("car", 13), "Nejdelší cesta",
+      `${r.longest_trip.km.toLocaleString("cs")} km`, fmtDay(r.longest_trip.date)]);
+  }
+  if (r.longest_streak_days > 1) {
+    rows.push([icon("refresh", 13), "Série dní s jízdou",
+      `${r.longest_streak_days} dní`, "po sobě jdoucích"]);
+  }
+  box.innerHTML = rows.length
+    ? "<h3>Rekordy období</h3>" + rows.map(([ic, label, val, sub]) =>
+        `<div class="recRow">${ic}<span>${label}</span>` +
+        `<b>${val}</b><span class="muted">${escapeHtml(sub)}</span></div>`).join("")
+    : "";
 }
 
 /* Kartička nad mapou, když zvolené období nemá žádná data. */

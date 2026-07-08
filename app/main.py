@@ -358,6 +358,44 @@ def _point_distances(conn, lo: int, hi: int):
     return monthly, step > 1
 
 
+def _compute_records(conn, lo: int, hi: int) -> dict:
+    """Zajímavé rekordy období: nejvíc najetých km za den, nejdelší jednotlivá
+    cesta a nejdelší série po sobě jdoucích dní s jízdou autem."""
+    from datetime import date, timedelta
+
+    day_rows = conn.execute(
+        "SELECT date(start_ts,'unixepoch','localtime') d, "
+        "SUM(COALESCE(distance_m,0)) dist FROM activities "
+        "WHERE start_ts BETWEEN ? AND ? GROUP BY d HAVING dist > 0 "
+        "ORDER BY dist DESC LIMIT 1", (lo, hi)).fetchone()
+    longest_day = ({"date": day_rows["d"], "km": round(day_rows["dist"] / 1000, 1)}
+                   if day_rows else None)
+
+    trip_row = conn.execute(
+        "SELECT start_ts, distance_m FROM activities "
+        "WHERE start_ts BETWEEN ? AND ? AND distance_m IS NOT NULL "
+        "ORDER BY distance_m DESC LIMIT 1", (lo, hi)).fetchone()
+    longest_trip = ({"date": local_dt(trip_row["start_ts"]).strftime("%Y-%m-%d"),
+                     "km": round(trip_row["distance_m"] / 1000, 1)}
+                    if trip_row and trip_row["distance_m"] else None)
+
+    car_days = [r["d"] for r in conn.execute(
+        "SELECT DISTINCT date(start_ts,'unixepoch','localtime') d FROM activities "
+        "WHERE start_ts BETWEEN ? AND ? "
+        f"AND REPLACE(UPPER(type),' ','_') IN ({','.join('?' * len(trips.CAR_TYPES))}) "
+        "ORDER BY d", (lo, hi, *trips.CAR_TYPES))]
+    best_streak = streak = 0
+    prev = None
+    for d in car_days:
+        cur = date.fromisoformat(d)
+        streak = streak + 1 if prev and cur - prev == timedelta(days=1) else 1
+        best_streak = max(best_streak, streak)
+        prev = cur
+
+    return {"longest_day": longest_day, "longest_trip": longest_trip,
+            "longest_streak_days": best_streak}
+
+
 @app.get("/api/stats")
 def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
               min_stay_min: float = Query(2, ge=0, le=120)):
@@ -419,6 +457,8 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
             monthly, approx = _point_distances(conn, lo, hi)
             monthly_source = "points"
 
+        records = _compute_records(conn, lo, hi)
+
     total_km = (activities_total if activities_total else sum(monthly.values())) / 1000
     return {
         "points": n_points,
@@ -435,6 +475,7 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
         "top_places": [{"label": r["label"], "lat": r["lat"], "lon": r["lon"],
                         "count": r["n"], "hours": round((r["secs"] or 0) / 3600, 1)}
                        for r in top_places],
+        "records": records,
     }
 
 

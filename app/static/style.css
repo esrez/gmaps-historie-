@@ -9,6 +9,7 @@
   --border: rgba(11, 11, 11, 0.10);
   --series-1: #2a78d6;
   --series-2: #1baf7a;
+  --series-3: #e0810f;
   --accent-red: #e34948;
 }
 /* tmavé hodnoty platí: (a) podle systému, pokud uživatel nevynutil světlý,
@@ -25,6 +26,7 @@
     --border: rgba(255, 255, 255, 0.10);
     --series-1: #3987e5;
     --series-2: #199e70;
+    --series-3: #f0a020;
     --accent-red: #e66767;
   }
 }
@@ -39,6 +41,7 @@
   --border: rgba(255, 255, 255, 0.10);
   --series-1: #3987e5;
   --series-2: #199e70;
+  --series-3: #f0a020;
   --accent-red: #e66767;
 }
 
@@ -298,6 +301,21 @@ button:disabled { opacity: 0.5; cursor: default; }
   padding: 2px 0;
 }
 .typeRow b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+.recRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 3px 0;
+}
+.recRow b {
+  margin-left: auto;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.recRow .muted { min-width: 88px; text-align: right; }
 
 #topPlaces { margin: 0; padding-left: 18px; font-size: 12px; }
 #topPlaces li { margin: 3px 0; color: var(--text-secondary); }

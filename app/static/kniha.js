@@ -480,9 +480,26 @@ async function refreshOdometer(explicitYear) {
       $("odoInfo").textContent =
         `Pro ${label} není stav tachometru zadán (v knize ${o.booked_km.toLocaleString("cs")} km).`;
     }
+    renderOdoWidget(o, label);
   } catch (e) {
     $("odoInfo").textContent = "";
+    $("odoWidget").hidden = true;
   }
+}
+
+/* Kompaktní ukazatel nad tabulkou: najeto v knize / zbývá do tachometru. */
+function renderOdoWidget(o, label) {
+  const w = $("odoWidget");
+  if (o.odometer_km === null || !(o.odometer_km > 0)) { w.hidden = true; return; }
+  const fmt = (v) => v.toLocaleString("cs", { maximumFractionDigits: 0 });
+  const pct = Math.max(0, Math.min(100, (o.booked_km / o.odometer_km) * 100));
+  const over = o.remaining_km < 0;
+  w.hidden = false;
+  w.innerHTML =
+    `<div class="odoTop"><span>Tachometr ${escapeHtml(label)}</span>` +
+    `<b class="${over ? "over" : ""}">${over ? "překročeno o " + fmt(-o.remaining_km) : "zbývá " + fmt(o.remaining_km)} km</b></div>` +
+    `<div class="odoBar"><div class="odoFill${over ? " over" : ""}" style="width:${pct}%"></div></div>` +
+    `<div class="odoSub muted">v knize ${fmt(o.booked_km)} z ${fmt(o.odometer_km)} km</div>`;
 }
 
 $("odoSaveBtn").addEventListener("click", async () => {
