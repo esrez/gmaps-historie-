@@ -46,4 +46,4 @@ echo.
 echo Smoke test:
 echo   python scripts\smoke_test.py --package dist\GMapsHistorie-update.zip
 echo.
-pause
+if not defined GITHUB_ACTIONS if not defined BUILD_NO_PAUSE pause

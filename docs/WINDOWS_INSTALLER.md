@@ -12,6 +12,8 @@ Po spuštění `build-windows-installer.bat` na **Windows 11** vznikne v `dist\`
 
 ## Požadavky pro sestavení
 
+### Lokálně na Windows 11
+
 1. **Python 3.11+** s PATH
 2. **[Inno Setup 6](https://jrsoftware.org/isinfo.php)** (`iscc` v PATH)
 3. Příkaz:
@@ -19,6 +21,16 @@ Po spuštění `build-windows-installer.bat` na **Windows 11** vznikne v `dist\`
 ```bat
 build-windows-installer.bat
 ```
+
+### Z macOS (bez Windows VM)
+
+PyInstaller a Inno Setup na Macu nespustíte – použijte **GitHub Actions**:
+
+1. Push na `main` (změny v kódu) **nebo** ručně: GitHub → **Actions** → **Windows build** → **Run workflow**
+2. Po dokončení (~15–25 min) stáhněte **Artifacts** → `gmaps-historie-windows-2.0.0.zip`
+3. Uvnitř jsou `GMapsHistorie-Setup-2.0.0.exe`, `GMapsHistorie.exe` a update ZIP
+
+Tag `v2.0.0` spustí build automaticky při push.
 
 ## Co instalátor nabízí
 

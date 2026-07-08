@@ -1,0 +1,84 @@
+# Sestavení Windows .exe a instalačního balíčku (spouštění z macOS přes push / ručně).
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "app/**"
+      - "run.py"
+      - "requirements.txt"
+      - "gmaps-historie.spec"
+      - "installer.iss"
+      - "installer/**"
+      - "scripts/**"
+      - "VERSION"
+      - "build-windows-*.bat"
+      - ".github/workflows/windows-build.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Inno Setup 6
+        run: choco install innosetup -y --no-progress
+
+      - name: Add ISCC to PATH
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC not found at $iscc" }
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Inno Setup 6"
+
+      - name: Build installer
+        shell: cmd
+        env:
+          GITHUB_ACTIONS: "true"
+          BUILD_NO_PAUSE: "1"
+        run: build-windows-installer.bat
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION -TotalCount 1).Trim()
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Smoke test update package
+        run: python scripts/smoke_test.py --package dist/GMapsHistorie-update.zip
+        env:
+          TZ: Europe/Prague
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmaps-historie-windows-${{ steps.ver.outputs.version }}
+          path: |
+            dist/GMapsHistorie.exe
+            dist/GMapsHistorie-update.zip
+            dist/GMapsHistorie-Setup-${{ steps.ver.outputs.version }}.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build summary
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          @"
+          ### Windows build hotov
+          | Soubor | Velikost |
+          |--------|----------|
+          $(Get-ChildItem dist/GMapsHistorie.exe, dist/GMapsHistorie-update.zip, "dist/GMapsHistorie-Setup-$v.exe" | ForEach-Object { "| $($_.Name) | $([math]::Round($_.Length/1MB, 1)) MB |" })
+          Stáhněte ZIP v sekci **Artifacts** tohoto běhu.
+          "@ >> $env:GITHUB_STEP_SUMMARY
