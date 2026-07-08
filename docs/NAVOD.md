@@ -35,6 +35,9 @@ minuty), nebo z příkazové řádky
 - **Hledání místa** – vaše místa i libovolná adresa (OpenStreetMap).
 - **„Kdy jsem tu byl?"** – klik do mapy → seznam všech pobytů v okruhu
   100 m–1 km s daty, časy a délkou; export do Excelu; klik na pobyt přehraje den.
+  Pobyty kratší než zvolený **min. pobyt** (výchozí 2 min) se nepočítají –
+  pouhý průjezd místem se tak neoznačí jako návštěva; totéž platí pro
+  statistiky návštěv a top místa.
 - **Statistiky / Analýza** – km celkem a po měsících, rozpad podle dopravy,
   top místa; km podle dne v týdnu, aktivita podle hodiny, km po letech.
 - **Přehrávání dne** – ◀ ▶ listování, rychlost přehrávání, stopa obarvená

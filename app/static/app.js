@@ -661,15 +661,20 @@ async function whenIWasHere(lat, lon, label) {
   }).addTo(locLayer);
 
   try {
-    const res = await api("/api/at_location", { lat, lon, radius_m: radius, ...r });
+    const res = await api("/api/at_location", {
+      lat, lon, radius_m: radius,
+      min_stay_min: Number($("locMinStay").value), ...r,
+    });
     if (!label && res.place_name) {
       loc.label = res.place_name;
       $("locTitle").textContent = res.place_name;
     }
     const hrs = (res.total_s / 3600).toLocaleString("cs", { maximumFractionDigits: 1 });
+    const minStay = Number($("locMinStay").value);
     $("locSummary").textContent = res.count
-      ? `${res.count}× ve zvoleném období, celkem ${hrs} h`
-      : "Ve zvoleném období tu žádný pobyt není. Zkuste větší okruh nebo období Vše.";
+      ? `${res.count}× ve zvoleném období, celkem ${hrs} h` +
+        (minStay ? ` (průjezdy pod ${minStay} min se nepočítají)` : "")
+      : "Ve zvoleném období tu žádný pobyt není. Zkuste větší okruh, kratší min. pobyt nebo období Vše.";
     $("locStays").innerHTML = res.stays.slice().reverse().map((s) => {
       const d = new Date(s.start_ts * 1000);
       const from = d.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric", year: "numeric" });
@@ -692,9 +697,10 @@ async function whenIWasHere(lat, lon, label) {
   }
 }
 
-$("locRadius").addEventListener("change", () => {
-  if (loc.lat !== null) whenIWasHere(loc.lat, loc.lon, loc.label);
-});
+["locRadius", "locMinStay"].forEach((id) =>
+  $(id).addEventListener("change", () => {
+    if (loc.lat !== null) whenIWasHere(loc.lat, loc.lon, loc.label);
+  }));
 $("locCloseBtn").addEventListener("click", () => {
   $("locPanel").hidden = true;
   locLayer.clearLayers();
@@ -709,6 +715,7 @@ $("locExportBtn").addEventListener("click", () => {
   const r = currentRange();
   location.href = buildUrl("/api/export_location.xlsx", {
     lat: loc.lat, lon: loc.lon, radius_m: Number($("locRadius").value),
+    min_stay_min: Number($("locMinStay").value),
     ...r, label: loc.label,
   });
 });
