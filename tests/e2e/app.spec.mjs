@@ -39,6 +39,26 @@ test.describe("mapa", () => {
     await expect(page.locator("#qualityReport")).not.toBeEmpty({ timeout: 15000 });
   });
 
+  test("moje místa: přehled, pobyty a přejmenování", async ({ page }) => {
+    await page.goto("/");
+    // pojmenovat místo přes API, ať máme co zobrazit
+    await page.request.post("/api/places",
+      { data: { lat: 50.1, lon: 14.39, name: "Zákazník Test" } });
+    await page.click('#tabs [data-tab="mista"]');
+    const card = page.locator(".placeCard").filter({ hasText: "Zákazník Test" });
+    await expect(card).toBeVisible();
+    // rozbalit → seznam pobytů
+    await card.locator(".placeHead").click();
+    await expect(card.locator(".placeBody li").first()).toBeVisible();
+    // přejmenovat inline (název je pak v hodnotě inputu, proto cílíme globálně)
+    await card.locator(".pact.edit").click();
+    await page.locator("#placesList .placeEdit input").fill("Zákazník Přejmenovaný");
+    await page.locator("#placesList .pact.save").click();
+    await expect(page.locator("#toast")).toContainText("Název upraven");
+    await expect(page.locator(".placeCard").filter({ hasText: "Zákazník Přejmenovaný" }))
+      .toBeVisible();
+  });
+
   test("exporty odpovídají", async ({ page }) => {
     for (const url of ["/api/export.xlsx", "/api/export.gpx", "/api/backup"]) {
       const res = await page.request.get(url);

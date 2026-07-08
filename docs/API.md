@@ -21,8 +21,9 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/pmtiles/status` | GET | dostupnost offline mapy `data/map.pmtiles` |
 | `/api/pmtiles` | GET | servíruje PMTiles s podporou HTTP Range |
 | `/api/places` | GET/POST | vlastní názvy míst (zákazník, adresa…); POST upsert dle blízkosti, volitelně `polygon` |
-| `/api/places/{id}` | DELETE | smazání vlastního názvu |
-| `/api/places/stats` | GET | pobyt na pojmenovaných místech v období (pro bubliny na mapě) |
+| `/api/places/{id}` | PATCH/DELETE | úprava názvu/okruhu podle id / smazání |
+| `/api/places/stats` | GET | pobyt na pojmenovaných místech v období (pro bubliny na mapě i přehled) |
+| `/api/places/{id}/stays` | GET | jednotlivé pobyty na daném místě v období (kdy od–do a jak dlouho) |
 
 ## Import a údržba
 

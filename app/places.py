@@ -120,6 +120,35 @@ def place_stats(from_ts: int | None = None, to_ts: int | None = None,
     return {"stats": list(agg.values())}
 
 
+@router.get("/{place_id}/stays")
+def place_stays(place_id: int, from_ts: int | None = None, to_ts: int | None = None,
+                min_stay_min: float = 2):
+    """Jednotlivé pobyty na konkrétním pojmenovaném místě ve zvoleném období:
+    kdy (od–do) a jak dlouho. Pobyt se přiřadí místu stejně jako v přehledu
+    (rozhoduje polygon, jinak nejbližší okruh), takže počty souhlasí."""
+    from .common import ts_range
+    lo, hi = ts_range(from_ts, to_ts)
+    with closing(db.connect()) as conn:
+        pls = load_places(conn)
+        target = next((p for p in pls if p["id"] == place_id), None)
+        if target is None:
+            raise HTTPException(404, "Místo nenalezeno")
+        stays = []
+        for v in conn.execute(
+                "SELECT start_ts, end_ts, lat, lon FROM visits "
+                "WHERE start_ts BETWEEN ? AND ? AND end_ts - start_ts >= ? "
+                "ORDER BY start_ts", (lo, hi, int(min_stay_min * 60))):
+            hit = custom_place(pls, v["lat"], v["lon"])
+            if hit is not None and hit["id"] == place_id:
+                stays.append({"start_ts": v["start_ts"], "end_ts": v["end_ts"],
+                              "secs": v["end_ts"] - v["start_ts"]})
+    total = sum(s["secs"] for s in stays)
+    return {"place": {"id": target["id"], "name": target["name"],
+                      "lat": target["lat"], "lon": target["lon"],
+                      "polygon": target["polygon"]},
+            "count": len(stays), "secs": total, "stays": stays}
+
+
 @router.post("")
 def upsert_place(p: PlaceIn):
     """Pojmenuje místo. Existuje-li vlastní název do 150 m, přejmenuje se
@@ -152,6 +181,38 @@ def upsert_place(p: PlaceIn):
                 "VALUES(?,?,?,?,?)",
                 (round(lat, 6), round(lon, 6), p.radius_m, name, poly))
         conn.commit()
+        return {"places": load_places(conn)}
+
+
+class PlacePatch(BaseModel):
+    name: str | None = None
+    radius_m: float | None = None
+
+
+@router.patch("/{place_id}")
+def patch_place(place_id: int, p: PlacePatch):
+    """Úprava konkrétního místa podle id (přejmenování, změna okruhu) –
+    spolehlivé z přehledu míst, nezávisí na blízkosti jako upsert."""
+    sets, args = [], []
+    if p.name is not None:
+        name = p.name.strip()
+        if not name:
+            raise HTTPException(400, "Název nesmí být prázdný")
+        sets.append("name=?")
+        args.append(name)
+    if p.radius_m is not None:
+        if p.radius_m <= 0:
+            raise HTTPException(400, "Okruh musí být kladný")
+        sets.append("radius_m=?")
+        args.append(p.radius_m)
+    if not sets:
+        raise HTTPException(400, "Nic k úpravě")
+    with closing(db.connect()) as conn:
+        cur = conn.execute(f"UPDATE place_names SET {', '.join(sets)} WHERE id=?",
+                           (*args, place_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Místo nenalezeno")
         return {"places": load_places(conn)}
 
 
