@@ -13,6 +13,7 @@ mountIcons();
 
 document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
   btn.addEventListener("click", () => {
+    if (drawState.active) drawCleanup();   // přepnutím se nesmí zaseknout kreslení oblasti
     document.querySelectorAll("#tabs .tab-btn").forEach((b) =>
       b.classList.toggle("active", b === btn));
     document.querySelectorAll(".tab-page").forEach((p) =>
@@ -21,9 +22,47 @@ document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
   }));
 
 $("panelCollapse").addEventListener("click", () => {
+  if (drawState.active) drawCleanup();
   const collapsed = $("panel").classList.toggle("collapsed");
   $("panelCollapse").textContent = collapsed ? "▸" : "▾";
 });
+
+// Panel lze odsunout tažením za hlavičku – uvolní se tak mapa pod ním.
+// (Na mobilu je panel spodní list, tam se přesun nepoužívá.)
+(function makePanelDraggable() {
+  const panel = $("panel"), head = $("panelHead");
+  const isMobile = () => window.matchMedia("(max-width: 800px)").matches;
+  let sx, sy, ox, oy, dragging = false;
+  head.addEventListener("pointerdown", (e) => {
+    if (isMobile() || e.target.closest("button, a, input, select")) return;
+    dragging = true;
+    const r = panel.getBoundingClientRect();
+    ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
+    panel.style.right = "auto";
+    head.classList.add("dragging");
+    head.setPointerCapture(e.pointerId);
+  });
+  head.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const nx = Math.max(4, Math.min(window.innerWidth - w - 4, ox + e.clientX - sx));
+    const ny = Math.max(4, Math.min(window.innerHeight - h - 4, oy + e.clientY - sy));
+    panel.style.left = nx + "px";
+    panel.style.top = ny + "px";
+  });
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    head.classList.remove("dragging");
+    try { head.releasePointerCapture(e.pointerId); } catch (_) { /* — */ }
+  };
+  head.addEventListener("pointerup", end);
+  head.addEventListener("pointercancel", end);
+  // při přechodu na mobil (spodní list) zrušit ruční pozici, ať platí layout
+  window.addEventListener("resize", () => {
+    if (isMobile()) { panel.style.left = panel.style.top = panel.style.right = ""; }
+  });
+})();
 
 $("timelineToggle").addEventListener("click", () => {
   $("timelinePop").hidden = !$("timelinePop").hidden;

@@ -28,10 +28,13 @@ minuty), nebo z příkazové řádky
 ## 2. Mapa
 
 Mapa zabírá celou obrazovku; ovládání je v plovoucím panelu vlevo se
-záložkami **Mapa · Statistiky · Analýza · Nástroje** (panel lze šipkou
-sbalit). Dole je plovoucí lišta přehrávání dne, vpravo dole legenda vrstev.
-Když zvolené období nemá žádná data, mapa to řekne kartičkou s tlačítkem
-„Zobrazit vše".
+záložkami **Mapa · Místa · Statistiky · Analýza · Nástroje**. Panel lze
+šipkou vpravo nahoře **sbalit** (▾/▸) a hlavně ho lze **odsunout tažením za
+hlavičku** (kurzor ruky), takže se dostanete k celé mapě a můžete s ní volně
+posouvat i tam, kde panel původně překážel. Dole je plovoucí lišta přehrávání
+dne, vpravo dole legenda vrstev (obojí je průchozí pro myš – mapa jde posouvat
+i pod nimi). Když zvolené období nemá žádná data, mapa to řekne kartičkou
+s tlačítkem „Zobrazit vše".
 
 - **Období** – od/do nebo předvolby (7/30/90 dní, Rok, Letos, Loni, Vše).
 - **Vrstvy** – Trasy (klik = přehrát den), Jednotlivé body (čas po najetí),
