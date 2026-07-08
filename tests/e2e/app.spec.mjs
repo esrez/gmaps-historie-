@@ -1,6 +1,24 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("mapa", () => {
+  test("průvodce s odkazy na stažení dat z Googlu", async ({ page }) => {
+    await page.goto("/");
+    // otevřít nápovědu (tlačítko ? v hlavičce) → rovnou krok s odkazy
+    await page.click("#helpBtn");
+    await expect(page.locator("#wizard")).toBeVisible();
+    await expect(page.locator("#wizard")).toContainText("Kde vzít data");
+    // odkazy míří na Google Takeout a nápovědu Googlu
+    const hrefs = await page.locator("#wizard .wizLink").evaluateAll(
+      (as) => as.map((a) => a.href));
+    expect(hrefs.some((h) => h.includes("takeout.google.com"))).toBeTruthy();
+    expect(hrefs.some((h) => h.includes("support.google.com"))).toBeTruthy();
+    // poslední krok má tlačítko importu, pak zavřít
+    await page.click("#wizNext");
+    await expect(page.locator("#wizImportBtn")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#wizard")).toBeHidden();
+  });
+
   test("načte statistiky, grafy a kalendář", async ({ page }) => {
     await page.goto("/");
     await page.click('#tabs [data-tab="stat"]');

@@ -4,9 +4,13 @@ Podrobný průvodce aplikací GMaps Historie. Rychlý přehled je v [README](../
 
 ## 1. První spuštění
 
-1. `docker compose up -d --build` → aplikace běží na `http://server:8000`.
-2. Při prázdné databázi se sama otevře záložka **Nástroje** s nápovědou
-   k importu.
+1. Spusťte aplikaci (Docker, `python run.py`, nebo na Windows dvojklikem na
+   `start-windows.bat` / `GMapsHistorie.exe`) → poběží na `http://…:8000`.
+2. Při prázdné databázi se sám otevře **průvodce pro začátečníky**, který
+   ve třech krocích vysvětlí, kde vzít data z Googlu (s odkazy na Google
+   Takeout i export z telefonu) a jak je nahrát. Průvodce lze kdykoli znovu
+   otevřít tlačítkem **?** v hlavičce (nebo „Kde vzít data z Googlu?" v sekci
+   Import). Zaškrtnutím „Nezobrazovat po spuštění" se přestane otevírat sám.
 3. Nahrajte export z Googlu (viz níže) – formát se pozná automaticky.
 
 ### Kde vzít data z Googlu

@@ -21,6 +21,7 @@
     <header id="panelHead">
       <h1><span data-icon="pin" data-size="17"></span> GMaps Historie</h1>
       <a href="/kniha" class="navlink"><span data-icon="car"></span> Kniha jízd</a>
+      <button id="helpBtn" class="mini" type="button" title="Nápověda – jak získat data z Googlu"><span data-icon="help"></span></button>
       <button id="themeBtn" class="mini" type="button"></button>
       <button id="panelCollapse" class="mini" type="button" title="Sbalit panel">▾</button>
     </header>
@@ -231,6 +232,7 @@
         <p class="muted">Nahrajte <b>Timeline.json</b> (export z telefonu), <b>Records.json</b>,
            měsíční JSON ze Semantic Location History, nebo celý <b>ZIP</b> z Takeoutu.
            Formát se rozpozná automaticky, duplicity se přeskočí.</p>
+        <button id="howtoBtn"><span data-icon="help"></span> Kde vzít data z Googlu? (průvodce)</button>
         <input type="file" id="importFile" accept=".json,.zip">
         <button id="importBtn"><span data-icon="upload"></span> Importovat</button>
         <div id="importStatus" class="muted"></div>
@@ -279,6 +281,82 @@
   </div>
 </div>
 <div id="tooltip" hidden></div>
+
+<!-- průvodce / nápověda: jak získat data z Google historie polohy -->
+<div id="wizard" hidden>
+  <div id="wizCard" class="floating" role="dialog" aria-modal="true" aria-label="Průvodce">
+    <button id="wizClose" class="mini" type="button" title="Zavřít"><span data-icon="x"></span></button>
+
+    <!-- krok 1: vítejte -->
+    <section class="wizStep" data-step="1">
+      <div class="wizIcon"><span data-icon="rocket" data-size="34"></span></div>
+      <h2>Vítejte v GMaps Historie</h2>
+      <p>Tato aplikace zobrazí vaši <b>historii polohy z Map Google</b> – mapu tras,
+         navštívená místa, statistiky, kalendář roku i knihu jízd. Vše běží
+         jen na tomto počítači, <b>data nikam neodesíláme</b>.</p>
+      <p class="muted">Nejdřív potřebujeme váš export z Googlu. Ukážeme vám ve
+         dvou krocích, kde ho vzít a jak ho sem nahrát.</p>
+    </section>
+
+    <!-- krok 2: získání dat -->
+    <section class="wizStep" data-step="2" hidden>
+      <h2>Kde vzít data z Googlu</h2>
+      <p class="muted">Zvolte podle toho, co máte po ruce. Aplikace pozná formát
+         sama – nahrajete <b>Timeline.json</b>, <b>Records.json</b> i celý <b>ZIP</b>.</p>
+
+      <div class="wizOpt">
+        <h3><span data-icon="phone"></span> Z telefonu (nejnovější způsob)</h3>
+        <ol>
+          <li>Otevřete aplikaci <b>Mapy Google</b> a klepněte na svůj <b>profil</b> vpravo nahoře.</li>
+          <li>Zvolte <b>Vaše časová osa</b> (Your Timeline).</li>
+          <li>Klepněte na <b>…</b> / <b>Nastavení polohy a soukromí</b>.</li>
+          <li>Zvolte <b>Exportovat data časové osy</b> → vznikne soubor
+              <code>Timeline.json</code>. Přeneste ho do tohoto počítače.</li>
+        </ol>
+        <a class="wizLink" href="https://support.google.com/maps/answer/14169818" target="_blank" rel="noopener">
+          Podrobný postup od Googlu <span data-icon="external" data-size="13"></span></a>
+      </div>
+
+      <div class="wizOpt">
+        <h3><span data-icon="cloud"></span> Přes Google Takeout (na počítači, i starší historie)</h3>
+        <ol>
+          <li>Otevřete <b>Google Takeout</b> a přihlaste se svým účtem.</li>
+          <li>Klikněte na <b>Zrušit výběr všeho</b> a zaškrtněte jen
+              <b>Historie polohy (Časová osa)</b>.</li>
+          <li>Dole zvolte <b>Další krok</b> → <b>Vytvořit export</b>.</li>
+          <li>Po přípravě si stáhněte <b>ZIP</b> (obsahuje <code>Records.json</code>
+              a Semantic Location History).</li>
+        </ol>
+        <a class="wizLink" href="https://takeout.google.com/" target="_blank" rel="noopener">
+          Otevřít Google Takeout <span data-icon="external" data-size="13"></span></a>
+      </div>
+    </section>
+
+    <!-- krok 3: import -->
+    <section class="wizStep" data-step="3" hidden>
+      <div class="wizIcon"><span data-icon="upload" data-size="34"></span></div>
+      <h2>Nahrání souboru</h2>
+      <p>Máte stažený <code>Timeline.json</code>, <code>Records.json</code> nebo
+         <code>ZIP</code>? Nahrajte ho – zpracování běží na pozadí, velké soubory
+         chvíli trvají.</p>
+      <button id="wizImportBtn" class="primary"><span data-icon="upload"></span> Vybrat soubor a importovat</button>
+      <div id="wizImportStatus" class="muted"></div>
+      <p class="muted">Tip: soubor můžete také zkopírovat do složky
+         <code>data/import/</code> – naimportuje se sám do minuty. Duplicity se
+         přeskočí, takže stejný soubor můžete nahrát opakovaně.</p>
+    </section>
+
+    <footer id="wizFoot">
+      <label class="check" id="wizDontShow"><input type="checkbox" id="wizNoAuto"> Nezobrazovat po spuštění</label>
+      <div class="wizDots" aria-hidden="true"></div>
+      <div class="wizNav">
+        <button id="wizPrev" type="button"><span data-icon="chevL"></span> Zpět</button>
+        <button id="wizNext" class="primary" type="button">Další <span data-icon="chevR"></span></button>
+        <button id="wizDone" class="primary" type="button" hidden>Hotovo</button>
+      </div>
+    </footer>
+  </div>
+</div>
 
 <datalist id="dlPlaces"></datalist>
 <datalist id="dlPlaceNames"></datalist>

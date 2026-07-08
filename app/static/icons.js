@@ -34,6 +34,13 @@ const ICONS = {
   map: P("M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z") + P("M9 4v14") + P("M15 6v14"),
   wand: P("M6 18 18 6") + P("M15 3v3M18 9h3M19 4l1 1"),
   chevR: P("M9 5l7 7-7 7"),
+  chevL: P("M15 5l-7 7 7 7"),
+  help: '<circle cx="12" cy="12" r="9"/>' + P("M9.2 9.3a3 3 0 0 1 5.6 1.4c0 2-2.8 2.3-2.8 4") + P("M12 17.5v.5"),
+  external: P("M14 4h6v6") + P("M20 4l-9 9") + P("M18 14v5H5V6h5"),
+  phone: P("M8 3h8v18H8z") + P("M11 18h2"),
+  cloud: P("M7 18a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17.5 9a3.5 3.5 0 0 1 .5 9H7z"),
+  rocket: P("M12 3c3 1 5 4 5 8l-2.5 2.5h-5L7 11c0-4 2-7 5-8z") +
+          P("M7 14l-2 2 3 .5.5 3 2-2") + '<circle cx="12" cy="9" r="1.4"/>',
 };
 
 export function icon(name, size = 15) {

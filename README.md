@@ -47,6 +47,10 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   záložkami (Mapa / Statistiky / Analýza / Nástroje), plovoucí lišta
   přehrávání, legenda vrstev, jednotné SVG ikony, dlaždice statistik
   s trendem oproti minulému období a mini-grafem, prázdné stavy s navigací
+- **Průvodce pro začátečníky** – při prvním spuštění (prázdná databáze) se
+  otevře jednoduchý průvodce, který krok za krokem ukáže, **kde vzít data
+  z Google historie polohy** (odkazy na Google Takeout i export z telefonu)
+  a jak je nahrát; dostupný i kdykoli později tlačítkem **?** v hlavičce
 - **Intuitivní ovládání** – nenápadná oznámení místo vyskakovacích oken,
   obrácené období se samo prohodí, potvrzení uložení přímo v řádku tabulky,
   navádění k importu při prázdné databázi
