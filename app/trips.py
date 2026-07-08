@@ -437,13 +437,37 @@ def update_trip(trip_id: int, patch: TripPatch):
     return _row(row)
 
 
+class BulkDelete(BaseModel):
+    ids: list[int]
+
+
+@router.post("/bulk_delete")
+def bulk_delete(p: BulkDelete):
+    """Smaže více jízd najednou (hromadný výběr v tabulce) – jedno volání,
+    jeden krok zpět."""
+    ids = list(dict.fromkeys(int(i) for i in p.ids))
+    if not ids:
+        return {"deleted": 0}
+    ph = ",".join("?" * len(ids))
+    with closing(db.connect()) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM trips WHERE id IN ({ph})", ids).fetchall()
+        if rows:
+            _save_undo(conn, "bulk_delete", rows=rows)
+            conn.execute(f"DELETE FROM trips WHERE id IN ({ph})", ids)
+            conn.commit()
+    return {"deleted": len(rows)}
+
+
 @router.delete("/{trip_id}")
 def delete_trip(trip_id: int):
     with closing(db.connect()) as conn:
-        cur = conn.execute("DELETE FROM trips WHERE id=?", (trip_id,))
+        row = conn.execute("SELECT * FROM trips WHERE id=?", (trip_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Jízda nenalezena")
+        _save_undo(conn, "delete", rows=[row])
+        conn.execute("DELETE FROM trips WHERE id=?", (trip_id,))
         conn.commit()
-    if cur.rowcount == 0:
-        raise HTTPException(404, "Jízda nenalezena")
     return {"deleted": trip_id}
 
 

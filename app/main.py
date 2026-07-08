@@ -88,7 +88,14 @@ def make_backup() -> str:
     """Konzistentní kopie SQLite databáze (backup API) + rotace starých záloh."""
     backup_dir = os.path.join(_data_dir(), "backups")
     os.makedirs(backup_dir, exist_ok=True)
-    name = f"history-{datetime.now(tz=None):%Y%m%d-%H%M%S}.db"
+    base = f"history-{datetime.now(tz=None):%Y%m%d-%H%M%S}"
+    # zajistit unikátní jméno – jinak by dvě zálohy ve stejné sekundě
+    # (např. snímek před obnovou) přepsaly jedna druhou a přišlo by se o data
+    name = f"{base}.db"
+    n = 1
+    while os.path.exists(os.path.join(backup_dir, name)):
+        name = f"{base}-{n}.db"
+        n += 1
     dest = os.path.join(backup_dir, name)
     src = sqlite3.connect(db.DB_PATH)
     dst = sqlite3.connect(dest)
@@ -169,6 +176,51 @@ def api_backup():
     dest = make_backup()
     return FileResponse(dest, filename=os.path.basename(dest),
                         media_type="application/octet-stream")
+
+
+def _is_backup_name(name: str) -> bool:
+    """Bezpečné jméno zálohy (bez cesty, jen soubory z rotace)."""
+    return (name.startswith("history-") and name.endswith(".db")
+            and os.path.basename(name) == name)
+
+
+@app.get("/api/backups")
+def api_backups():
+    """Seznam dostupných záloh (pro obnovu bez zásahu do souborů)."""
+    backup_dir = os.path.join(_data_dir(), "backups")
+    items = []
+    if os.path.isdir(backup_dir):
+        for name in os.listdir(backup_dir):
+            if not _is_backup_name(name):
+                continue
+            st = os.stat(os.path.join(backup_dir, name))
+            items.append({"name": name, "size": st.st_size,
+                          "when": datetime.fromtimestamp(st.st_mtime)
+                          .strftime("%d.%m.%Y %H:%M")})
+    items.sort(key=lambda x: x["name"], reverse=True)
+    return {"backups": items}
+
+
+@app.post("/api/restore")
+def api_restore(name: str = Query(...)):
+    """Obnoví databázi z vybrané zálohy. Aktuální stav se předtím zazálohuje,
+    ať jde obnova případně vzít zpět. Kopíruje se přes SQLite backup API
+    (bezpečné i při zapnutém WAL), nezasahuje se do souborů za běhu."""
+    if not _is_backup_name(name):
+        raise HTTPException(400, "Neplatné jméno zálohy")
+    path = os.path.join(_data_dir(), "backups", name)
+    if not os.path.exists(path):
+        raise HTTPException(404, "Záloha nenalezena")
+    safety = make_backup()   # snímek současného stavu před přepsáním
+    src = sqlite3.connect(path)
+    dst = sqlite3.connect(db.DB_PATH)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    return {"restored": name, "safety_backup": os.path.basename(safety)}
 
 
 @app.get("/api/autoimport")

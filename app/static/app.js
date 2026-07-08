@@ -1233,6 +1233,33 @@ async function watchImport(jobId) {
 
 $("backupBtn").addEventListener("click", () => { location.href = "/api/backup"; });
 
+async function loadBackups() {
+  try {
+    const { backups } = await api("/api/backups");
+    const sel = $("restoreSelect");
+    sel.innerHTML = '<option value="">— vyberte zálohu —</option>' +
+      backups.map((b) =>
+        `<option value="${escapeHtml(b.name)}">${b.when} · ${(b.size / 1e6).toFixed(1)} MB</option>`
+      ).join("");
+  } catch (e) { /* nedostupné */ }
+}
+
+$("restoreBtn").addEventListener("click", async () => {
+  const name = $("restoreSelect").value;
+  if (!name) { toast("Nejdřív vyberte zálohu.", "error"); return; }
+  if (!confirm("Obnovit databázi z této zálohy? Současná data se přepíšou " +
+               "(předtím se ale sama zazálohují, obnovu lze vzít zpět).")) return;
+  try {
+    const res = await api("/api/restore", { method: "POST", params: { name } });
+    toast(`Databáze obnovena ze zálohy. Předchozí stav uložen jako ${res.safety_backup}.`,
+      "success");
+    loadBackups();
+    location.reload();
+  } catch (e) {
+    toast("Obnova selhala: " + e.message, "error");
+  }
+});
+
 async function showAutoImportLog() {
   try {
     const { log } = await api("/api/autoimport");
@@ -1264,6 +1291,7 @@ async function showAutoImportLog() {
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   showVersion();
+  loadBackups();
   showAutoImportLog();
   renderCalendar();
   loadAll();

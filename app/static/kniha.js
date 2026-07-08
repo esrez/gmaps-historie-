@@ -152,10 +152,10 @@ $("bulkDelBtn").addEventListener("click", async () => {
   const n = selectedIds.size;
   if (!n || !confirm(`Opravdu smazat ${n} vybraných jízd?`)) return;
   try {
-    for (const id of selectedIds) {
-      await api(`/api/trips/${id}`, { method: "DELETE" });
-    }
-    toast(`Smazáno ${n} jízd.`, "success");
+    const res = await api("/api/trips/bulk_delete", {
+      method: "POST", body: { ids: [...selectedIds] },
+    });
+    toast(`Smazáno ${res.deleted} jízd (lze vrátit tlačítkem Zpět).`, "success");
   } catch (e) {
     toast("Mazání selhalo: " + e.message, "error");
   }
@@ -411,7 +411,8 @@ async function onDelete(t, tr) {
   updateTotal();
   refreshOdometer();
   refreshAlerts();
-  toast("Jízda smazána.", "success");
+  refreshUndo();
+  toast("Jízda smazána (lze vrátit tlačítkem Zpět).", "success");
 }
 
 // -------------------------------------------------------------- pravidla
@@ -627,7 +628,8 @@ async function refreshUndo() {
     $("undoBtn").hidden = !u.available;
     if (u.available) {
       const OPS = { generate: "generování", propagate: "propagaci km",
-                    apply_rules: "použití pravidel", delete_range: "smazání období" };
+                    apply_rules: "použití pravidel", delete_range: "smazání období",
+                    delete: "smazání jízdy", bulk_delete: "hromadné smazání" };
       $("undoBtn").innerHTML = `${icon("undo", 13)} Vrátit ${OPS[u.op] || u.op} (${u.affected} jízd)` +
         (u.steps > 1 ? ` · ${u.steps} kroků zpět` : "");
     }

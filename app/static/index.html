@@ -175,10 +175,17 @@
         </div>
         <div id="qualityReport"></div>
         <button id="cleanupBtn" hidden class="danger"><span data-icon="wand"></span> Opravit (smazat vadné záznamy)</button>
-        <h3>Záloha</h3>
+        <h3>Záloha a obnova</h3>
         <button id="backupBtn"><span data-icon="save"></span> Stáhnout zálohu (.db)</button>
         <p class="muted">Záloha se navíc vytváří automaticky každý den do
            <code>data/backups/</code> (drží se posledních 14).</p>
+        <div class="row">
+          <select id="restoreSelect"><option value="">— vyberte zálohu —</option></select>
+          <button id="restoreBtn" class="danger"><span data-icon="refresh"></span> Obnovit</button>
+        </div>
+        <p class="muted">Obnova přepíše současná data vybranou zálohou.
+           Aktuální stav se ještě předtím sám zazálohuje, takže obnovu lze
+           vzít zpět.</p>
       </section>
 
       <section>
