@@ -206,3 +206,8 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 - **Špatné časy** – nastavte `TZ` v docker-compose na svou zónu.
 - **SPZ odmítá import** – vozidlo se stejnou SPZ musí být v programu SPZ
   založené; prázdného řidiče si SPZ doplní z karty vozidla.
+- **Aplikace vypadá staře / něco nereaguje po aktualizaci** – prohlížeč drží
+  starou verzi v mezipaměti (PWA). Aplikace se od této verze přepne na nový
+  kód sama; pokud ne, stačí **tvrdé obnovení** stránky (Ctrl+Shift+R, na Macu
+  Cmd+Shift+R). Aktuální verzi frontendu ukazuje na mapě záložka Nástroje →
+  „O aplikaci".

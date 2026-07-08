@@ -6,14 +6,30 @@ body.kniha {
 
 #knihaHeader {
   display: flex;
-  align-items: baseline;
-  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   padding: 12px 20px;
   background: var(--surface-1);
   border-bottom: 1px solid var(--border);
+  /* zůstává navrchu a stále klikatelný – nikdy ho nepřekryjí přilepené
+     řádky tabulky (ty mají nižší z-index) */
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 #knihaHeader h1 { margin: 0; font-size: 18px; }
-.navlink { color: var(--series-1); text-decoration: none; font-size: 13px; }
+.navlink {
+  position: relative;   /* nad případnými sousedy, plná plocha na klik */
+  z-index: 1;
+  color: var(--series-1);
+  text-decoration: none;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+}
 .navlink:hover { text-decoration: underline; }
 
 #knihaLayout {
