@@ -17,6 +17,7 @@ document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
       b.classList.toggle("active", b === btn));
     document.querySelectorAll(".tab-page").forEach((p) =>
       p.classList.toggle("active", p.dataset.page === btn.dataset.tab));
+    if (btn.dataset.tab === "mista") loadPlacesTab();
   }));
 
 $("panelCollapse").addEventListener("click", () => {
@@ -199,6 +200,8 @@ async function loadAll() {
     renderStats(stats, prevStats);
     renderEmptyState(pts);
     renderAnalysis(analysis);
+    if (document.querySelector('.tab-page[data-page="mista"]').classList.contains("active"))
+      loadPlacesTab();   // přehled míst drží krok se zvoleným obdobím
     state.loadedOnce = true;
     if (!state.fitted) fitToData();
     writeHash();
@@ -427,6 +430,154 @@ async function renderMyPlaces() {
 }
 
 $("layerMyPlaces").addEventListener("change", renderMyPlaces);
+
+// ------------------------------------------------ přehled „Moje místa"
+
+let placesData = [];   // [{...place, count, secs}] pro zvolené období
+
+function fmtDur(secs) {
+  const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60);
+  if (h && m) return `${h} h ${m} min`;
+  if (h) return `${h} h`;
+  return `${m} min`;
+}
+
+async function loadPlacesTab() {
+  try {
+    const r = currentRange();
+    const [pl, st] = await Promise.all([
+      api("/api/places"),
+      api("/api/places/stats", r),
+    ]);
+    const stats = {};
+    for (const s of st.stats) stats[s.id] = s;
+    placesData = pl.places.map((p) => ({
+      ...p, count: stats[p.id]?.count || 0, secs: stats[p.id]?.secs || 0,
+    }));
+  } catch (e) { placesData = []; }
+  drawPlacesList();
+}
+
+function drawPlacesList() {
+  const list = $("placesList");
+  if (!placesData.length) {
+    list.innerHTML =
+      `<div id="placesEmpty">${icon("pin", 28)}` +
+      "<p><b>Zatím žádná pojmenovaná místa</b></p>" +
+      '<p class="muted">Pojmenujte místo v mapě (klik → „Pojmenovat místo"), ' +
+      "nebo obkreslete oblast polygonem v záložce Mapa.</p></div>";
+    return;
+  }
+  const q = $("placeSearch").value.trim().toLowerCase();
+  const sort = $("placeSort").value;
+  const items = placesData
+    .filter((p) => !q || p.name.toLowerCase().includes(q))
+    .sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, "cs")
+      : sort === "count" ? b.count - a.count : b.secs - a.secs);
+  if (!items.length) {
+    list.innerHTML = '<p class="muted" style="padding:10px 4px">Nic nevyhovuje filtru.</p>';
+    return;
+  }
+  list.innerHTML = items.map((p) => {
+    const sub = p.count
+      ? `${p.count}× · ${fmtDur(p.secs)} ve zvoleném období`
+      : "ve zvoleném období bez pobytu";
+    return `<div class="placeCard" data-id="${p.id}">
+      <div class="placeHead">
+        <span class="ic pinIc">${icon(p.polygon ? "polygon" : "pin", 16)}</span>
+        <div class="pmeta">
+          <div class="pname">${escapeHtml(p.name)}</div>
+          <div class="psub">${sub}</div>
+        </div>
+        <span class="ptag">${p.polygon ? "oblast" : "kruh"}</span>
+        <button class="pact edit" title="Přejmenovat">${icon("pencil", 14)}</button>
+        <button class="pact del" title="Smazat místo">${icon("trash", 14)}</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// jedno delegované klikání pro celý seznam (přežije překreslení)
+$("placesList").addEventListener("click", async (ev) => {
+  const card = ev.target.closest(".placeCard");
+  if (!card) return;
+  const id = Number(card.dataset.id);
+  const p = placesData.find((x) => x.id === id);
+  if (!p) return;
+
+  if (ev.target.closest(".edit")) { startPlaceEdit(card, p); return; }
+  if (ev.target.closest(".del")) {
+    if (!confirm(`Smazat pojmenování místa „${p.name}"?`)) return;
+    await apiFetch(`/api/places/${id}`, { method: "DELETE" });
+    toast("Místo smazáno.", "success");
+    renderMyPlaces();
+    loadPlacesTab();
+    return;
+  }
+  if (ev.target.closest(".placeEdit")) return;   // klik do editačního pole
+
+  // klik na kartu: přepnout detail s pobyty + doletět na mapě
+  if (p.polygon) map.flyToBounds(p.polygon, { maxZoom: 16, duration: 0.7 });
+  else map.flyTo([p.lat, p.lon], 15, { duration: 0.7 });
+  const open = card.querySelector(".placeBody");
+  if (open) { open.remove(); return; }
+  await expandPlace(card, id);
+});
+
+async function expandPlace(card, id) {
+  const body = document.createElement("div");
+  body.className = "placeBody";
+  body.innerHTML = '<p class="muted">Načítám pobyty…</p>';
+  card.appendChild(body);
+  try {
+    const d = await api(`/api/places/${id}/stays`, currentRange());
+    if (!d.stays.length) {
+      body.innerHTML = '<p class="muted">Ve zvoleném období tu nemáte žádný pobyt.</p>';
+      return;
+    }
+    body.innerHTML = "<ol>" + d.stays.map((s) => {
+      const a = new Date(s.start_ts * 1000), b = new Date(s.end_ts * 1000);
+      const day = a.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" });
+      return `<li><span>${day} ${toTimeStr(a)}–${toTimeStr(b)}</span><b>${fmtDur(s.secs)}</b></li>`;
+    }).join("") + "</ol>";
+  } catch (e) {
+    body.innerHTML = `<p class="muted">Načtení selhalo: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function startPlaceEdit(card, p) {
+  const meta = card.querySelector(".pmeta");
+  if (card.querySelector(".placeEdit")) return;
+  const orig = meta.innerHTML;
+  meta.innerHTML =
+    `<div class="placeEdit"><input type="text" value="${escapeHtml(p.name)}">` +
+    `<button class="pact save" title="Uložit">${icon("check", 14)}</button>` +
+    `<button class="pact cancel" title="Zrušit">${icon("x", 14)}</button></div>`;
+  const input = meta.querySelector("input");
+  input.focus();
+  input.select();
+  const cancel = () => { meta.innerHTML = orig; };
+  const save = async () => {
+    const name = input.value.trim();
+    if (!name) { toast("Název nesmí být prázdný.", "error"); return; }
+    if (name === p.name) { cancel(); return; }
+    try {
+      await apiFetch(`/api/places/${p.id}`, { method: "PATCH", body: { name } });
+      toast("Název upraven.", "success");
+      renderMyPlaces();
+      loadPlacesTab();
+    } catch (e) { toast("Úprava selhala: " + e.message, "error"); }
+  };
+  meta.querySelector(".save").addEventListener("click", save);
+  meta.querySelector(".cancel").addEventListener("click", cancel);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") save();
+    else if (e.key === "Escape") cancel();
+  });
+}
+
+$("placeSearch").addEventListener("input", drawPlacesList);
+$("placeSort").addEventListener("change", drawPlacesList);
 
 // ------------------------------------------- kreslení oblasti (polygon)
 

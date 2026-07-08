@@ -27,6 +27,7 @@
 
     <nav id="tabs" role="tablist">
       <button class="tab-btn active" data-tab="mapa"><span data-icon="map"></span> Mapa</button>
+      <button class="tab-btn" data-tab="mista"><span data-icon="pin"></span> Místa</button>
       <button class="tab-btn" data-tab="stat"><span data-icon="chart"></span> Statistiky</button>
       <button class="tab-btn" data-tab="analyza"><span data-icon="calendar"></span> Analýza</button>
       <button class="tab-btn" data-tab="nastroje"><span data-icon="tools"></span> Nástroje</button>
@@ -119,6 +120,25 @@
           <p class="muted">Druhé období se vykreslí <b style="color:var(--series-3)">oranžově</b>
              přes hlavní modré trasy – hodí se na srovnání „letos vs. loni".</p>
         </div>
+      </section>
+    </div>
+
+    <!-- ===================== záložka MÍSTA ===================== -->
+    <div class="tab-page" data-page="mista">
+      <section>
+        <h2>Moje místa</h2>
+        <div class="row">
+          <input type="search" id="placeSearch" placeholder="Filtrovat podle názvu…">
+          <select id="placeSort" title="Řazení">
+            <option value="time">Nejvíc času</option>
+            <option value="count">Nejvíc návštěv</option>
+            <option value="name">Podle názvu</option>
+          </select>
+        </div>
+        <p class="muted">Vaše pojmenovaná místa a časy ve zvoleném období.
+           Klikněte na místo – ukáže se na mapě i s jednotlivými pobyty.
+           Tužkou upravíte název, košem místo smažete.</p>
+        <div id="placesList"></div>
       </section>
     </div>
 

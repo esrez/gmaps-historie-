@@ -99,18 +99,22 @@ body {
 }
 .tab-btn {
   flex: 1;
+  min-width: 0;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 3px;
   border: none;
   background: none;
-  padding: 7px 4px;
-  font-size: 12px;
+  padding: 6px 2px;
+  font-size: 11px;
+  line-height: 1.1;
   color: var(--muted);
   border-radius: 8px 8px 0 0;
   border-bottom: 2px solid transparent;
 }
+.tab-btn .ic { margin: 0; }
 .tab-btn:hover { color: var(--text-primary); background: var(--grid); }
 .tab-btn.active {
   color: var(--series-1);
@@ -321,6 +325,79 @@ button:disabled { opacity: 0.5; cursor: default; }
 #topPlaces li { margin: 3px 0; color: var(--text-secondary); }
 #topPlaces a { color: var(--series-1); text-decoration: none; cursor: pointer; }
 #topPlaces a:hover { text-decoration: underline; }
+
+/* ---------------- přehled Moje místa ---------------- */
+#placesList { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.placeCard {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.placeHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.placeHead:hover { background: var(--grid); }
+.placeHead .ic.pinIc { color: var(--series-2); flex: 0 0 auto; }
+.placeHead .pmeta { min-width: 0; flex: 1; }
+.placeHead .pname {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.placeHead .psub { font-size: 11px; color: var(--muted); }
+.placeHead .ptag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--grid);
+  color: var(--text-secondary);
+}
+.placeHead .pact {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 5px;
+  opacity: 0.65;
+}
+.placeHead .pact:hover { opacity: 1; background: var(--grid); }
+.placeHead .pact.del:hover { color: var(--accent-red); }
+.placeBody {
+  border-top: 1px dashed var(--baseline);
+  padding: 6px 10px 8px;
+  font-size: 12px;
+}
+.placeBody ol { margin: 0; padding: 0; list-style: none; }
+.placeBody li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+.placeBody li b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.placeEdit { display: flex; gap: 6px; align-items: center; flex: 1; }
+.placeEdit input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--series-1);
+  border-radius: 6px;
+  padding: 4px 7px;
+}
+#placesEmpty { padding: 18px 6px; text-align: center; color: var(--muted); }
+#placesEmpty .ic { display: block; margin: 0 auto 6px; opacity: 0.5; }
 
 .clock { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; }
 

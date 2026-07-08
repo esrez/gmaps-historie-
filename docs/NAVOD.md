@@ -72,6 +72,21 @@ Když zvolené období nemá žádná data, mapa to řekne kartičkou s tlačít
   a uprostřed každé je směrová šipka.
 - Pohled i období se drží v adrese – funguje záložkování a obnovení stránky.
 
+### Přehled „Moje místa" (záložka Místa)
+
+Samostatná záložka se seznamem všech pojmenovaných míst a časů ve zvoleném
+období. Umožňuje:
+
+- **filtrovat** podle názvu a **řadit** (nejvíc času / nejvíc návštěv / podle
+  názvu);
+- **klik na místo** ho ukáže na mapě (u polygonu přiblíží celý areál)
+  a rozbalí **jednotlivé pobyty** – u každého datum, čas od–do a délku;
+- **přejmenovat** místo přímo v seznamu (tužka → pole s uložením) a **smazat**
+  (koš). Změna se hned promítne všude, kde se místo zobrazuje.
+
+Každá karta rozlišuje, zda jde o **kruh** (okruh kolem bodu) nebo **oblast**
+(polygon). Místa bez pobytu v období jsou označena jako „bez pobytu".
+
 ## 3. Kniha jízd (`/kniha`)
 
 Typický postup na konci měsíce:

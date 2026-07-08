@@ -71,6 +71,10 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   souřadnic; názvy se použijí v top místech, na mapě, v hledání i v knize
   jízd a jdou kdykoli upravit (Home/Work se překládá na Domov/Práce);
   velké objekty lze obkreslit **polygonem** a vrstva „Moje místa" je ukazuje
+- **Přehled „Moje místa"** (samostatná záložka) – seznam všech pojmenovaných
+  míst s počtem návštěv a časem ve zvoleném období, filtrování a řazení;
+  klik na místo ho ukáže na mapě a rozbalí **jednotlivé pobyty** (kdy od–do
+  a jak dlouho jste tam byli), přejmenování i mazání přímo v seznamu
 - **Kniha jízd po dnech** – řádek dne se součtem km a trasou, rozbalení na
   editovatelné jízdy; mezisoučty měsíců, přilepená hlavička i celkový součet,
   hromadný výběr a mazání jízd či celých dnů; pole s **našeptávačem** míst
@@ -104,7 +108,7 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   plynulé načítání dlouhých tabulek
 - **Verzovaná PWA cache** – po aktualizaci serveru se mezipaměť sama
   zneplatní, nové UI naběhne bez ručního mazání cache (verze v Nástrojích)
-- **Automatické testy** – pytest (44 testů: importér, API, kniha jízd)
+- **Automatické testy** – pytest (46 testů: importér, API, kniha jízd)
   + Playwright e2e testy UI, obojí v GitHub Actions při každém push
 - **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
   - automatické generování jízd z rozpoznaných cest autem, volitelně jen

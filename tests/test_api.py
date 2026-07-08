@@ -199,6 +199,32 @@ def test_place_stats_for_tooltips(client, test_db, tmp_path):
     assert mine["count"] == 5 and mine["secs"] > 0
 
 
+def test_place_stays_detail(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    pid = client.post("/api/places",
+                      json={"lat": 50.1, "lon": 14.39, "name": "Zákazník"}).json()["places"][0]["id"]
+    d = client.get(f"/api/places/{pid}/stays").json()
+    assert d["place"]["name"] == "Zákazník"
+    assert d["count"] == 5 and len(d["stays"]) == 5
+    # počet a čas souhlasí s přehledovým /stats
+    assert d["secs"] == sum(s["secs"] for s in d["stays"])
+    st = next(s for s in client.get("/api/places/stats").json()["stats"] if s["id"] == pid)
+    assert d["count"] == st["count"] and d["secs"] == st["secs"]
+    # každý pobyt má smysluplný interval
+    assert all(s["end_ts"] > s["start_ts"] for s in d["stays"])
+    assert client.get("/api/places/9999/stays").status_code == 404
+
+
+def test_place_patch_rename(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    pid = client.post("/api/places",
+                      json={"lat": 50.1, "lon": 14.39, "name": "Starý"}).json()["places"][0]["id"]
+    res = client.patch(f"/api/places/{pid}", json={"name": "Nový název"}).json()
+    assert next(p for p in res["places"] if p["id"] == pid)["name"] == "Nový název"
+    assert client.patch(f"/api/places/{pid}", json={"name": "  "}).status_code == 400
+    assert client.patch("/api/places/9999", json={"name": "x"}).status_code == 404
+
+
 def test_cities_resolver():
     from app.cities import city_for
     assert city_for(49.19, 16.61) == "Brno"
