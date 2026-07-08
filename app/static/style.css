@@ -46,6 +46,9 @@
 }
 
 * { box-sizing: border-box; }
+/* [hidden] musí vždy skrýt – i prvky, kterým jinde nastavujeme display
+   (modály, tlačítka v liště), jinak by zůstaly viditelné a braly myš */
+[hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -65,6 +68,85 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+
+/* ---------------- průvodce / nápověda (modální) ---------------- */
+#wizard {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+#wizCard {
+  position: relative;
+  width: 560px;
+  max-width: 100%;
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px 16px;
+  animation: pageIn 0.2s ease-out;
+}
+#wizClose { position: absolute; top: 10px; right: 10px; }
+#wizCard h2 { font-size: 19px; margin: 0 0 10px; color: var(--text-primary); text-transform: none; letter-spacing: 0; }
+#wizCard h3 { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-primary); margin: 0 0 6px; }
+#wizCard p { margin: 8px 0; line-height: 1.5; }
+#wizCard .wizStep { overflow-y: auto; }
+.wizIcon { color: var(--series-1); margin-bottom: 6px; }
+.wizIcon .ic { width: 34px; height: 34px; }
+.wizOpt {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-1) 60%, transparent);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+.wizOpt ol { margin: 6px 0; padding-left: 20px; }
+.wizOpt li { margin: 4px 0; line-height: 1.45; }
+.wizLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  color: var(--series-1);
+  font-weight: 600;
+  text-decoration: none;
+}
+.wizLink:hover { text-decoration: underline; }
+#wizImportBtn { margin: 6px 0; }
+#wizImportStatus { margin: 6px 0; min-height: 16px; }
+#wizFoot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--grid);
+}
+#wizDontShow { font-size: 12px; color: var(--muted); }
+.wizDots { display: flex; gap: 6px; margin: 0 auto; }
+.wizDots span {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--baseline);
+}
+.wizDots span.on { background: var(--series-1); }
+.wizNav { display: flex; gap: 8px; }
+.wizNav button { display: inline-flex; align-items: center; gap: 4px; }
+#wizCard code {
+  background: var(--grid);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+
+@media (max-width: 560px) {
+  #wizFoot { flex-wrap: wrap; }
+  #wizDontShow { order: 3; width: 100%; }
 }
 
 #panel {

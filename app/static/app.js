@@ -1460,24 +1460,32 @@ $("cleanupBtn").addEventListener("click", async () => {
 
 // ----------------------------------------------------------------- import
 
-$("importBtn").addEventListener("click", async () => {
-  const f = $("importFile").files[0];
-  if (!f) { toast("Nejdřív vyberte soubor k importu.", "error"); return; }
+// stav importu se ukazuje v Nástrojích i (běží-li) v okně průvodce
+function setImportStatus(msg) {
+  $("importStatus").textContent = msg;
+  const w = document.getElementById("wizImportStatus");
+  if (w) w.textContent = msg;
+}
+
+async function startImport(file) {
+  if (!file) { toast("Nejdřív vyberte soubor k importu.", "error"); return; }
   const fd = new FormData();
-  fd.append("file", f);
+  fd.append("file", file);
   $("importBtn").disabled = true;
-  $("importStatus").textContent = `Nahrávám ${f.name} …`;
+  setImportStatus(`Nahrávám ${file.name} …`);
   try {
     const res = await fetch("/api/import", { method: "POST", body: fd });
     const body = await res.json();
     if (!res.ok) throw new Error(body.detail || res.status);
     await watchImport(body.job_id);   // import běží na pozadí, sledujeme průběh
   } catch (e) {
-    $("importStatus").textContent = "Import selhal: " + e.message;
+    setImportStatus("Import selhal: " + e.message);
     toast("Import selhal", "error");
     $("importBtn").disabled = false;
   }
-});
+}
+
+$("importBtn").addEventListener("click", () => startImport($("importFile").files[0]));
 
 async function watchImport(jobId) {
   const fmt = (v) => v.toLocaleString("cs");
@@ -1486,30 +1494,85 @@ async function watchImport(jobId) {
     try {
       s = await api(`/api/import/status/${jobId}`);
     } catch (e) {
-      $("importStatus").textContent = "Nelze zjistit stav importu: " + e.message;
+      setImportStatus("Nelze zjistit stav importu: " + e.message);
       break;
     }
     if (s.status === "running") {
-      $("importStatus").textContent =
-        `Zpracovávám… +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, +${fmt(s.activities)} aktivit`;
+      setImportStatus(
+        `Zpracovávám… +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, +${fmt(s.activities)} aktivit`);
       await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
     if (s.status === "done") {
-      $("importStatus").textContent =
+      setImportStatus(
         `Hotovo: +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, ` +
-        `+${fmt(s.activities)} aktivit (${s.files} souborů).`;
+        `+${fmt(s.activities)} aktivit (${s.files} souborů).`);
       toast("Import dokončen.", "success");
       state.fitted = false;
+      if (!document.getElementById("wizard").hidden) {
+        setTimeout(closeWizard, 1200);   // po dokončení průvodce zavřít
+      }
+      loadPlaceSuggest();
       loadAll();
     } else {
-      $("importStatus").textContent = "Import selhal: " + s.error;
+      setImportStatus("Import selhal: " + s.error);
       toast("Import selhal", "error");
     }
     break;
   }
   $("importBtn").disabled = false;
 }
+
+// ----------------------------------------------------- průvodce / nápověda
+
+const WIZ_STEPS = 3;
+let wizStep = 1;
+
+function renderWizStep() {
+  document.querySelectorAll("#wizCard .wizStep").forEach((el) =>
+    el.hidden = Number(el.dataset.step) !== wizStep);
+  $("wizPrev").hidden = wizStep === 1;
+  $("wizNext").hidden = wizStep === WIZ_STEPS;
+  $("wizDone").hidden = wizStep !== WIZ_STEPS;
+  const dots = document.querySelector("#wizFoot .wizDots");
+  dots.innerHTML = Array.from({ length: WIZ_STEPS },
+    (_, i) => `<span class="${i + 1 === wizStep ? "on" : ""}"></span>`).join("");
+}
+
+function openWizard(step = 1) {
+  wizStep = step;
+  $("wizNoAuto").checked = localStorage.getItem("wizardSeen") === "1";
+  renderWizStep();
+  $("wizard").hidden = false;
+}
+
+function closeWizard() {
+  $("wizard").hidden = true;
+}
+
+$("helpBtn").addEventListener("click", () => openWizard(2));   // rovnou k odkazům na data
+$("howtoBtn").addEventListener("click", () => openWizard(2));
+$("wizClose").addEventListener("click", closeWizard);
+$("wizDone").addEventListener("click", closeWizard);
+$("wizPrev").addEventListener("click", () => { wizStep = Math.max(1, wizStep - 1); renderWizStep(); });
+$("wizNext").addEventListener("click", () => { wizStep = Math.min(WIZ_STEPS, wizStep + 1); renderWizStep(); });
+$("wizNoAuto").addEventListener("change", () => {
+  localStorage.setItem("wizardSeen", $("wizNoAuto").checked ? "1" : "0");
+});
+$("wizard").addEventListener("click", (e) => { if (e.target.id === "wizard") closeWizard(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("wizard").hidden) closeWizard();
+});
+
+// tlačítko v průvodci: vybrat soubor a rovnou importovat
+$("wizImportBtn").addEventListener("click", () => {
+  const onPick = () => {
+    $("importFile").removeEventListener("change", onPick);
+    if ($("importFile").files[0]) startImport($("importFile").files[0]);
+  };
+  $("importFile").addEventListener("change", onPick);
+  $("importFile").click();
+});
 
 $("backupBtn").addEventListener("click", () => { location.href = "/api/backup"; });
 
@@ -1563,11 +1626,14 @@ async function showAutoImportLog() {
       calYear = new Date(r.max_ts * 1000).getFullYear();
     }
     if (!r.points && !r.visits) {
-      // prázdná databáze → navést uživatele rovnou k importu
-      document.querySelector('#tabs [data-tab="nastroje"]').click();
+      // prázdná databáze → laika provede průvodce (pokud si ho nevypnul)
       $("importStatus").textContent =
         "Začněte zde: nahrajte Timeline.json z telefonu nebo ZIP z Takeoutu.";
-      toast("Zatím nejsou žádná data – začněte importem exportu z Google Maps.");
+      if (localStorage.getItem("wizardSeen") === "1") {
+        document.querySelector('#tabs [data-tab="nastroje"]').click();
+      } else {
+        openWizard(1);
+      }
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   showVersion();
