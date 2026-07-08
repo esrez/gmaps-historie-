@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS place_names (
     lat      REAL NOT NULL,
     lon      REAL NOT NULL,
     radius_m REAL NOT NULL DEFAULT 250,
-    name     TEXT NOT NULL
+    name     TEXT NOT NULL,
+    polygon  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS undo_log (
@@ -102,6 +103,10 @@ def _migrate(conn: sqlite3.Connection):
     cols = {r[1] for r in conn.execute("PRAGMA table_info(trips)")}
     if cols and "excluded" not in cols:
         conn.execute("ALTER TABLE trips ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0")
+
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(place_names)")}
+    if cols and "polygon" not in cols:
+        conn.execute("ALTER TABLE place_names ADD COLUMN polygon TEXT")
 
     # tachometr: dříve jen (year, km), nyní per vozidlo (year, plate, km)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(odometer)")}

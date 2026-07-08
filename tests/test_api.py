@@ -175,3 +175,15 @@ def test_min_stay_filters_passthrough(client, test_db, tmp_path):
                       params={"lat": 50.1, "lon": 14.39, "radius_m": 300,
                               "min_stay_min": 0}).json()
     assert loc0["count"] == 6
+
+
+def test_polygon_place(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    poly = [[50.095, 14.385], [50.105, 14.385], [50.105, 14.395], [50.095, 14.395]]
+    r = client.post("/api/places", json={"name": "Areál firmy", "polygon": poly}).json()
+    assert r["places"][0]["polygon"] is not None
+    stats = client.get("/api/stats").json()
+    assert stats["top_places"][0]["label"] == "Areál firmy"   # práce leží uvnitř
+    # bod mimo polygon jméno nedostane
+    from app import places as pl
+    assert pl.custom_label(r["places"], 50.2, 14.5) is None

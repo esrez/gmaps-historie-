@@ -20,7 +20,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/calendar` | GET | denní km + počty bodů pro kalendář roku (`year`) |
 | `/api/pmtiles/status` | GET | dostupnost offline mapy `data/map.pmtiles` |
 | `/api/pmtiles` | GET | servíruje PMTiles s podporou HTTP Range |
-| `/api/places` | GET/POST | vlastní názvy míst (zákazník, adresa…); POST upsert dle blízkosti |
+| `/api/places` | GET/POST | vlastní názvy míst (zákazník, adresa…); POST upsert dle blízkosti, volitelně `polygon` |
 | `/api/places/{id}` | DELETE | smazání vlastního názvu |
 
 ## Import a údržba
@@ -58,6 +58,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/trips/rules/{id}` | DELETE | smazání pravidla |
 | `/api/trips/odometer` | GET/PUT | roční tachometr per SPZ; vrací i `booked_km` a `remaining_km` |
 | `/api/trips/undo` | GET/POST | info o poslední hromadné akci / její vrácení |
+| `/api/trips/suggest` | GET | našeptávač: známá místa a používané účely |
 | `/api/trips/missing_days` | GET | dny s jízdou autem chybějící v knize |
 | `/api/trips/alerts` | GET | neúplné jízdy, překročené tachometry |
 | `/api/trips/export.xlsx` | GET | kniha jízd pro import do SPZ (bez vyřazených; volitelně `plate`) |

@@ -47,6 +47,9 @@ minuty), nebo z příkazové řádky
   odkazem v bublině místa na mapě, nebo v panelu „Kdy jsem tu byl?".
   Název platí pro okruh 250 m, použije se všude včetně knihy jízd
   a stejnou cestou ho lze změnit; prázdný název ho smaže.
+  Tlačítkem **⬠ Pojmenovat oblast (polygon)** lze místo kruhu obkreslit
+  celý areál (min. 3 body, dvojklik/tlačítko dokončí, Esc zruší) – přesnější
+  pro velké objekty. Pojmenovaná místa zobrazuje vrstva „Moje místa".
 - Pohled i období se drží v adrese – funguje záložkování a obnovení stránky.
 
 ## 3. Kniha jízd (`/kniha`)
@@ -59,8 +62,11 @@ Typický postup na konci měsíce:
    a už existující záznamy (ruční úpravy se nikdy nepřepíšou).
 3. Zkontrolujte **upozornění** nad tabulkou: chybějící dny (tlačítko Doplnit),
    neúplné jízdy, překročený tachometr.
-4. Upravte tabulku – vše je editovatelné přímo v řádku; uložení potvrdí
-   zelené bliknutí.
+4. Tabulka se zobrazuje **po dnech**: řádek dne ukazuje počet jízd, trasu
+   a součet km; kliknutím se den rozbalí na jednotlivé jízdy k úpravě
+   (přepínač „Zobrazovat po dnech" vpravo nahoře vrátí plochý seznam).
+   Pole Odkud/Kam/Účel mají **našeptávač** známých míst a účelů.
+   Uložení potvrdí zelené bliknutí.
 5. **Export XLSX pro SPZ** (import v programu SPZ od Milk Computers – vozidlo
    s toutéž SPZ musí být v SPZ založené) nebo **Export PDF** pro tisk.
 

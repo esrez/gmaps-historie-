@@ -50,6 +50,7 @@ L.control.scale({ imperial: false }).addTo(map);
 
 const trackLayer = L.layerGroup().addTo(map);
 const pointLayer = L.layerGroup().addTo(map);
+const myPlacesLayer = L.layerGroup().addTo(map);
 const visitLayer = L.markerClusterGroup({
   disableClusteringAtZoom: 15,
   maxClusterRadius: 40,
@@ -163,6 +164,7 @@ async function loadAll() {
     ]);
     state.visits = visits.visits;
     renderVisits();
+    renderMyPlaces();
     renderStats(stats);
     renderAnalysis(analysis);
     state.loadedOnce = true;
@@ -241,13 +243,22 @@ function splitSegments(points) {
 function renderTracks() {
   trackLayer.clearLayers();
   if (!$("layerTracks").checked) return;
-  for (const seg of splitSegments(state.points)) {
+  // „casing": světlý/tmavý podklad pod čarou – trasa je čitelná na každém
+  // podkladu (satelit, tmavá mapa) a čáry působí prokresleně
+  const casing = isDarkTheme() ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)";
+  const segments = splitSegments(state.points);
+  for (const seg of segments) {
+    L.polyline(seg.map((p) => [p[1], p[2]]), {
+      color: casing, weight: 6, opacity: 1, interactive: false,
+    }).addTo(trackLayer);
+  }
+  for (const seg of segments) {
     const from = new Date(seg[0][0] * 1000);
     const to = new Date(seg[seg.length - 1][0] * 1000);
     const line = L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: css("--series-1"),
-      weight: 2,
-      opacity: 0.75,
+      weight: 2.5,
+      opacity: 0.9,
     }).bindTooltip(
       `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>` +
       "<i>kliknutím přehrajete den</i>", { sticky: true });
@@ -256,11 +267,94 @@ function renderTracks() {
       $("playDate").value = toDateStr(from);
       playDay();
     });
-    line.on("mouseover", () => line.setStyle({ weight: 4 }));
-    line.on("mouseout", () => line.setStyle({ weight: 2 }));
+    line.on("mouseover", () => line.setStyle({ weight: 4.5 }));
+    line.on("mouseout", () => line.setStyle({ weight: 2.5 }));
     line.addTo(trackLayer);
   }
 }
+
+// -------------------------------------------------- moje místa (názvy)
+
+async function renderMyPlaces() {
+  myPlacesLayer.clearLayers();
+  if (!$("layerMyPlaces").checked) return;
+  let all;
+  try {
+    all = (await api("/api/places")).places;
+  } catch (e) { return; }
+  const color = isDarkTheme() ? "#9085e9" : "#4a3aa7";
+  for (const p of all) {
+    const style = { color, weight: 2, fillColor: color, fillOpacity: 0.07,
+                    dashArray: "5 5" };
+    const shape = p.polygon
+      ? L.polygon(p.polygon, style)
+      : L.circle([p.lat, p.lon], { radius: p.radius_m, ...style });
+    shape.bindTooltip(p.name, { sticky: true });
+    shape.on("click", (ev) => {
+      L.DomEvent.stop(ev);
+      whenIWasHere(p.lat, p.lon, p.name);
+    });
+    shape.addTo(myPlacesLayer);
+  }
+}
+
+$("layerMyPlaces").addEventListener("change", renderMyPlaces);
+
+// ------------------------------------------- kreslení oblasti (polygon)
+
+const drawState = { active: false, pts: [], preview: null };
+
+function drawCleanup() {
+  drawState.active = false;
+  drawState.pts = [];
+  if (drawState.preview) { map.removeLayer(drawState.preview); drawState.preview = null; }
+  locLayer.clearLayers();
+  map.getContainer().style.cursor = "";
+  map.doubleClickZoom.enable();
+  $("drawPolyBtn").textContent = "⬠ Pojmenovat oblast (polygon)";
+}
+
+$("drawPolyBtn").addEventListener("click", () => {
+  if (drawState.active) { finishPolygonDraw(); return; }
+  drawState.active = true;
+  map.doubleClickZoom.disable();
+  map.getContainer().style.cursor = "crosshair";
+  $("drawPolyBtn").textContent = "✔ Dokončit oblast";
+  toast("Klikáním do mapy obkreslete oblast (min. 3 body), pak Dokončit. Esc zruší.");
+});
+
+function addDrawVertex(lat, lng) {
+  drawState.pts.push([lat, lng]);
+  L.circleMarker([lat, lng], { radius: 4, color: css("--accent-red"),
+                               fillOpacity: 1 }).addTo(locLayer);
+  if (drawState.preview) map.removeLayer(drawState.preview);
+  drawState.preview = L.polygon(drawState.pts, {
+    color: css("--accent-red"), weight: 2, dashArray: "4 4", fillOpacity: 0.08,
+  }).addTo(map);
+}
+
+async function finishPolygonDraw() {
+  if (drawState.pts.length < 3) {
+    toast("Oblast potřebuje alespoň 3 body.", "error");
+    return;
+  }
+  const name = prompt("Název oblasti (zákazník, sklad, areál…):");
+  if (name === null || !name.trim()) { drawCleanup(); return; }
+  try {
+    await apiFetch("/api/places", {
+      method: "POST",
+      body: { name: name.trim(), polygon: drawState.pts },
+    });
+    toast(`Oblast pojmenována: ${name.trim()}`, "success");
+  } catch (e) {
+    toast("Uložení oblasti selhalo: " + e.message, "error");
+  }
+  drawCleanup();
+  renderMyPlaces();
+  loadAll();
+}
+
+map.on("dblclick", () => { if (drawState.active) finishPolygonDraw(); });
 
 let glifyLayer = null;
 
@@ -437,6 +531,7 @@ async function renamePlace(lat, lon, currentLabel) {
   }
   await apiFetch("/api/places", { method: "POST", body: { lat, lon, name: name.trim() } });
   toast(`Místo pojmenováno: ${name.trim()}`, "success");
+  renderMyPlaces();
   loadAll();
 }
 
@@ -589,6 +684,11 @@ $("calNext").addEventListener("click", () => { calYear++; renderCalendar(); });
 // ------------------------------------------------------ klávesové zkratky
 
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && drawState.active) {
+    drawCleanup();
+    toast("Kreslení oblasti zrušeno.");
+    return;
+  }
   if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey) return;
   if (e.key === "ArrowLeft") { shiftDay(-1); }
   else if (e.key === "ArrowRight") { shiftDay(1); }
@@ -635,6 +735,10 @@ async function doSearch() {
 }
 
 map.on("click", (e) => {
+  if (drawState.active) {
+    addDrawVertex(e.latlng.lat, e.latlng.lng);
+    return;
+  }
   const { lat, lng } = e.latlng;
   const div = document.createElement("div");
   const btn = document.createElement("button");
