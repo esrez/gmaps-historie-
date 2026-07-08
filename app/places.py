@@ -8,6 +8,7 @@ zobrazuje: top místa, mapa, „Kdy jsem tu byl?" i kniha jízd.
 from __future__ import annotations
 
 import json
+import math
 from contextlib import closing
 
 from fastapi import APIRouter, HTTPException
@@ -72,6 +73,63 @@ def custom_label(places: list[dict], lat, lon) -> str | None:
     return p["name"] if p else None
 
 
+def _place_bbox(place: dict) -> tuple[float, float, float, float]:
+    """Obálka (min_lat, max_lat, min_lon, max_lon) místa pro předvýběr z DB."""
+    if place["polygon"]:
+        lats = [v[0] for v in place["polygon"]]
+        lons = [v[1] for v in place["polygon"]]
+        return min(lats), max(lats), min(lons), max(lons)
+    lat, lon, r = place["lat"], place["lon"], place["radius_m"]
+    dlat = r / 111_000
+    dlon = r / (111_000 * max(math.cos(math.radians(lat)), 0.01))
+    return lat - dlat, lat + dlat, lon - dlon, lon + dlon
+
+
+def _place_contains(place: dict, lat: float, lon: float) -> bool:
+    if place["polygon"]:
+        return point_in_polygon(lat, lon, place["polygon"])
+    return haversine_m(lat, lon, place["lat"], place["lon"]) <= place["radius_m"]
+
+
+def stays_for_place(conn, place: dict, lo: int, hi: int, gap_s: int = 2700) -> list[list[int]]:
+    """Pobyty na daném místě: GPS body seskupené v čase + záznamy návštěv,
+    obojí omezené na geometrii místa (polygon nebo okruh) a sloučené do
+    souvislých intervalů. Stejná logika jako mapové „Kdy jsem tu byl?", takže
+    přehled míst chytí i pobyty, které existují jen jako GPS body (ne jako
+    návštěva z Googlu)."""
+    min_lat, max_lat, min_lon, max_lon = _place_bbox(place)
+    intervals: list[list[int]] = []
+
+    prev = None
+    for ts, plat, plon in conn.execute(
+            "SELECT ts, lat, lon FROM points WHERE lat BETWEEN ? AND ? "
+            "AND lon BETWEEN ? AND ? AND ts BETWEEN ? AND ? ORDER BY ts",
+            (min_lat, max_lat, min_lon, max_lon, lo, hi)):
+        if not _place_contains(place, plat, plon):
+            continue
+        if prev is not None and ts - prev[1] <= gap_s:
+            prev[1] = ts
+        else:
+            prev = [ts, ts]
+            intervals.append(prev)
+
+    for v in conn.execute(
+            "SELECT start_ts, end_ts, lat, lon FROM visits WHERE lat BETWEEN ? AND ? "
+            "AND lon BETWEEN ? AND ? AND start_ts BETWEEN ? AND ? ORDER BY start_ts",
+            (min_lat, max_lat, min_lon, max_lon, lo, hi)):
+        if _place_contains(place, v["lat"], v["lon"]):
+            intervals.append([v["start_ts"], v["end_ts"]])
+
+    intervals.sort(key=lambda x: x[0])
+    merged: list[list[int]] = []
+    for s, e in intervals:
+        if merged and s <= merged[-1][1] + gap_s:
+            merged[-1][1] = max(merged[-1][1], e)
+        else:
+            merged.append([s, e])
+    return merged
+
+
 def visit_label(places: list[dict], lat, lon, name, semantic) -> str:
     """Popisek místa: vlastní název > jméno z Googlu > Domov/Práce > souřadnice."""
     custom = custom_label(places, lat, lon)
@@ -103,46 +161,37 @@ def list_places():
 def place_stats(from_ts: int | None = None, to_ts: int | None = None,
                 min_stay_min: float = 2):
     """Pobyt na pojmenovaných místech ve zvoleném období – pro bublinové
-    nápovědy na mapě (kolikrát a jak dlouho jsem tam byl)."""
+    nápovědy na mapě i přehled. Počítá z GPS bodů i návštěv (stejně jako
+    „Kdy jsem tu byl?"), takže zachytí i pobyty bez záznamu návštěvy."""
     from .common import ts_range
     lo, hi = ts_range(from_ts, to_ts)
+    min_s = int(min_stay_min * 60)
     with closing(db.connect()) as conn:
-        pls = load_places(conn)
-        agg = {p["id"]: {"id": p["id"], "count": 0, "secs": 0} for p in pls}
-        for v in conn.execute(
-                "SELECT start_ts, end_ts, lat, lon FROM visits "
-                "WHERE start_ts BETWEEN ? AND ? AND end_ts - start_ts >= ?",
-                (lo, hi, int(min_stay_min * 60))):
-            hit = custom_place(pls, v["lat"], v["lon"])
-            if hit is not None:
-                agg[hit["id"]]["count"] += 1
-                agg[hit["id"]]["secs"] += v["end_ts"] - v["start_ts"]
-    return {"stats": list(agg.values())}
+        out = []
+        for p in load_places(conn):
+            stays = [(s, e) for s, e in stays_for_place(conn, p, lo, hi) if e - s >= min_s]
+            out.append({"id": p["id"], "count": len(stays),
+                        "secs": sum(e - s for s, e in stays)})
+    return {"stats": out}
 
 
 @router.get("/{place_id}/stays")
-def place_stays(place_id: int, from_ts: int | None = None, to_ts: int | None = None,
-                min_stay_min: float = 2):
+def place_stays_detail(place_id: int, from_ts: int | None = None,
+                       to_ts: int | None = None, min_stay_min: float = 2):
     """Jednotlivé pobyty na konkrétním pojmenovaném místě ve zvoleném období:
-    kdy (od–do) a jak dlouho. Pobyt se přiřadí místu stejně jako v přehledu
-    (rozhoduje polygon, jinak nejbližší okruh), takže počty souhlasí."""
+    kdy (od–do) a jak dlouho. Počítá z GPS bodů i návštěv, takže počty
+    souhlasí s přehledem i s mapovým „Kdy jsem tu byl?"."""
     from .common import ts_range
     lo, hi = ts_range(from_ts, to_ts)
+    min_s = int(min_stay_min * 60)
     with closing(db.connect()) as conn:
         pls = load_places(conn)
         target = next((p for p in pls if p["id"] == place_id), None)
         if target is None:
             raise HTTPException(404, "Místo nenalezeno")
-        stays = []
-        for v in conn.execute(
-                "SELECT start_ts, end_ts, lat, lon FROM visits "
-                "WHERE start_ts BETWEEN ? AND ? AND end_ts - start_ts >= ? "
-                "ORDER BY start_ts", (lo, hi, int(min_stay_min * 60))):
-            hit = custom_place(pls, v["lat"], v["lon"])
-            if hit is not None and hit["id"] == place_id:
-                stays.append({"start_ts": v["start_ts"], "end_ts": v["end_ts"],
-                              "secs": v["end_ts"] - v["start_ts"]})
-    total = sum(s["secs"] for s in stays)
+        stays = [{"start_ts": s, "end_ts": e, "secs": e - s}
+                 for s, e in stays_for_place(conn, target, lo, hi) if e - s >= min_s]
+    total = sum(x["secs"] for x in stays)
     return {"place": {"id": target["id"], "name": target["name"],
                       "lat": target["lat"], "lon": target["lon"],
                       "polygon": target["polygon"]},
