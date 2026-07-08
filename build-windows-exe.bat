@@ -27,4 +27,4 @@ echo   dist\GMapsHistorie.exe
 echo   dist\GMapsHistorie-update.zip
 echo   data\update\GMapsHistorie-update.zip
 echo (Prvni spusteni chvili trva - rozbaluje se do docasne slozky.)
-pause
+if not defined BUILD_NO_PAUSE pause

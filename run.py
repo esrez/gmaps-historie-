@@ -24,10 +24,16 @@ import threading
 import webbrowser
 
 # Pracovní adresář: u .exe (PyInstaller) vedle spustitelného souboru, jinak
-# adresář projektu – aby data/ (databáze, zálohy, import) vznikla na správném
-# místě a relativní cesty seděly.
+# adresář projektu – aby relativní cesty seděly.
 if getattr(sys, "frozen", False):
-    os.chdir(os.path.dirname(sys.executable))
+    _EXE_DIR = os.path.dirname(sys.executable)
+    os.chdir(_EXE_DIR)
+    if not os.environ.get("DATA_DIR"):
+        _local = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        _data = os.path.join(_local, "GMapsHistorie", "data")
+        os.makedirs(_data, exist_ok=True)
+        os.environ["DATA_DIR"] = _data
+    os.environ.setdefault("APP_DIR", _EXE_DIR)
 else:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -46,6 +52,15 @@ def _open_browser_later() -> None:
 
 
 def main() -> None:
+    if "--update" in sys.argv or "--check-update" in sys.argv:
+        from pathlib import Path
+
+        from app.core.updater import run_update
+        code = run_update(Path(os.environ.get("APP_DIR", os.getcwd())))
+        if "--check-update" in sys.argv and code == 2:
+            sys.exit(0)
+        sys.exit(0 if code in (0, 2) else 1)
+
     try:
         # předáváme přímo objekt aplikace (ne řetězec) – funguje i v .exe,
         # kde uvicorn neumí spolehlivě importovat modul podle jména

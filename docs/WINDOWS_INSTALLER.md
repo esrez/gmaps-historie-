@@ -1,64 +1,75 @@
-# Windows instalátor a aktualizace
+# Windows 11 – instalátor a aktualizace
 
-## Co je nově
+## Výstup buildu
 
-- `build-windows-installer.bat` sestaví `.exe`, update ZIP a instalační balíček.
-- `installer.iss` (Inno Setup) vytvoří instalátor `GMapsHistorie-Setup.exe`.
-- `scripts/make_update_package.py` automaticky vytvoří `GMapsHistorie-update.zip`.
-- `scripts/update_windows.py` provede in-place aktualizaci z `/api/update`.
-- `scripts/smoke_test.py` rychle ověří API a strukturu update balíčku.
+Po spuštění `build-windows-installer.bat` na **Windows 11** vznikne v `dist\`:
 
-## Build (Windows)
+| Soubor | Účel |
+|---|---|
+| `GMapsHistorie-Setup-2.0.0.exe` | Instalační program (čeština) |
+| `GMapsHistorie.exe` | Spustitelná aplikace |
+| `GMapsHistorie-update.zip` | Balík pro aktualizaci |
 
-1. Nainstalujte [Inno Setup 6](https://jrsoftware.org/isinfo.php) (obsahuje `iscc`).
-2. Spusťte:
+## Požadavky pro sestavení
+
+1. **Python 3.11+** s PATH
+2. **[Inno Setup 6](https://jrsoftware.org/isinfo.php)** (`iscc` v PATH)
+3. Příkaz:
 
 ```bat
 build-windows-installer.bat
 ```
 
-Výstup v `dist/`:
-- `GMapsHistorie.exe` – spustitelná aplikace
-- `GMapsHistorie-update.zip` – balík pro aktualizaci
-- `GMapsHistorie-Setup.exe` – instalační program
+## Co instalátor nabízí
 
-Navíc se vytvoří `data/update/GMapsHistorie-update.zip` pro lokální servírování přes API.
+- **Český průvodce** – licence, úvod, volba úloh, dokončení
+- **Instalace do Program Files** (vyžaduje souhlas administrátora – standardní bezpečný postup)
+- **Data mimo Program Files** – databáze v `%LOCALAPPDATA%\GMapsHistorie\data` (zápis bez admin práv)
+- **Zástupce** – Start, volitelně plocha, „Aktualizovat…“, odinstalace
+- **Volitelný autostart** po přihlášení (vypnuto ve výchozím stavu)
+- **Volitelná URL aktualizací** – zadáte při instalaci (např. `https://vas-server.cz/api/update`)
+- **Odinstalace** – nabídne smazání lokálních dat
 
-## Smoke test po buildu
+## Aktualizace (3 způsoby)
 
+### 1. Z nabídky Start
+**Aktualizovat GMaps Historie** → spustí vestavěný updater
+
+### 2. Příkazová řádka
 ```bat
-python scripts\smoke_test.py --package dist\GMapsHistorie-update.zip
+cd "C:\Program Files\GMapsHistorie"
+GMapsHistorie.exe --update
 ```
 
-Nebo jen API (bez Windows exe):
+### 3. Ze serveru
+1. Nahrajte `GMapsHistorie-update.zip` do `data\update\` na běžícím serveru
+2. Ujistěte se, že `/api/update` vrací novější verzi
+3. Spusťte aktualizaci na klientovi
 
-```bat
-python scripts\smoke_test.py
+Updater před přepsáním zálohuje starý `.exe` do `backups\`.
+
+## Bezpečnost
+
+| Opatření | Popis |
+|---|---|
+| Data lokálně | Historie polohy neopouští počítač |
+| AppData | Uživatelská data nejsou v Program Files |
+| Záloha exe | Před aktualizací se uloží `.bak` |
+| Ověření ZIP | Kontrola `version.json` a `dist/GMapsHistorie.exe` |
+| Admin jen při instalaci | Běžný provoz nevyžaduje elevaci |
+
+**Digitální podpis:** Pro produkční nasazení doporučujeme podepsat `GMapsHistorie-Setup.exe` kódem podepisujícím certifikátem (Authenticode). Bez podpisu může Windows SmartScreen zobrazit varování – jde o běžné chování u nepodpsaných aplikací.
+
+## Konfigurace po instalaci
+
+Soubor `C:\Program Files\GMapsHistorie\version.ini`:
+
+```ini
+[install]
+version=2.0.0
+update_url=https://vas-server.cz/api/update
 ```
-
-Proti běžícímu serveru:
-
-```bat
-python scripts\smoke_test.py --live http://127.0.0.1:8000
-```
-
-## Aktualizace instalace
-
-1. Umístěte nový `GMapsHistorie-update.zip` do `data/update/` na serveru.
-2. Spusťte updater (z instalované složky):
-
-```bat
-set APP_VERSION=1.9.0
-set UPDATE_URL=http://127.0.0.1:8000/api/update
-python scripts\update_windows.py
-```
-
-Updater:
-- načte `/api/update` a porovná verze,
-- stáhne `/api/update/package`,
-- přepíše `GMapsHistorie.exe` a updater skript.
 
 ## Verze
 
-Číslo vydání je v souboru `VERSION` (aktuálně 2.0.0). Build ho použije automaticky;
-lze přepsat proměnnou `APP_VERSION`.
+Číslo verze se bere ze souboru `VERSION` v kořeni projektu.

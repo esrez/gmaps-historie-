@@ -1,0 +1,13 @@
+GMaps Historie – licenční podmínky
+
+Copyright © 2025–2026 GMaps Historie
+
+Tento software je poskytován „tak jak je“, bez záruky jakéhokoli druhu.
+Autor nenese odpovědnost za ztrátu dat ani škody vzniklé použitím programu.
+
+Software ukládá vaše osobní data o poloze pouze lokálně na tomto počítači.
+Neposílá historii polohy na žádný externí server (kromě volitelné kontroly
+aktualizací na vámi zadané adrese).
+
+Instalací souhlasíte s tím, že jste výhradním správcem svých dat a že jste
+oprávněni zpracovávat export historie polohy z Google Maps / Timeline.

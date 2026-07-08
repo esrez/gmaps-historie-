@@ -1,0 +1,15 @@
+Instalace byla dokončena.
+
+První spuštění:
+  1. Spusťte „GMaps Historie“ z nabídky Start
+  2. Aplikace otevře prohlížeč na http://127.0.0.1:8000
+  3. V záložce Nástroje nahrajte export z Google (Timeline.json nebo ZIP)
+
+Aktualizace:
+  • V nabídce Start zvolte „Aktualizovat GMaps Historie“
+  • Nebo spusťte GMapsHistorie.exe --update
+
+Data jsou ve složce:
+  %LOCALAPPDATA%\GMapsHistorie\data
+
+Příjemné používání!

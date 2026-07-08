@@ -1,0 +1,12 @@
+Vítejte v průvodci instalací GMaps Historie.
+
+Tato aplikace zobrazí vaši historii polohy z Google Maps – mapu tras,
+navštívená místa, statistiky a knihu jízd. Vše běží pouze na tomto počítači.
+
+Co instalátor udělá:
+  • Nainstaluje program do složky Program Files
+  • Vytvoří zástupce v nabídce Start (volitelně na ploše)
+  • Vaše data uloží do %LOCALAPPDATA%\GMapsHistorie (bezpečně pro uživatele)
+  • Připraví vestavěnou kontrolu aktualizací
+
+Pokračujte kliknutím na Další.

@@ -243,8 +243,9 @@ server, otevře prohlížeč a **data ukládá do složky `data\` vedle sebe**.
 Do balíčku je zahrnutý Python, všechny knihovny i webové rozhraní; PDF export
 s českou diakritikou i časová pásma fungují bez doinstalování.
 
-**Instalační program:** `build-windows-installer.bat` (vyžaduje [Inno Setup 6](https://jrsoftware.org/isinfo.php))
-vytvoří `dist\GMapsHistorie-Setup.exe`. Podrobnosti v
+**Instalační program (Windows 11):** `build-windows-installer.bat` (vyžaduje [Inno Setup 6](https://jrsoftware.org/isinfo.php))
+vytvoří `dist\GMapsHistorie-Setup-2.0.0.exe` – český průvodce, data v AppData, vestavěná aktualizace.
+Podrobnosti v
 [docs/WINDOWS_INSTALLER.md](docs/WINDOWS_INSTALLER.md).
 
 **Kontrola po buildu:** `python scripts\smoke_test.py --package dist\GMapsHistorie-update.zip`
