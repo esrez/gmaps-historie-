@@ -1,6 +1,8 @@
 """Importér: všechny formáty, autodetekce, deduplikace."""
+import zipfile
 from contextlib import closing
 
+import pytest
 from conftest import make_records, make_semantic, make_takeout_zip, make_timeline_android
 
 from app import importer
@@ -43,6 +45,38 @@ def test_reimport_is_deduplicated(test_db, tmp_path):
     importer.import_path(str(p))
     c2 = importer.import_path(str(p))
     assert c2.points == 0 and c2.visits == 0 and c2.activities == 0
+
+
+def test_zip_reports_per_file_and_skips(test_db, tmp_path):
+    """ZIP s daty i s cizím JSONem: report úspěšných + přeskočený s důvodem."""
+    rec = make_records(tmp_path / "_r.json")
+    sem = make_semantic(tmp_path / "_s.json")
+    junk = tmp_path / "_j.json"
+    junk.write_text('{"settings": {"theme": "dark"}}', encoding="utf-8")
+    zpath = tmp_path / "mix.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.write(rec, "Takeout/Records.json")
+        zf.write(sem, "Takeout/2021_MARCH.json")
+        zf.write(junk, "Takeout/Settings.json")
+
+    c = importer.import_path(str(zpath))
+    assert c.files == 2 and c.skipped == 1
+    assert c.points == 50 and c.visits == 1
+    names = [r["name"] for r in c.reports]
+    assert "Records.json" in names and "2021_MARCH.json" in names
+    rec_report = next(r for r in c.reports if r["name"] == "Records.json")
+    assert rec_report["points"] == 50 and rec_report["format"] == "Records"
+    assert any("Settings.json" in n for n in c.skipped_names)
+    d = c.as_dict()
+    assert d["skipped"] == 1 and d["files"] == 2
+
+
+def test_empty_zip_raises_clear_error(test_db, tmp_path):
+    zpath = tmp_path / "empty.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr("Takeout/readme.txt", "nic tu není")
+    with pytest.raises(ValueError, match="žádné .json"):
+        importer.import_path(str(zpath))
 
 
 def test_parse_helpers():

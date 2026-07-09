@@ -27,14 +27,21 @@ test.describe("mapa", () => {
     await expect(page.locator("#monthlyChart svg")).toBeVisible();
     await expect(page.locator("#calendar svg")).toBeVisible();
     expect(await page.locator("#calendar rect[data-d]").count()).toBeGreaterThan(300);
+    // dny se záznamem jsou jasně odlišené (data-rec) a legenda to vysvětluje
+    expect(await page.locator('#calendar rect[data-rec]').count()).toBeGreaterThan(0);
+    await expect(page.locator(".calLegend")).toContainText("bez záznamu");
+    // den bez záznamu má šedou výplň (ne modrou), den se záznamem naopak modrou
+    const emptyFill = await page.locator('#calendar rect[data-d]:not([data-rec])').first()
+      .getAttribute("fill");
+    expect(emptyFill).not.toMatch(/^#(9ec5f4|6da7ec|3987e5|1c5cab|0d366b|cfe3fb)$/i);
   });
 
   test("kalendář spustí přehrávání dne", async ({ page }) => {
     await page.goto("/");
     await page.click('#tabs [data-tab="stat"]');
     await page.locator("#calendar svg").waitFor();
-    // najdi den s jízdou (tmavá výplň) a klikni
-    const day = page.locator('#calendar rect[data-d]:not([fill="transparent"])').first();
+    // najdi den se záznamem km (modrá výplň) a klikni
+    const day = page.locator('#calendar rect[data-rec="km"]').first();
     await day.click();
     await expect(page.locator("#playBtn")).toHaveAttribute("data-state", "playing");
     await page.click("#timelineToggle");
@@ -62,6 +69,20 @@ test.describe("mapa", () => {
     await page.click('#tabs [data-tab="nastroje"]');
     // e2e server neběží jako desktopová aplikace → tlačítko musí být skryté
     await expect(page.locator("#quitBtn")).toBeHidden();
+  });
+
+  test("bez souhlasu se souřadnice neposílají do Nominatim", async ({ page }) => {
+    let nominatim = 0;
+    page.on("request", (r) => { if (r.url().includes("nominatim")) nominatim++; });
+    await page.request.post("/api/places",
+      { data: { lat: 50.1, lon: 14.39, name: "Soukromí Test", radius_m: 250 } });
+    await page.goto("/");
+    await expect(page.locator("#geoOnline")).not.toBeChecked();   // výchozí vypnuto
+    await page.click('#tabs [data-tab="mista"]');
+    await page.locator(".placeCard").filter({ hasText: "Soukromí Test" })
+      .locator(".placeHead").click();
+    await expect(page.locator(".placeAddr")).toContainText("50.1");   // jen souřadnice
+    expect(nominatim).toBe(0);                                        // nic neodešlo ven
   });
 
   test("nastavení mapy se pamatují po znovunačtení", async ({ page }) => {
@@ -154,6 +175,63 @@ test.describe("mapa", () => {
       const res = await page.request.get(url);
       expect(res.status(), url).toBe(200);
     }
+  });
+
+  test("měření vzdálenosti ukáže odečet a Esc ho smaže", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#map").waitFor();
+    await page.click("#measureBtn");
+    await expect(page.locator("#measureBtn")).toContainText("Ukončit měření");
+    // dva kliky do volné části mapy (mimo panel vlevo)
+    await page.locator("#map").click({ position: { x: 620, y: 240 } });
+    await page.locator("#map").click({ position: { x: 760, y: 380 } });
+    const readout = page.locator("#measureReadout");
+    await expect(readout).toBeVisible();
+    await expect(readout).toContainText(/\d/);
+    await expect(readout).toContainText(/m|km/);
+    // dvojklik ukončí měření – tlačítko nabídne „Měřit znovu"
+    await page.locator("#map").dblclick({ position: { x: 680, y: 470 } });
+    await expect(page.locator("#measureBtn")).toContainText("Měřit znovu");
+    // „Měřit znovu" spustí NOVÉ měření (ne jen smaže) – readout zpět na startu
+    await page.click("#measureBtn");
+    await expect(page.locator("#measureBtn")).toContainText("Ukončit měření");
+    await expect(readout).toContainText("klikejte do mapy");
+    await page.keyboard.press("Escape");
+    await expect(readout).toHaveCount(0);
+  });
+
+  test("export mapy stáhne PNG", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#map").waitFor();
+    await page.waitForTimeout(400);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.click("#exportPngBtn"),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^mapa-.*\.png$/);
+    const path = await download.path();
+    const fs = await import("node:fs");
+    const buf = fs.readFileSync(path);
+    // PNG signatura
+    expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  });
+
+  test("prázdné období nabídne dostupný rozsah a Zobrazit vše vrátí data", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() => window.loadAll && document.querySelector("#dbInfo"));
+    // zvolím období bez dat (daleká budoucnost) → chytrá kartička, ne jen „nejsou data"
+    await page.fill("#dateFrom", "2099-01-01");
+    await page.fill("#dateTo", "2099-12-31");
+    await page.click("#loadBtn");
+    const empty = page.locator("#emptyState");
+    await expect(empty).toBeVisible();
+    await expect(empty).toContainText("data máte");        // ví, že data v DB jsou
+    await expect(empty).toContainText("bodů");
+    // Zobrazit vše skutečně data vrátí a kartička zmizí
+    await empty.locator("#emptyAllBtn").click();
+    await expect(empty).toBeHidden();
+    await expect(page.locator("#dbInfo")).toContainText("Zobrazeno");
+    expect(await page.locator("#dateFrom").inputValue()).toBe("");
   });
 });
 

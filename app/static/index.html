@@ -114,6 +114,12 @@
           <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
         <button id="drawPolyBtn" title="Klikáním do mapy obkreslíte areál (zákazník, sklad…) a pojmenujete ho – přesnější než kruh">
           <span data-icon="polygon"></span> Pojmenovat oblast (polygon)</button>
+        <div class="row" style="gap:6px">
+          <button id="measureBtn" title="Klikáním do mapy měříte vzdálenost trasy; dvojklik nebo Esc měření ukončí">
+            <span data-icon="ruler"></span> Měřit vzdálenost</button>
+          <button id="exportPngBtn" title="Uloží aktuální výřez mapy i s trasami jako obrázek PNG">
+            <span data-icon="image"></span> Uložit mapu (PNG)</button>
+        </div>
       </section>
 
       <section>
@@ -176,11 +182,17 @@
           <button id="calPrev" title="Předchozí rok">◀</button>
           <b id="calYear"></b>
           <button id="calNext" title="Další rok">▶</button>
-          <span class="muted" id="calLegend">km/den</span>
         </div>
         <div id="calendar"></div>
-        <p class="muted">Kliknutím na den ho přehrajete na mapě.
-           Šedé dny mají záznam polohy bez rozpoznané jízdy.</p>
+        <div class="calLegend">
+          <span class="cl-item"><i class="cl-sw cl-empty"></i> bez záznamu</span>
+          <span class="cl-item"><i class="cl-sw cl-rec"></i> jen poloha</span>
+          <span class="cl-item">méně
+            <i class="cl-sw cl-k0"></i><i class="cl-sw cl-k1"></i><i class="cl-sw cl-k2"></i><i class="cl-sw cl-k3"></i><i class="cl-sw cl-k4"></i>
+            více km</span>
+        </div>
+        <p class="muted">Modré dny mají záznam (světle = jen poloha, tmavěji = víc
+           najetých km), šedé dny jsou bez jakéhokoli záznamu. Kliknutím den přehrajete.</p>
       </section>
     </div>
 
@@ -264,6 +276,17 @@
         </div>
         <p class="muted">OwnTracks: nastavte HTTP webhook na
           <code>POST /api/sync/owntracks</code> (JSON s lat/lon/tst).</p>
+      </section>
+
+      <section>
+        <h2>Soukromí</h2>
+        <label class="check"><input type="checkbox" id="geoOnline">
+          Zjišťovat adresy míst online</label>
+        <p class="muted">Když je zapnuto, souřadnice pojmenovaných míst se posílají
+           do služby OpenStreetMap (Nominatim), aby se u nich zobrazila adresa.
+           Ve výchozím stavu je to <b>vypnuté</b> – vaše souřadnice pak nikam
+           neodcházejí a místa se ukazují jen jako poloha. (Podkladové mapové
+           dlaždice se stahují vždy; plně offline mapu lze nastavit přes PMTiles.)</p>
       </section>
 
       <section>

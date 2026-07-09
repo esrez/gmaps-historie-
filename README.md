@@ -267,8 +267,15 @@ neznámý spustitelný soubor – jde o běžný falešný poplach u PyInstaller
 Ve výchozím stavu aplikace nemá přihlašování – počítá s během v důvěryhodné
 domácí síti. Doporučujeme v `docker-compose.yml` odkomentovat
 `AUTH_PASSWORD=...` – aplikace pak vyžaduje heslo (jméno je libovolné).
+Přihlášení je chráněné **brzdou proti hádání hesla** (po několika chybných
+pokusech dočasně zablokuje danou IP) a **přihlášení přežije restart**
+i aktualizaci (sessions se ukládají do `data/auth_sessions.json`).
 Pokud ji vystavujete do internetu, přidejte navíc reverse proxy s HTTPS
 (např. nginx, Caddy, Tailscale…). Jde o citlivá osobní data.
+
+**Soukromí:** vaše poloha se nikam neposílá. Výjimkou jsou mapové dlaždice
+(OpenStreetMap/Carto/Esri – lze nahradit offline PMTiles) a **volitelné**
+zjišťování adres míst (Nástroje → Soukromí, výchozí vypnuto).
 
 ## Dokumentace
 

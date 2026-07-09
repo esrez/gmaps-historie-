@@ -30,7 +30,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | Endpoint | Metoda | Popis |
 |---|---|---|
 | `/api/import` | POST | upload souboru (JSON/ZIP); vrací `job_id`, běží na pozadí |
-| `/api/import/status/{job_id}` | GET | průběh importu (počty, stav, chyba) |
+| `/api/import/status/{job_id}` | GET | průběh importu: `points/visits/activities/files`, `skipped` + `skipped_names` (přeskočené soubory a důvod), `reports` (detail po souborech: formát a přírůstky), `status`, `error` |
 | `/api/autoimport` | GET | log souborů zpracovaných ze složky `data/import/` |
 | `/api/quality` | GET | kontrola: nepřesné body (`accuracy_limit`), teleporty, vadné návštěvy, duplicitní cesty, dny bez dat |
 | `/api/cleanup` | POST | opravy; `dry_run=true` jen počítá; přepínače `remove_*`; po skutečném mazání VACUUM |
@@ -69,6 +69,10 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/trips/alerts` | GET | neúplné jízdy, překročené tachometry |
 | `/api/trips/export.xlsx` | GET | kniha jízd pro import do SPZ (bez vyřazených; volitelně `plate`) |
 | `/api/trips/export.pdf` | GET | tisková kniha jízd s měsíčními součty |
+| `/api/trips/export.csv` | GET | kniha jízd jako CSV (BOM + středník + desetinná čárka = otevře český Excel) |
+| `/api/trips/summary` | GET | roční souhrn na vozidlo: km, počet jízd a soukromé po měsících (`year`, volitelně `plate`) |
+| `/api/trips/locks` | GET | uzavřené měsíce (`plate` filtruje na vozidlo + globální) |
+| `/api/trips/lock` | POST | uzamknout/odemknout měsíc (`month` RRRR-MM, `plate`, `locked`); uzavřený měsíc generování nepřepíše |
 
 ## Zabezpečení
 

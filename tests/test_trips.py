@@ -197,3 +197,41 @@ def test_bulk_delete_empty_is_noop(client, test_db, tmp_path):
     before = len(client.get("/api/trips", params=RANGE).json()["trips"])
     assert client.post("/api/trips/bulk_delete", json={"ids": []}).json()["deleted"] == 0
     assert len(client.get("/api/trips", params=RANGE).json()["trips"]) == before
+
+
+def test_export_csv_czech_excel(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=3)
+    gen(client)
+    r = client.get("/api/trips/export.csv", params=RANGE)
+    assert r.status_code == 200
+    text = r.content.decode("utf-8")
+    assert text.startswith("﻿")                 # BOM pro český Excel
+    assert "SPZ;Datum;Odjezd" in text                # středníkový oddělovač
+    assert "1AB 2345" in text and ";5,0;" in text     # desetinná čárka
+
+
+def test_yearly_summary_per_plate(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=3)
+    gen(client)
+    s = client.get("/api/trips/summary",
+                   params={"year": 2025, "plate": "1AB 2345"}).json()
+    assert s["total_km"] == 15.0 and s["trips"] == 3
+    assert s["months"] and s["months"][0]["month"].startswith("2025-")
+    empty = client.get("/api/trips/summary", params={"year": 2099}).json()
+    assert empty["months"] == [] and empty["total_km"] == 0
+
+
+def test_month_lock_skips_generation(client, test_db, tmp_path):
+    seed(test_db, tmp_path, days=3)
+    gen(client)
+    month = client.get("/api/trips", params=RANGE).json()["trips"][0]
+    from app.common import local_dt
+    mkey = local_dt(month["start_ts"]).strftime("%Y-%m")
+    client.delete("/api/trips", params=RANGE)          # smazat, ať lze znovu generovat
+    client.post("/api/trips/lock", json={"month": mkey, "plate": "1AB 2345"})
+    assert mkey in [x["month"] for x in
+                    client.get("/api/trips/locks", params={"plate": "1AB 2345"}).json()["locks"]]
+    res = gen(client)
+    assert res["created"] == 0 and res["skipped_locked"] == 3   # uzavřený měsíc se negeneruje
+    client.post("/api/trips/lock", json={"month": mkey, "plate": "1AB 2345", "locked": False})
+    assert gen(client)["created"] == 3                 # po odemčení znovu jde
