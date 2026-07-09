@@ -27,14 +27,21 @@ test.describe("mapa", () => {
     await expect(page.locator("#monthlyChart svg")).toBeVisible();
     await expect(page.locator("#calendar svg")).toBeVisible();
     expect(await page.locator("#calendar rect[data-d]").count()).toBeGreaterThan(300);
+    // dny se záznamem jsou jasně odlišené (data-rec) a legenda to vysvětluje
+    expect(await page.locator('#calendar rect[data-rec]').count()).toBeGreaterThan(0);
+    await expect(page.locator(".calLegend")).toContainText("bez záznamu");
+    // den bez záznamu má šedou výplň (ne modrou), den se záznamem naopak modrou
+    const emptyFill = await page.locator('#calendar rect[data-d]:not([data-rec])').first()
+      .getAttribute("fill");
+    expect(emptyFill).not.toMatch(/^#(9ec5f4|6da7ec|3987e5|1c5cab|0d366b|cfe3fb)$/i);
   });
 
   test("kalendář spustí přehrávání dne", async ({ page }) => {
     await page.goto("/");
     await page.click('#tabs [data-tab="stat"]');
     await page.locator("#calendar svg").waitFor();
-    // najdi den s jízdou (tmavá výplň) a klikni
-    const day = page.locator('#calendar rect[data-d]:not([fill="transparent"])').first();
+    // najdi den se záznamem km (modrá výplň) a klikni
+    const day = page.locator('#calendar rect[data-rec="km"]').first();
     await day.click();
     await expect(page.locator("#playBtn")).toHaveAttribute("data-state", "playing");
     await page.click("#timelineToggle");

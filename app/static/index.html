@@ -176,11 +176,17 @@
           <button id="calPrev" title="Předchozí rok">◀</button>
           <b id="calYear"></b>
           <button id="calNext" title="Další rok">▶</button>
-          <span class="muted" id="calLegend">km/den</span>
         </div>
         <div id="calendar"></div>
-        <p class="muted">Kliknutím na den ho přehrajete na mapě.
-           Šedé dny mají záznam polohy bez rozpoznané jízdy.</p>
+        <div class="calLegend">
+          <span class="cl-item"><i class="cl-sw cl-empty"></i> bez záznamu</span>
+          <span class="cl-item"><i class="cl-sw cl-rec"></i> jen poloha</span>
+          <span class="cl-item">méně
+            <i class="cl-sw cl-k0"></i><i class="cl-sw cl-k1"></i><i class="cl-sw cl-k2"></i><i class="cl-sw cl-k3"></i><i class="cl-sw cl-k4"></i>
+            více km</span>
+        </div>
+        <p class="muted">Modré dny mají záznam (světle = jen poloha, tmavěji = víc
+           najetých km), šedé dny jsou bez jakéhokoli záznamu. Kliknutím den přehrajete.</p>
       </section>
     </div>
 

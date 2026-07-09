@@ -683,6 +683,25 @@ button.mini {
 #calendar rect { cursor: pointer; }
 #calendar rect:hover { stroke: var(--text-primary); stroke-width: 1; }
 
+/* Legenda kalendáře: šedá = bez záznamu, modrá = záznam (světlá jen poloha,
+   tmavší víc km). Barvy odpovídají 1:1 buňkám kreslený v app.js. */
+.calLegend {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px 14px; margin: 8px 0 2px; font-size: 11px; color: var(--muted);
+}
+.calLegend .cl-item { display: inline-flex; align-items: center; gap: 4px; }
+.cl-sw {
+  display: inline-block; width: 11px; height: 11px; border-radius: 2px;
+  vertical-align: middle;
+}
+.cl-empty { background: var(--grid); border: 0.75px solid var(--baseline); }
+.cl-rec { background: #cfe3fb; }
+.cl-k0 { background: #9ec5f4; }
+.cl-k1 { background: #6da7ec; }
+.cl-k2 { background: #3987e5; }
+.cl-k3 { background: #1c5cab; }
+.cl-k4 { background: #0d366b; }
+
 /* větší dotykové plochy na dotykových zařízeních */
 @media (pointer: coarse) {
   button { padding: 9px 14px; }

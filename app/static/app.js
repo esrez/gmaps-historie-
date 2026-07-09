@@ -1354,7 +1354,10 @@ async function renamePlace(lat, lon, currentLabel) {
 
 // -------------------------------------------------------- kalendář roku
 
-// sekvenční modrá pro km/den; šedá = data bez rozpoznané jízdy
+// Sekvenční modrá ramp pro km/den (světlá → tmavá). „Jen poloha" (záznam bez
+// jízdy) dostane ještě světlejší modrou, takže JAKÁKOLI modrá = je tam záznam;
+// šedá = den bez záznamu. Rozlišení modrá/šedá je čitelné i barvoslepým.
+const CAL_REC = "#cfe3fb";   // záznam polohy bez rozpoznané jízdy
 const CAL_STEPS = ["#9ec5f4", "#6da7ec", "#3987e5", "#1c5cab", "#0d366b"];
 let calYear = new Date().getFullYear();
 
@@ -1373,7 +1376,8 @@ async function renderCalendar() {
   const cell = 11, gap = 2;
   const first = new Date(calYear, 0, 1);
   const startCol = (first.getDay() + 6) % 7;   // pondělí = 0
-  const gridBg = css("--grid");
+  const emptyFill = css("--grid");        // prázdný den = zřetelné šedé políčko
+  const emptyStroke = css("--baseline");  // s jemným rámečkem, ať je grid vidět
 
   let svg = "";
   const months = [];
@@ -1383,19 +1387,24 @@ async function renderCalendar() {
     const row = (dayIdx + startCol) % 7;
     const iso = toDateStr(d);
     const info = byDate.get(iso);
-    let fill = "transparent", stroke = gridBg;
-    if (info) {
+    const hasRecord = info && ((info.points || 0) > 0 || info.km > 0);
+    // výchozí = den bez záznamu: zřetelně prázdné šedé políčko s rámečkem
+    let fill = emptyFill, stroke = emptyStroke;
+    let tip = "bez záznamu";
+    if (hasRecord) {
+      stroke = "none";
       if (info.km > 0) {
         const idx = Math.min(4, Math.floor((info.km / maxKm) * 5));
         fill = CAL_STEPS[idx];
-        stroke = "none";
+        tip = `${info.km} km` + (info.points ? `, ${info.points.toLocaleString("cs")} bodů` : "");
       } else {
-        fill = css("--baseline");   // záznam polohy, ale žádná jízda
-        stroke = "none";
+        fill = CAL_REC;   // je tam záznam polohy, jen bez rozpoznané jízdy
+        tip = `jen poloha${info.points ? ` (${info.points.toLocaleString("cs")} bodů)` : ""}`;
       }
     }
     if (d.getDate() === 1) months.push([col, d.toLocaleDateString("cs", { month: "short" })]);
-    svg += `<rect x="${col * (cell + gap)}" y="${14 + row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="0.75" data-d="${iso}"><title>${d.toLocaleDateString("cs")}${info ? ` – ${info.km} km` : ""}</title></rect>`;
+    const recAttr = hasRecord ? ` data-rec="${info.km > 0 ? "km" : "pos"}"` : "";
+    svg += `<rect x="${col * (cell + gap)}" y="${14 + row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="0.75" data-d="${iso}"${recAttr}><title>${d.toLocaleDateString("cs")} – ${tip}</title></rect>`;
   }
   const weeks = Math.ceil((365 + startCol) / 7) + 1;
   const width = weeks * (cell + gap);
