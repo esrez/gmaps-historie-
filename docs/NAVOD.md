@@ -88,7 +88,9 @@ období. Umožňuje:
   názvu);
 - **klik na místo** ho ukáže na mapě (u polygonu přiblíží celý areál)
   a rozbalí **jednotlivé pobyty** – u každého datum, čas od–do a délku;
-  v záhlaví detailu se navíc dopočítá **adresa** místa (ze souřadnic);
+  v záhlaví detailu se může dopočítat **adresa** místa – jen když v Nástrojích →
+  Soukromí zapnete „Zjišťovat adresy míst online" (výchozí vypnuto, souřadnice
+  pak nikam neodcházejí);
 - **upravit** místo přímo v seznamu (tužka): změna názvu a u kruhových míst
   **okruhu v metrech** (s živým náhledem). Tlačítkem **„Upravit … na mapě"**
   se spustí interaktivní úprava tvaru:

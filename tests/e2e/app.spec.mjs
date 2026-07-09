@@ -64,6 +64,20 @@ test.describe("mapa", () => {
     await expect(page.locator("#quitBtn")).toBeHidden();
   });
 
+  test("bez souhlasu se souřadnice neposílají do Nominatim", async ({ page }) => {
+    let nominatim = 0;
+    page.on("request", (r) => { if (r.url().includes("nominatim")) nominatim++; });
+    await page.request.post("/api/places",
+      { data: { lat: 50.1, lon: 14.39, name: "Soukromí Test", radius_m: 250 } });
+    await page.goto("/");
+    await expect(page.locator("#geoOnline")).not.toBeChecked();   // výchozí vypnuto
+    await page.click('#tabs [data-tab="mista"]');
+    await page.locator(".placeCard").filter({ hasText: "Soukromí Test" })
+      .locator(".placeHead").click();
+    await expect(page.locator(".placeAddr")).toContainText("50.1");   // jen souřadnice
+    expect(nominatim).toBe(0);                                        // nic neodešlo ven
+  });
+
   test("nastavení mapy se pamatují po znovunačtení", async ({ page }) => {
     await page.goto("/");
     await page.check("#layerHeat");

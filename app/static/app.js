@@ -204,6 +204,7 @@ map.on("baselayerchange", (e) => localStorage.setItem("map.baseLayer", e.name));
 const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
+  "geoOnline",
 ];
 
 function loadMapSettings() {
@@ -226,6 +227,8 @@ function saveMapSettings() {
 
 MAP_SETTINGS.forEach((id) => $(id)?.addEventListener("change", saveMapSettings));
 loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
+// zapnutí online adres → překreslit místa, ať se adresy začnou dotahovat
+$("geoOnline")?.addEventListener("change", () => renderMyPlaces());
 
 /* Offline mapa (PMTiles): pokud na serveru leží data/map.pmtiles, přidá se
    plně lokální podklad. Použije se automaticky jen když si uživatel podklad
@@ -637,6 +640,8 @@ const geoInflight = new Map();
 async function reverseGeocode(lat, lon) {
   const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
   if (key in geoStore) return geoStore[key];
+  // soukromí: bez souhlasu se souřadnice nikam neposílají (jen dřív zjištěné)
+  if (!$("geoOnline")?.checked) return null;
   if (geoInflight.has(key)) return geoInflight.get(key);
   const pr = (async () => {
     try {
