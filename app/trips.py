@@ -270,10 +270,12 @@ def generate(p: GenerateParams):
             (lo, hi, *CAR_TYPES)).fetchall()
         namer = PlaceNamer(conn)
         rules = _load_rules(conn)
+        locked = _locked_months(conn, p.plate)   # uzavřené měsíce se negenerují
         # ochrana proti duplicitám: intervaly už existujících jízd + nově přijatých
         covered = [(r["start_ts"], r["end_ts"]) for r in conn.execute(
             "SELECT start_ts, end_ts FROM trips WHERE start_ts BETWEEN ? AND ?", (lo, hi))]
         skipped_dup = 0
+        skipped_locked = 0
 
         # 1) posbírat přijaté cesty (filtry dnů/hodin/duplicit; km i z GPS stopy)
         entries: list[dict] = []
@@ -324,6 +326,9 @@ def generate(p: GenerateParams):
         # 3) zápis: pravidla km, zaokrouhlení, undo
         created_ids: list[int] = []
         for e in entries:
+            if local_dt(e["start_ts"]).strftime("%Y-%m") in locked:
+                skipped_locked += 1     # měsíc má uzávěrku – nepřepisovat
+                continue
             rule_km = _rule_km(rules, e["origin"], e["destination"])
             km_final = _round_km(rule_km if rule_km is not None else e["km"], p.round_up)
             cur = conn.execute(
@@ -339,7 +344,8 @@ def generate(p: GenerateParams):
         if created_ids:
             _save_undo(conn, "generate", created=created_ids)
         conn.commit()
-    return {"created": created, "scanned": len(acts), "skipped_duplicates": skipped_dup}
+    return {"created": created, "scanned": len(acts),
+            "skipped_duplicates": skipped_dup, "skipped_locked": skipped_locked}
 
 
 @router.post("")
@@ -684,6 +690,92 @@ def export_spz(from_ts: int | None = Query(None), to_ts: int | None = Query(None
     ws.cell(row=total, column=8,
             value=round(sum(r["km"] for r in rows), 1)).font = Font(bold=True)
     return xlsx_response(wb, "kniha-jizd-spz.xlsx")
+
+
+@router.get("/export.csv")
+def export_csv(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
+               plate: str | None = Query(None)):
+    """Kniha jízd jako CSV (středník + BOM = otevře se správně v českém Excelu)."""
+    import csv
+    import io
+
+    from fastapi.responses import Response as _Resp
+    rows = _book_rows(from_ts, to_ts, plate)
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(["SPZ", "Datum", "Odjezd", "Příjezd", "Odkud", "Kam",
+                "Účel jízdy", "Km", "Řidič", "Soukromá"])
+    for r in rows:
+        s, e = fmt_dt(r["start_ts"]), fmt_dt(r["end_ts"])
+        w.writerow([r["plate"] or "", s.strftime("%d.%m.%Y"),
+                    s.strftime("%H:%M"), e.strftime("%H:%M"),
+                    r["origin"] or "", r["destination"] or "", r["purpose"] or "",
+                    str(r["km"]).replace(".", ","), r["driver"] or "",
+                    "ano" if r["private"] else "ne"])
+    data = ("﻿" + buf.getvalue()).encode("utf-8")
+    return _Resp(data, media_type="text/csv; charset=utf-8",
+                 headers={"Content-Disposition": 'attachment; filename="kniha-jizd.csv"'})
+
+
+@router.get("/summary")
+def yearly_summary(year: int = Query(...), plate: str | None = Query(None)):
+    """Roční souhrn na vozidlo: km a počet jízd po měsících (bez vyřazených)."""
+    psql, pargs = _plate_sql(plate)
+    with closing(db.connect()) as conn:
+        rows = conn.execute(
+            "SELECT strftime('%Y-%m', start_ts, 'unixepoch', 'localtime') m, "
+            "SUM(km) km, COUNT(*) n, SUM(private) priv FROM trips "
+            "WHERE excluded=0 AND strftime('%Y', start_ts, 'unixepoch', 'localtime')=? "
+            f"{psql} GROUP BY m ORDER BY m", (str(year), *pargs)).fetchall()
+    months = [{"month": r["m"], "km": round(r["km"] or 0, 1),
+               "trips": r["n"], "private": r["priv"] or 0} for r in rows]
+    return {"year": year, "plate": plate or "",
+            "total_km": round(sum(m["km"] for m in months), 1),
+            "trips": sum(m["trips"] for m in months), "months": months}
+
+
+# ----------------------------------------------------------- uzávěrka měsíce
+
+def _locked_months(conn, plate: str | None) -> set[str]:
+    """Uzavřené měsíce (YYYY-MM) pro dané vozidlo – včetně globálních (plate='')."""
+    rows = conn.execute(
+        "SELECT month FROM trip_locks WHERE plate='' OR plate=?", (plate or "",))
+    return {r["month"] for r in rows}
+
+
+class LockBody(BaseModel):
+    month: str            # "YYYY-MM"
+    plate: str = ""
+    locked: bool = True
+
+
+@router.get("/locks")
+def list_locks(plate: str | None = Query(None)):
+    with closing(db.connect()) as conn:
+        if plate:
+            rows = conn.execute(
+                "SELECT month, plate FROM trip_locks WHERE plate='' OR plate=? "
+                "ORDER BY month DESC", (plate,)).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT month, plate FROM trip_locks ORDER BY month DESC").fetchall()
+    return {"locks": [{"month": r["month"], "plate": r["plate"]} for r in rows]}
+
+
+@router.post("/lock")
+def set_lock(b: LockBody):
+    """Uzamkne / odemkne měsíc – uzavřený měsíc už generování nepřepíše."""
+    if len(b.month) != 7 or b.month[4] != "-":
+        raise HTTPException(400, "Měsíc musí být ve tvaru RRRR-MM")
+    with closing(db.connect()) as conn:
+        if b.locked:
+            conn.execute("INSERT OR IGNORE INTO trip_locks(month, plate) VALUES(?,?)",
+                         (b.month, b.plate or ""))
+        else:
+            conn.execute("DELETE FROM trip_locks WHERE month=? AND plate=?",
+                         (b.month, b.plate or ""))
+        conn.commit()
+    return {"month": b.month, "plate": b.plate or "", "locked": b.locked}
 
 
 _APP_FONTS = os.path.join(os.path.dirname(__file__), "fonts")

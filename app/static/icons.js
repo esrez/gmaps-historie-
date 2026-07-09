@@ -41,6 +41,9 @@ const ICONS = {
   cloud: P("M7 18a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17.5 9a3.5 3.5 0 0 1 .5 9H7z"),
   rocket: P("M12 3c3 1 5 4 5 8l-2.5 2.5h-5L7 11c0-4 2-7 5-8z") +
           P("M7 14l-2 2 3 .5.5 3 2-2") + '<circle cx="12" cy="9" r="1.4"/>',
+  lock: P("M6 11h12v9H6z") + P("M8 11V8a4 4 0 0 1 8 0v3"),
+  unlock: P("M6 11h12v9H6z") + P("M8 11V8a4 4 0 0 1 7.5-2"),
+  database: '<ellipse cx="12" cy="6" rx="8" ry="3"/>' + P("M4 6v12a8 3 0 0 0 16 0V6") + P("M4 12a8 3 0 0 0 16 0"),
 };
 
 export function icon(name, size = 15) {

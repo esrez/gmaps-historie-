@@ -91,10 +91,20 @@
       <button id="undoBtn" hidden>↩ Vrátit poslední hromadnou akci</button>
       <button id="exportBtn"><span data-icon="download"></span> Export XLSX pro SPZ</button>
       <button id="exportPdfBtn"><span data-icon="file"></span> Export PDF (pro tisk)</button>
+      <button id="exportCsvBtn"><span data-icon="download"></span> Export CSV (Excel)</button>
       <button id="clearBtn" class="danger"><span data-icon="trash"></span> Smazat jízdy v období</button>
       <p class="muted">Export je xlsx pro univerzální import knihy jízd v programu
          SPZ (Milk Computers): SPZ, Datum, Odjezd, Příjezd, Odkud, Kam, Účel, Km,
          Řidič. Vozidlo s touto SPZ musí být v programu SPZ založené.</p>
+    </details>
+
+    <details class="sec">
+      <summary>Roční souhrn</summary>
+      <div class="row">
+        <label>Rok <input type="number" id="sumYear" min="2000" max="2100"></label>
+        <button id="sumBtn"><span data-icon="chart"></span> Zobrazit</button>
+      </div>
+      <div id="sumResult" class="muted"></div>
     </details>
   </aside>
 

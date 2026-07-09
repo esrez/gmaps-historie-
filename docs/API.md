@@ -69,6 +69,10 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/trips/alerts` | GET | neúplné jízdy, překročené tachometry |
 | `/api/trips/export.xlsx` | GET | kniha jízd pro import do SPZ (bez vyřazených; volitelně `plate`) |
 | `/api/trips/export.pdf` | GET | tisková kniha jízd s měsíčními součty |
+| `/api/trips/export.csv` | GET | kniha jízd jako CSV (BOM + středník + desetinná čárka = otevře český Excel) |
+| `/api/trips/summary` | GET | roční souhrn na vozidlo: km, počet jízd a soukromé po měsících (`year`, volitelně `plate`) |
+| `/api/trips/locks` | GET | uzavřené měsíce (`plate` filtruje na vozidlo + globální) |
+| `/api/trips/lock` | POST | uzamknout/odemknout měsíc (`month` RRRR-MM, `plate`, `locked`); uzavřený měsíc generování nepřepíše |
 
 ## Zabezpečení
 

@@ -10,6 +10,7 @@ const api = apiFetch;
 const RENDER_CHUNK = 250;   // řádků najednou; zbytek se dokreslí při doskrolování
 let trips = [];
 let rules = [];
+let lockedMonths = new Set();   // uzavřené měsíce "YYYY-MM" pro aktuální filtr vozidla
 
 // ------------------------------------------------------------ nastavení
 
@@ -79,6 +80,7 @@ async function loadTrips() {
     selectedIds.clear();
     $("selAll").checked = false;
     updateBulkBtn();
+    await loadLocks();
     renderTable(data.total_km);
     refreshOdometer(odoYear()); // rok podle zvoleného období
     refreshAlerts();
@@ -235,17 +237,45 @@ function buildDayRow(g) {
 }
 
 /* Součtový řádek měsíce – zobrazuje se v pohledu po dnech, když období
-   pokrývá víc měsíců. */
+   pokrývá víc měsíců. Vpravo je zámek měsíční uzávěrky. */
 function buildMonthRow(monthKey, km) {
   const tr = document.createElement("tr");
   tr.className = "monthRow";
   const d = new Date(monthKey + "-01");
   const label = d.toLocaleDateString("cs", { month: "long", year: "numeric" });
+  const locked = lockedMonths.has(monthKey);
   tr.innerHTML = `
     <td colspan="5">${label.charAt(0).toUpperCase() + label.slice(1)}</td>
     <td class="num"><b>${km.toLocaleString("cs", { maximumFractionDigits: 1 })} km</b></td>
-    <td colspan="5"></td>`;
+    <td colspan="5"><button class="lockBtn${locked ? " locked" : ""}"
+        title="${locked ? "Měsíc je uzavřený – generování ho nepřepíše. Kliknutím odemknout." : "Uzavřít měsíc – generování ho pak nebude přepisovat."}">
+        ${icon(locked ? "lock" : "unlock", 13)} ${locked ? "Uzavřeno" : "Uzavřít"}</button></td>`;
+  tr.querySelector(".lockBtn").addEventListener("click", () => toggleLock(monthKey));
   return tr;
+}
+
+// ------------------------------------------------------- měsíční uzávěrka
+
+async function loadLocks() {
+  try {
+    const res = await api("/api/trips/locks", { params: { ...plateFilter() } });
+    lockedMonths = new Set(res.locks.map((l) => l.month));
+  } catch (e) { lockedMonths = new Set(); }
+}
+
+async function toggleLock(monthKey) {
+  const locked = !lockedMonths.has(monthKey);
+  const plate = plateFilter().plate || "";
+  try {
+    await api("/api/trips/lock", {
+      method: "POST", body: { month: monthKey, plate, locked },
+    });
+    if (locked) lockedMonths.add(monthKey); else lockedMonths.delete(monthKey);
+    toast(locked ? `Měsíc ${monthKey} uzavřen.` : `Měsíc ${monthKey} odemčen.`, "success");
+    renderTable();
+  } catch (e) {
+    toast("Změna uzávěrky selhala: " + e.message, "error");
+  }
 }
 
 function refreshDayHeader(t) {
@@ -583,7 +613,8 @@ $("generateBtn").addEventListener("click", async () => {
     });
     $("genStatus").textContent =
       `Vytvořeno ${res.created} nových jízd (prohledáno ${res.scanned} cest autem` +
-      (res.skipped_duplicates ? `, ${res.skipped_duplicates} duplicit přeskočeno` : "") + ").";
+      (res.skipped_duplicates ? `, ${res.skipped_duplicates} duplicit přeskočeno` : "") +
+      (res.skipped_locked ? `, ${res.skipped_locked} v uzavřených měsících vynecháno` : "") + ").";
     if (res.created) toast(`Vytvořeno ${res.created} jízd (lze vrátit tlačítkem Zpět).`, "success");
     loadTrips();
   } catch (e) {
@@ -622,6 +653,45 @@ $("exportBtn").addEventListener("click", () => {
 $("exportPdfBtn").addEventListener("click", () => {
   location.href = buildUrl("/api/trips/export.pdf",
     { ...currentRange(), ...plateFilter(), driver: $("setDriver").value.trim() });
+});
+
+$("exportCsvBtn").addEventListener("click", () => {
+  location.href = buildUrl("/api/trips/export.csv", { ...currentRange(), ...plateFilter() });
+});
+
+// ------------------------------------------------------------ roční souhrn
+
+$("sumBtn").addEventListener("click", async () => {
+  const year = Number($("sumYear").value);
+  if (!year) { toast("Zadejte rok.", "error"); return; }
+  const box = $("sumResult");
+  box.textContent = "Načítám…";
+  try {
+    const s = await api("/api/trips/summary", { params: { year, ...plateFilter() } });
+    if (!s.months.length) {
+      box.textContent = `V roce ${year} nejsou žádné jízdy` +
+        (s.plate ? ` pro vozidlo ${s.plate}.` : ".");
+      return;
+    }
+    const fmt = (v) => v.toLocaleString("cs", { maximumFractionDigits: 1 });
+    const MON = ["led", "úno", "bře", "dub", "kvě", "čvn",
+                 "čvc", "srp", "zář", "říj", "lis", "pro"];
+    const rows = s.months.map((m) => {
+      const mi = Number(m.month.slice(5, 7)) - 1;
+      return `<tr><td>${MON[mi]}</td><td class="num">${fmt(m.km)}</td>` +
+             `<td class="num">${m.trips}</td>` +
+             `<td class="num">${m.private || 0}</td></tr>`;
+    }).join("");
+    box.innerHTML =
+      `<table class="sumTable"><thead><tr><th>Měsíc</th><th class="num">Km</th>` +
+      `<th class="num">Jízd</th><th class="num">Soukr.</th></tr></thead>` +
+      `<tbody>${rows}</tbody>` +
+      `<tfoot><tr><td><b>Rok ${year}${s.plate ? " · " + escapeHtml(s.plate) : ""}</b></td>` +
+      `<td class="num"><b>${fmt(s.total_km)}</b></td>` +
+      `<td class="num"><b>${s.trips}</b></td><td></td></tr></tfoot></table>`;
+  } catch (e) {
+    box.textContent = "Souhrn se nepodařilo načíst: " + e.message;
+  }
 });
 
 $("clearBtn").addEventListener("click", async () => {
@@ -668,4 +738,5 @@ $("undoBtn").addEventListener("click", async () => {
 loadSettings();
 loadRules();
 loadSuggest();
+$("sumYear").value = new Date().getFullYear();
 setMonthPreset("thisMonth");

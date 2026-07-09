@@ -327,3 +327,25 @@ button.danger:hover { border-color: var(--accent-red); color: var(--accent-red);
   #tripsTable .del { font-size: 15px; padding: 6px 14px; border: 1px solid var(--grid); border-radius: 6px; }
   #tripsTable tfoot td { display: flex; justify-content: space-between; padding: 8px 12px; }
 }
+
+/* měsíční uzávěrka – zámek v součtovém řádku měsíce */
+.lockBtn {
+  font-size: 12px;
+  padding: 3px 9px;
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.lockBtn:hover { border-color: var(--baseline); color: var(--text); }
+.lockBtn.locked { color: #b06a00; border-color: #e0a83a; background: #fff6e6; }
+
+/* roční souhrn – tabulka po měsících */
+.sumTable { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+.sumTable th, .sumTable td { padding: 4px 6px; border-bottom: 1px solid var(--grid); text-align: left; }
+.sumTable .num { text-align: right; }
+.sumTable tfoot td { border-top: 2px solid var(--baseline); border-bottom: none; }

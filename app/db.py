@@ -101,6 +101,12 @@ CREATE TABLE IF NOT EXISTS undo_log (
     data    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS trip_locks (
+    month TEXT NOT NULL,
+    plate TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (month, plate)
+);
+
 CREATE TABLE IF NOT EXISTS import_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
