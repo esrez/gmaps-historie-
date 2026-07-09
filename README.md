@@ -79,9 +79,11 @@ neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
   míst s počtem návštěv a časem ve zvoleném období, filtrování a řazení;
   klik na místo ho ukáže na mapě a rozbalí **jednotlivé pobyty** (kdy od–do
   a jak dlouho jste tam byli); přímo v seznamu lze **upravit vyhrazený prostor**
-  (okruh v metrech s živým náhledem i překreslení polygonu), přejmenovat
-  s **našeptávačem** a smazat. U souřadnic se dopočítá **adresa** (reverzní
-  geokódování) – v detailu i v bublině na mapě
+  – **interaktivně na mapě**: u kruhu tažením posunout střed a měnit velikost,
+  u polygonu **táhnout jednotlivé body**, přidávat je („+") a mazat (pravý
+  klik); dále okruh v metrech s živým náhledem, přejmenování s **našeptávačem**
+  a mazání. U souřadnic se dopočítá **adresa** (reverzní geokódování) –
+  v detailu i v bublině na mapě
 - **Kniha jízd po dnech** – řádek dne se součtem km a trasou, rozbalení na
   editovatelné jízdy; mezisoučty měsíců, přilepená hlavička i celkový součet,
   hromadný výběr a mazání jízd či celých dnů; pole s **našeptávačem** míst

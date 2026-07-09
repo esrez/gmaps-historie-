@@ -101,6 +101,32 @@ test.describe("mapa", () => {
     expect(places.places.find((p) => p.name === "Zákazník Přejmenovaný").radius_m).toBe(500);
   });
 
+  test("interaktivní úprava tvaru místa na mapě (posun/velikost okruhu)", async ({ page }) => {
+    await page.goto("/");
+    await page.request.post("/api/places",
+      { data: { lat: 49.195, lon: 16.606, name: "Tvar Test", radius_m: 250 } });
+    await page.click('#tabs [data-tab="mista"]');
+    const card = page.locator(".placeCard").filter({ hasText: "Tvar Test" });
+    await card.locator(".pact.edit").click();
+    await card.locator(".peShape").click();          // Upravit na mapě
+    await expect(page.locator("#geomBar")).toBeVisible();
+    // střed (modrá) + kraj (červená) úchyt
+    await expect(page.locator(".geomHandle.center")).toBeVisible();
+    await page.waitForTimeout(1000);                 // počkat na doletění mapy (flyTo)
+    const edge = page.locator(".geomHandle.edge");
+    const eb = await edge.boundingBox();
+    await page.mouse.move(eb.x + eb.width / 2, eb.y + eb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(eb.x + 120, eb.y, { steps: 8 });
+    await page.mouse.up();
+    await page.click("#geomSave");
+    await expect(page.locator("#toast")).toContainText("Tvar místa uložen");
+    await expect(page.locator("#geomBar")).toBeHidden();
+    // poloměr se skutečně zvětšil
+    const places = await (await page.request.get("/api/places")).json();
+    expect(places.places.find((p) => p.name === "Tvar Test").radius_m).toBeGreaterThan(300);
+  });
+
   test("exporty odpovídají", async ({ page }) => {
     for (const url of ["/api/export.xlsx", "/api/export.gpx", "/api/backup"]) {
       const res = await page.request.get(url);

@@ -237,6 +237,8 @@ class PlacePatch(BaseModel):
     name: str | None = None
     radius_m: float | None = None
     polygon: list[list[float]] | None = None   # [[lat,lon],…]; [] zruší → kruh
+    lat: float | None = None                   # posun středu (jen kruhová místa)
+    lon: float | None = None
 
 
 @router.patch("/{place_id}")
@@ -267,6 +269,9 @@ def patch_place(place_id: int, p: PlacePatch):
             clon = round(sum(v[1] for v in poly) / len(poly), 6)
             sets += ["polygon=?", "lat=?", "lon=?"]
             args += [json.dumps(poly), clat, clon]
+    elif p.lat is not None and p.lon is not None:  # posun středu kruhového místa
+        sets += ["lat=?", "lon=?"]
+        args += [round(p.lat, 6), round(p.lon, 6)]
     if not sets:
         raise HTTPException(400, "Nic k úpravě")
     with closing(db.connect()) as conn:
