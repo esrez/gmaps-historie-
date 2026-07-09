@@ -189,6 +189,13 @@ test.describe("mapa", () => {
     await expect(readout).toBeVisible();
     await expect(readout).toContainText(/\d/);
     await expect(readout).toContainText(/m|km/);
+    // dvojklik ukončí měření – tlačítko nabídne „Měřit znovu"
+    await page.locator("#map").dblclick({ position: { x: 680, y: 470 } });
+    await expect(page.locator("#measureBtn")).toContainText("Měřit znovu");
+    // „Měřit znovu" spustí NOVÉ měření (ne jen smaže) – readout zpět na startu
+    await page.click("#measureBtn");
+    await expect(page.locator("#measureBtn")).toContainText("Ukončit měření");
+    await expect(readout).toContainText("klikejte do mapy");
     await page.keyboard.press("Escape");
     await expect(readout).toHaveCount(0);
   });

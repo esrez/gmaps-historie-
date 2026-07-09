@@ -994,9 +994,8 @@ function startMeasure() {
 }
 
 $("measureBtn").addEventListener("click", () => {
-  if (measureState.active) { measureCleanup(); return; }
-  if (measureState.layer) { measureCleanup(); return; }   // druhý klik smaže hotové měření
-  startMeasure();
+  if (measureState.active) { measureCleanup(); return; }   // probíhá měření → ukončit a smazat
+  startMeasure();   // i s hotovou čarou: startMeasure ji uvnitř smaže a začne nové (Esc jen smaže)
 });
 
 // ------------------------------------------------- export mapy do PNG
@@ -1041,14 +1040,12 @@ async function exportMapPng() {
             "(OpenStreetMap) a načtěte mapu znovu.", "error");
       return;
     }
-    const r = currentRange();
     const tag = ($("dateFrom").value || "vse") + "_" + ($("dateTo").value || "vse");
     const a = document.createElement("a");
     a.href = url;
     a.download = `mapa-${tag}.png`;
     a.click();
     toast("Mapa uložena jako PNG.", "success");
-    void r;
   } finally {
     btn.disabled = false;
     btn.innerHTML = orig;
@@ -1468,14 +1465,18 @@ function ensureEmptyState() {
   return el;
 }
 
+let emptyStateSeq = 0;   // proti závodu: novější načtení přebije dokreslení staršího
+
 async function renderEmptyState(pts) {
   if (!pts) return;   // dotaz zrušen novějším – stav neměnit
+  const seq = ++emptyStateSeq;
   const el = ensureEmptyState();
   if (pts.total !== 0) { el.hidden = true; return; }
 
   // je vybrané období, nebo koukáme na prázdný výřez? zeptáme se, co v DB je
   let range = null;
   try { range = await api("/api/range"); } catch (e) { /* offline */ }
+  if (seq !== emptyStateSeq) return;   // mezitím doběhlo novější načtení – nesahat na kartičku
   const hasData = range && (range.points || range.visits);
   const rangeShown = !!($("dateFrom").value || $("dateTo").value);
 
