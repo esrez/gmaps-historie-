@@ -765,7 +765,8 @@ function startPlaceEdit(card, p) {
       ? `<label class="peRow">Okruh (m)<input class="peRadius" type="number" min="20" step="10" value="${Math.round(p.radius_m)}"></label>`
       : "") +
     `<div class="peActions">` +
-      `<button type="button" class="peArea">${icon("polygon", 13)} ${p.polygon ? "Překreslit oblast" : "Vymezit oblast na mapě"}</button>` +
+      `<button type="button" class="peShape">${icon("pencil", 13)} ${p.polygon ? "Upravit body na mapě" : "Upravit na mapě (posun/velikost)"}</button>` +
+      `<button type="button" class="peArea">${icon("polygon", 13)} ${p.polygon ? "Překreslit celou oblast" : "Vymezit oblast (polygon)"}</button>` +
       (p.polygon ? `<button type="button" class="peToCircle">${icon("refresh", 13)} Zpět na kruh</button>` : "") +
     `</div>` +
     `<div class="peSave"><button type="button" class="primary peOk">${icon("check", 13)} Uložit</button>` +
@@ -815,6 +816,7 @@ function startPlaceEdit(card, p) {
 
   panel.querySelector(".peOk").addEventListener("click", save);
   panel.querySelector(".peCancel").addEventListener("click", close);
+  panel.querySelector(".peShape").addEventListener("click", () => { close(); startGeometryEdit(p); });
   panel.querySelector(".peArea").addEventListener("click", () => { close(); startAreaRedraw(p); });
   panel.querySelector(".peToCircle")?.addEventListener("click", async () => {
     if (!confirm("Zrušit vymezenou oblast? Místo se vrátí na kruhový okruh.")) return;
@@ -920,6 +922,149 @@ async function finishPolygonDraw() {
 }
 
 map.on("dblclick", () => { if (drawState.active) finishPolygonDraw(); });
+
+// ------------------------- interaktivní úprava tvaru uloženého místa
+// polygon: táhnutelné body + „+" pro přidání + pravý klik pro smazání;
+// kruh: prostřední značka posune střed, krajní mění velikost (poloměr).
+
+const geomState = { active: false, place: null, verts: [], center: null, radius: 0, shape: null };
+
+function geomHandleIcon(kind) {
+  if (kind === "mid") {
+    return L.divIcon({ className: "geomHandle mid", html: "+", iconSize: [16, 16], iconAnchor: [8, 8] });
+  }
+  return L.divIcon({ className: "geomHandle " + kind, iconSize: [15, 15], iconAnchor: [8, 8] });
+}
+
+function geomCleanup() {
+  geomState.active = false;
+  geomState.place = null;
+  geomState.verts = [];
+  geomState.center = null;
+  if (geomState.shape) { map.removeLayer(geomState.shape); geomState.shape = null; }
+  locLayer.clearLayers();
+  document.getElementById("geomBar")?.remove();
+  map.doubleClickZoom.enable();
+}
+
+function startGeometryEdit(p) {
+  drawCleanup();
+  geomCleanup();
+  document.querySelector('#tabs [data-tab="mapa"]').click();
+  geomState.active = true;
+  geomState.place = p;
+  if (p.polygon) {
+    geomState.verts = p.polygon.map(([a, b]) => [a, b]);
+    map.flyToBounds(p.polygon, { maxZoom: 17, duration: 0.5 });
+    redrawPolyEditor();
+    toast("Táhněte body oblasti. Značka plus mezi body přidá bod, pravý klik bod smaže.");
+  } else {
+    geomState.center = [p.lat, p.lon];
+    geomState.radius = p.radius_m;
+    map.flyTo(geomState.center, 16, { duration: 0.5 });
+    redrawCircleEditor();
+    toast("Táhněte prostřední značku pro posun místa, krajní pro změnu velikosti.");
+  }
+  showGeomBar(p.name);
+}
+
+function redrawPolyEditor() {
+  locLayer.clearLayers();
+  if (geomState.shape) map.removeLayer(geomState.shape);
+  const verts = geomState.verts;
+  geomState.shape = L.polygon(verts, { color: css("--series-2"), weight: 2,
+    fillColor: css("--series-2"), fillOpacity: 0.1 }).addTo(map);
+  verts.forEach((v, i) => {
+    const h = L.marker(v, { draggable: true, icon: geomHandleIcon("vertex"), zIndexOffset: 1000 });
+    h.on("drag", (e) => { verts[i] = [e.latlng.lat, e.latlng.lng]; geomState.shape.setLatLngs(verts); });
+    h.on("dragend", redrawPolyEditor);
+    h.on("contextmenu", (e) => { L.DomEvent.stop(e); removeVertex(i); });
+    h.addTo(locLayer);
+  });
+  verts.forEach((v, i) => {
+    const n = verts[(i + 1) % verts.length];
+    const mid = [(v[0] + n[0]) / 2, (v[1] + n[1]) / 2];
+    const m = L.marker(mid, { icon: geomHandleIcon("mid") });
+    m.on("click", (e) => { L.DomEvent.stop(e); verts.splice(i + 1, 0, mid); redrawPolyEditor(); });
+    m.addTo(locLayer);
+  });
+  updateGeomInfo();
+}
+
+function removeVertex(i) {
+  if (geomState.verts.length <= 3) { toast("Oblast musí mít alespoň 3 body.", "error"); return; }
+  geomState.verts.splice(i, 1);
+  redrawPolyEditor();
+}
+
+function edgeLatLng() {
+  const [lat, lon] = geomState.center;
+  const dLon = geomState.radius / (111320 * Math.cos((lat * Math.PI) / 180));
+  return L.latLng(lat, lon + dLon);
+}
+
+function redrawCircleEditor() {
+  locLayer.clearLayers();
+  if (geomState.shape) map.removeLayer(geomState.shape);
+  geomState.shape = L.circle(geomState.center, { radius: geomState.radius,
+    color: css("--series-2"), weight: 2, fillColor: css("--series-2"), fillOpacity: 0.08 }).addTo(map);
+  const c = L.marker(geomState.center, { draggable: true, icon: geomHandleIcon("center"), zIndexOffset: 1000 });
+  c.on("drag", (e) => { geomState.center = [e.latlng.lat, e.latlng.lng]; geomState.shape.setLatLng(geomState.center); });
+  c.on("dragend", redrawCircleEditor);
+  c.addTo(locLayer);
+  const edge = L.marker(edgeLatLng(), { draggable: true, icon: geomHandleIcon("edge"), zIndexOffset: 1000 });
+  edge.on("drag", (e) => {
+    geomState.radius = Math.max(20, map.distance(geomState.center, e.latlng));
+    geomState.shape.setRadius(geomState.radius);
+    updateGeomInfo();
+  });
+  edge.on("dragend", redrawCircleEditor);
+  edge.addTo(locLayer);
+  updateGeomInfo();
+}
+
+function showGeomBar(name) {
+  document.getElementById("geomBar")?.remove();
+  const bar = document.createElement("div");
+  bar.id = "geomBar";
+  bar.className = "floating";
+  bar.innerHTML =
+    `<span class="gbName">${icon("pencil", 13)} <b>${escapeHtml(name)}</b></span>` +
+    '<span id="geomInfo" class="muted"></span>' +
+    `<button type="button" class="primary" id="geomSave">${icon("check", 13)} Uložit tvar</button>` +
+    '<button type="button" id="geomCancel">Zrušit</button>';
+  document.getElementById("app").appendChild(bar);
+  bar.querySelector("#geomSave").addEventListener("click", saveGeom);
+  bar.querySelector("#geomCancel").addEventListener("click", geomCleanup);
+}
+
+function updateGeomInfo() {
+  const el = document.getElementById("geomInfo");
+  if (!el || !geomState.place) return;
+  el.textContent = geomState.place.polygon
+    ? `${geomState.verts.length} bodů`
+    : `okruh ${Math.round(geomState.radius)} m`;
+}
+
+async function saveGeom() {
+  const p = geomState.place;
+  if (!p) return;
+  let body;
+  if (p.polygon) {
+    if (geomState.verts.length < 3) { toast("Oblast musí mít alespoň 3 body.", "error"); return; }
+    body = { polygon: geomState.verts };
+  } else {
+    body = { radius_m: Math.round(geomState.radius),
+             lat: geomState.center[0], lon: geomState.center[1] };
+  }
+  try {
+    await apiFetch(`/api/places/${p.id}`, { method: "PATCH", body });
+    toast("Tvar místa uložen.", "success");
+    geomCleanup();
+    renderMyPlaces();
+    loadAll();
+  } catch (e) { toast("Uložení selhalo: " + e.message, "error"); }
+}
 
 let glifyLayer = null;
 
@@ -1188,6 +1333,11 @@ document.addEventListener("keydown", (e) => {
     toast("Kreslení oblasti zrušeno.");
     return;
   }
+  if (e.key === "Escape" && geomState.active) {
+    geomCleanup();
+    toast("Úprava tvaru zrušena.");
+    return;
+  }
   if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey) return;
   if (e.key === "ArrowLeft") { shiftDay(-1); }
   else if (e.key === "ArrowRight") { shiftDay(1); }
@@ -1238,6 +1388,7 @@ map.on("click", (e) => {
     addDrawVertex(e.latlng.lat, e.latlng.lng);
     return;
   }
+  if (geomState.active) return;   // při úpravě tvaru klik do mapy nic neotvírá
   const { lat, lng } = e.latlng;
   const div = document.createElement("div");
   const btn = document.createElement("button");

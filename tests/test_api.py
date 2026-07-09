@@ -267,6 +267,11 @@ def test_place_patch_area(client, test_db, tmp_path):
     # zrušení oblasti → zpět kruh
     client.patch(f"/api/places/{pid}", json={"polygon": []})
     assert get()["polygon"] is None
+    # posun středu kruhového místa (interaktivní úprava tvaru na mapě)
+    client.patch(f"/api/places/{pid}", json={"radius_m": 300, "lat": 50.2, "lon": 14.5})
+    p2 = get()
+    assert p2["radius_m"] == 300
+    assert abs(p2["lat"] - 50.2) < 1e-6 and abs(p2["lon"] - 14.5) < 1e-6
 
 
 def test_cities_resolver():

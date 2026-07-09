@@ -89,10 +89,16 @@ období. Umožňuje:
 - **klik na místo** ho ukáže na mapě (u polygonu přiblíží celý areál)
   a rozbalí **jednotlivé pobyty** – u každého datum, čas od–do a délku;
   v záhlaví detailu se navíc dopočítá **adresa** místa (ze souřadnic);
-- **upravit** místo přímo v seznamu (tužka): změna názvu, u kruhových míst
-  **okruhu v metrech** (s živým náhledem na mapě) a **vymezené oblasti** –
-  tlačítko „Vymezit / Překreslit oblast na mapě" spustí obkreslení nového
-  polygonu, „Zpět na kruh" oblast zruší;
+- **upravit** místo přímo v seznamu (tužka): změna názvu a u kruhových míst
+  **okruhu v metrech** (s živým náhledem). Tlačítkem **„Upravit … na mapě"**
+  se spustí interaktivní úprava tvaru:
+  - **kruh** – prostřední (modrá) značka posune místo, krajní (červená) mění
+    velikost okruhu; nahoře je počet metrů;
+  - **oblast (polygon)** – jednotlivé **body lze táhnout**, značka „+" mezi
+    body přidá nový bod a **pravý klik** bod smaže (minimum 3);
+  - změny se uloží tlačítkem **Uložit tvar** (Esc/Zrušit zahodí).
+  Dále lze **Překreslit celou oblast** od začátku, nebo u polygonu
+  **Zpět na kruh**;
 - **smazat** místo (koš). Změna se hned promítne všude, kde se místo zobrazuje.
 
 Pole pro název má **našeptávač** (dosud použité názvy míst i nabídnutá adresa

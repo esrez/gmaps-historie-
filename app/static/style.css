@@ -582,16 +582,53 @@ button:disabled { opacity: 0.5; cursor: default; }
   padding: 5px 7px;
 }
 .placeEditPanel .peRow input.peRadius { flex: 0 0 90px; }
-.placeEditPanel .peActions, .placeEditPanel .peSave { display: flex; gap: 6px; }
+.placeEditPanel .peActions { display: flex; flex-direction: column; gap: 6px; }
+.placeEditPanel .peSave { display: flex; gap: 6px; }
 .placeEditPanel .peActions button, .placeEditPanel .peCancel {
-  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   font-size: 12px;
 }
-.placeEditPanel .peSave .peOk { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.placeEditPanel .peSave .peOk, .placeEditPanel .peSave .peCancel { flex: 1; }
+.placeEditPanel .peShape { border-color: var(--series-1); color: var(--series-1); }
+
+/* interaktivní úprava tvaru místa na mapě */
+.geomHandle {
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+}
+.geomHandle.vertex, .geomHandle.center { background: var(--series-1); }
+.geomHandle.edge { background: var(--accent-red); }
+.geomHandle.mid {
+  background: var(--surface-1);
+  border: 1px dashed var(--series-1);
+  color: var(--series-1);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 13px;
+  text-align: center;
+  opacity: 0.85;
+  cursor: copy;
+}
+#geomBar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  max-width: calc(100vw - 24px);
+}
+#geomBar .gbName { display: inline-flex; align-items: center; gap: 5px; }
+#geomBar button { display: inline-flex; align-items: center; gap: 4px; }
 
 /* adresa v bublině na mapě */
 .tipAddr { color: var(--muted); font-size: 11px; display: inline-block; max-width: 240px; }
