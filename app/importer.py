@@ -34,16 +34,41 @@ BATCH = 50_000
 _LATLNG_RE = re.compile(r"(-?\d+(?:\.\d+)?)\s*°?\s*,\s*(-?\d+(?:\.\d+)?)\s*°?")
 
 
+def _short_reason(exc: Exception) -> str:
+    """Krátký, srozumitelný důvod přeskočení souboru pro přehled importu."""
+    msg = str(exc).strip() or exc.__class__.__name__
+    if "nerozpoznaný formát" in msg:
+        return "nerozpoznaný formát (nejspíš to nejsou data o poloze)"
+    return msg[:100]
+
+
 class Counters:
     def __init__(self):
         self.points = 0
         self.visits = 0
         self.activities = 0
-        self.files = 0
+        self.files = 0            # úspěšně zpracované soubory
+        self.skipped = 0          # soubory bez rozpoznaného formátu / chybné
+        self.reports: list[dict] = []       # co který soubor přinesl (úspěšné)
+        self.skipped_names: list[str] = []  # ukázka přeskočených (max 30)
+
+    def note_file(self, name: str, fmt: str, points: int, visits: int, activities: int):
+        self.files += 1
+        # detail držíme jen pro rozumný počet souborů, ať status nenabobtná
+        if len(self.reports) < 400:
+            self.reports.append({"name": name, "format": fmt, "points": points,
+                                 "visits": visits, "activities": activities})
+
+    def note_skip(self, name: str, reason: str):
+        self.skipped += 1
+        if len(self.skipped_names) < 30:
+            self.skipped_names.append(f"{name}: {reason}")
 
     def as_dict(self):
         return {"files": self.files, "points": self.points,
-                "visits": self.visits, "activities": self.activities}
+                "visits": self.visits, "activities": self.activities,
+                "skipped": self.skipped, "reports": self.reports,
+                "skipped_names": self.skipped_names}
 
 
 # ---------------------------------------------------------------- pomocné
@@ -331,26 +356,40 @@ def import_path(path: str, conn=None, counters: Counters | None = None) -> Count
     try:
         if zipfile.is_zipfile(path):
             with zipfile.ZipFile(path) as zf:
-                for name in zf.namelist():
-                    if not name.lower().endswith(".json"):
-                        continue
-                    w = Writer(conn, c, os.path.basename(name))
-                    with zf.open(name) as raw:
-                        buffered = io.BufferedReader(raw)
-                        try:
+                json_names = [n for n in zf.namelist() if n.lower().endswith(".json")]
+                if not json_names:
+                    raise ValueError(
+                        "V ZIP archivu nejsou žádné .json soubory – je to opravdu "
+                        "export Google Takeout / Timeline?")
+                for name in json_names:
+                    base = os.path.basename(name)
+                    before = (c.points, c.visits, c.activities)
+                    w = Writer(conn, c, base)
+                    try:
+                        with zf.open(name) as raw:
+                            buffered = io.BufferedReader(raw)
                             fmt = _import_json_stream(buffered, w, name)
-                        except (ValueError, json.JSONDecodeError):
-                            continue
-                    w.flush()
-                    c.files += 1
+                        w.flush()
+                    except (ValueError, json.JSONDecodeError) as exc:
+                        c.note_skip(base, _short_reason(exc))
+                        continue
+                    except Exception as exc:   # neočekávané – nezastavit celý ZIP
+                        c.note_skip(base, _short_reason(exc))
+                        print(f"  {name}: přeskočeno – {_short_reason(exc)}")
+                        continue
+                    c.note_file(base, fmt, c.points - before[0],
+                                c.visits - before[1], c.activities - before[2])
                     print(f"  {name}: {fmt}")
         else:
-            w = Writer(conn, c, os.path.basename(path))
+            base = os.path.basename(path)
+            before = (c.points, c.visits, c.activities)
+            w = Writer(conn, c, base)
             with open(path, "rb") as f:
                 fmt = _import_json_stream(f, w, path)
             w.flush()
-            c.files += 1
-            print(f"  {os.path.basename(path)}: {fmt}")
+            c.note_file(base, fmt, c.points - before[0],
+                        c.visits - before[1], c.activities - before[2])
+            print(f"  {base}: {fmt}")
     finally:
         if own_conn:
             from . import db as _db

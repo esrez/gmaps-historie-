@@ -862,6 +862,27 @@ button .ic { margin-right: 1px; }
 #emptyState button { pointer-events: auto; }
 #emptyState .ic { display: block; margin: 0 auto 8px; opacity: 0.6; }
 
+/* Přehled importu v Nástrojích / v průvodci */
+#importStatus, #wizImportStatus { line-height: 1.5; }
+.impHead {
+  display: flex; align-items: center; gap: 7px;
+  font-weight: 600; font-size: 14px; margin-bottom: 6px;
+}
+.impHead.ok { color: var(--ok, #1f9d55); }
+.impHead.warn { color: #b06a00; }
+.impHead .ic { flex: none; }
+.impStats {
+  list-style: none; margin: 4px 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+}
+.impStats li { white-space: nowrap; }
+.impStats b { color: var(--text); }
+.impDetails { margin: 6px 0; }
+.impDetails summary { cursor: pointer; color: var(--baseline); }
+.impSkip { margin: 6px 0; padding-left: 18px; max-height: 160px; overflow: auto; }
+.impSkip li { word-break: break-word; }
+.impTotal { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--grid); }
+
 
 .newPlaces {
   margin: 8px 0 4px;

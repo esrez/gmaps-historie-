@@ -313,7 +313,11 @@ const api = (path, params) => apiFetch(path, { params });
 /* Parametry výřezu mapy: při přiblížení se dotahuje plný detail jen pro
    viditelnou oblast a heatmapa dostane jemnější mřížku. */
 function viewportParams() {
-  if (!$("layerViewport").checked || !state.loadedOnce) return {};
+  // Výřez omezuje dotaz jen když už je mapa usazená na datech. Při prvním
+  // (i poimportním) načtení fitted=false → dotáhne se vše a mapa se přiblíží
+  // na data. Bez toho by filtr výřezu schoval čerstvě naimportovaná data,
+  // pokud mapa zrovna kouká jinam („ve zvoleném období nejsou žádná data").
+  if (!$("layerViewport").checked || !state.loadedOnce || !state.fitted) return {};
   const b = map.getBounds().pad(0.3);
   const z = map.getZoom();
   return {
@@ -1262,26 +1266,65 @@ function renderStats(s, prev) {
     }));
 }
 
-/* Kartička nad mapou, když zvolené období nemá žádná data. */
-function renderEmptyState(pts) {
-  if (!pts) return;   // dotaz zrušen novějším – stav neměnit
+/* Kartička nad mapou, když zvolený výběr nemá žádná data. Ptá se serveru,
+   jaká data jsou vůbec v databázi, a podle toho poradí – aby uživatel po
+   importu nezůstal u prázdné mapy, když data má, jen mimo zvolené období. */
+function ensureEmptyState() {
   let el = document.getElementById("emptyState");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "emptyState";
-    el.className = "floating";
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "emptyState";
+  el.className = "floating";
+  el.hidden = true;
+  document.getElementById("app").appendChild(el);
+  return el;
+}
+
+async function renderEmptyState(pts) {
+  if (!pts) return;   // dotaz zrušen novějším – stav neměnit
+  const el = ensureEmptyState();
+  if (pts.total !== 0) { el.hidden = true; return; }
+
+  // je vybrané období, nebo koukáme na prázdný výřez? zeptáme se, co v DB je
+  let range = null;
+  try { range = await api("/api/range"); } catch (e) { /* offline */ }
+  const hasData = range && (range.points || range.visits);
+  const rangeShown = !!($("dateFrom").value || $("dateTo").value);
+
+  if (hasData) {
+    const fmtD = (ts) => new Date(ts * 1000).toLocaleDateString("cs");
+    const span = (range.min_ts && range.max_ts)
+      ? ` (${fmtD(range.min_ts)} – ${fmtD(range.max_ts)})` : "";
     el.innerHTML =
-      `${icon("pin", 30)}<h3>Ve zvoleném období nejsou žádná data</h3>` +
-      '<p class="muted">Zkuste jiné datum, nebo naimportujte export v záložce Nástroje.</p>' +
-      '<button class="primary" id="emptyAllBtn">Zobrazit vše</button>';
-    document.getElementById("app").appendChild(el);
-    el.querySelector("#emptyAllBtn").addEventListener("click", () => {
-      $("dateFrom").value = "";
-      $("dateTo").value = "";
-      loadAll();
-    });
+      `${icon("database", 30)}<h3>Tady zrovna nic není, ale data máte</h3>` +
+      `<p class="muted">V databázi je <b>${range.points.toLocaleString("cs")}</b> bodů ` +
+      `a <b>${range.visits.toLocaleString("cs")}</b> návštěv${span}.<br>` +
+      (rangeShown
+        ? "Zvolené období je mimo ně – zkuste je rozšířit nebo zobrazit vše."
+        : "Mapa jen kouká jinam – zobrazte vše a skočíme na vaše data.") +
+      "</p><button class=\"primary\" id=\"emptyAllBtn\">Zobrazit všechna data</button>";
+  } else {
+    el.innerHTML =
+      `${icon("pin", 30)}<h3>Zatím žádná data</h3>` +
+      '<p class="muted">Naimportujte export z Google historie polohy ' +
+      '(Timeline.json nebo ZIP z Takeoutu) v záložce Nástroje.</p>' +
+      '<button class="primary" id="emptyToolsBtn">Přejít na import</button>';
   }
-  el.hidden = pts.total !== 0;
+
+  const allBtn = el.querySelector("#emptyAllBtn");
+  if (allBtn) allBtn.addEventListener("click", () => showAllData());
+  const toolsBtn = el.querySelector("#emptyToolsBtn");
+  if (toolsBtn) toolsBtn.addEventListener("click", () =>
+    document.querySelector('#tabs [data-tab="nastroje"]').click());
+  el.hidden = false;
+}
+
+/* Zobrazit úplně vše: zrušit období i výřezový filtr dotazu a skočit na data. */
+function showAllData() {
+  $("dateFrom").value = "";
+  $("dateTo").value = "";
+  state.fitted = false;   // vynutí globální dotaz (bez výřezu) a přiblížení na data
+  loadAll();
 }
 
 /* Pojmenování místa – název (zákazník, adresa…) se použije všude
@@ -1806,16 +1849,15 @@ async function watchImport(jobId) {
       continue;
     }
     if (s.status === "done") {
-      setImportStatus(
-        `Hotovo: +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, ` +
-        `+${fmt(s.activities)} aktivit (${s.files} souborů).`);
-      toast("Import dokončen.", "success");
-      state.fitted = false;
+      await renderImportSummary(s);
+      toast(s.points || s.visits || s.activities
+        ? "Import dokončen." : "Import proběhl, ale nenašla se žádná data.",
+        s.points || s.visits || s.activities ? "success" : "error");
       if (!document.getElementById("wizard").hidden) {
-        setTimeout(closeWizard, 1200);   // po dokončení průvodce zavřít
+        setTimeout(closeWizard, 1800);   // po dokončení průvodce zavřít
       }
       loadPlaceSuggest();
-      loadAll();
+      showAllData();   // období = vše + skok na data, ať je hned vidět, co se přidalo
     } else {
       setImportStatus("Import selhal: " + s.error);
       toast("Import selhal", "error");
@@ -1823,6 +1865,62 @@ async function watchImport(jobId) {
     break;
   }
   $("importBtn").disabled = false;
+}
+
+/* Přehledný souhrn importu: co přibylo, které soubory se přeskočily a proč,
+   a co je teď celkem v databázi (aby bylo jasné, co se stalo a proč). */
+async function renderImportSummary(s) {
+  const fmt = (v) => (v || 0).toLocaleString("cs");
+  const box = $("importStatus");
+  const nothing = !s.points && !s.visits && !s.activities;
+  const parts = [];
+
+  parts.push(
+    `<div class="impHead ${nothing ? "warn" : "ok"}">` +
+    `${icon(nothing ? "alert" : "check", 18)} ` +
+    (nothing ? "Import proběhl, ale nepřidala se žádná data"
+             : "Import dokončen") + "</div>");
+
+  parts.push(
+    `<ul class="impStats"><li>+<b>${fmt(s.points)}</b> GPS bodů</li>` +
+    `<li>+<b>${fmt(s.visits)}</b> návštěv míst</li>` +
+    `<li>+<b>${fmt(s.activities)}</b> cest/aktivit</li>` +
+    `<li>z <b>${fmt(s.files)}</b> souborů` +
+    (s.skipped ? `, <b>${fmt(s.skipped)}</b> přeskočeno` : "") + "</li></ul>");
+
+  if (nothing) {
+    parts.push('<p class="muted">Nejčastější příčina: vybraný soubor není ' +
+      'export historie polohy, nebo je to prázdný/jiný ZIP. Stáhněte z Googlu ' +
+      '„Location History (Timeline)" a vyberte <b>Timeline.json</b> nebo celý ' +
+      '<b>ZIP</b> z Takeoutu.</p>');
+  }
+
+  if (s.skipped_names && s.skipped_names.length) {
+    const items = s.skipped_names.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
+    const more = s.skipped > s.skipped_names.length
+      ? `<li class="muted">…a další (${fmt(s.skipped - s.skipped_names.length)})</li>` : "";
+    parts.push(
+      `<details class="impDetails"><summary>Přeskočené soubory (${fmt(s.skipped)})</summary>` +
+      `<ul class="impSkip">${items}${more}</ul>` +
+      '<p class="muted">Přeskočí se soubory, které nejsou data o poloze ' +
+      '(nastavení, jiné služby) – to je v pořádku.</p></details>');
+  }
+
+  // co je teď celkem v databázi + rozsah dat
+  try {
+    const r = await api("/api/range");
+    if (r.min_ts && r.max_ts) {
+      const fmtD = (ts) => new Date(ts * 1000).toLocaleDateString("cs");
+      parts.push(
+        `<p class="impTotal">Celkem v databázi: <b>${fmt(r.points)}</b> bodů, ` +
+        `<b>${fmt(r.visits)}</b> návštěv · data od <b>${fmtD(r.min_ts)}</b> ` +
+        `do <b>${fmtD(r.max_ts)}</b>.</p>`);
+    }
+  } catch (e) { /* nevadí */ }
+
+  box.innerHTML = parts.join("");
+  const w = document.getElementById("wizImportStatus");
+  if (w) w.innerHTML = box.innerHTML;
 }
 
 // ----------------------------------------------------- průvodce / nápověda

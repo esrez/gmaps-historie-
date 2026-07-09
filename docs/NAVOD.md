@@ -24,10 +24,19 @@ Podrobný průvodce aplikací GMaps Historie. Rychlý přehled je v [README](../
 | Starý Takeout | celý `.zip` | projde se všechno uvnitř |
 
 Import je **idempotentní** – stejný soubor můžete nahrát vícekrát, duplicity se
-přeskočí. Velké soubory se zpracovávají na pozadí s ukazatelem průběhu.
-Alternativy: nakopírovat soubor do `data/import/` (naimportuje se sám do
+přeskočí. Velké soubory (i miliony bodů) se zpracovávají na pozadí, streamovaně
+a po dávkách; na mapě se pak body chytře vzorkují, takže aplikace zůstává
+svižná. Alternativy: nakopírovat soubor do `data/import/` (naimportuje se sám do
 minuty), nebo z příkazové řádky
 `docker compose exec gmaps-historie python -m app.importer /data/soubor.json`.
+
+**Přehled importu.** Po dokončení uvidíte, co se přesně stalo: kolik přibylo GPS
+bodů, návštěv a cest, z kolika souborů, a **kolik souborů se přeskočilo a proč**
+(typicky soubory, které nejsou data o poloze – nastavení a jiné služby v ZIPu;
+to je v pořádku). Nakonec je vypsáno, co je teď **celkem v databázi** a **rozsah
+dat** (od–do). Když se nenašla žádná data, program to zřetelně oznámí a poradí,
+který soubor z Googlu vybrat. Hned po importu se mapa přepne na **Vše** a skočí
+na vaše data, takže je uvidíte bez dalšího klikání.
 
 ## 2. Mapa
 
@@ -37,8 +46,10 @@ záložkami **Mapa · Místa · Statistiky · Analýza · Nástroje**. Panel lze
 hlavičku** (kurzor ruky), takže se dostanete k celé mapě a můžete s ní volně
 posouvat i tam, kde panel původně překážel. Dole je plovoucí lišta přehrávání
 dne, vpravo dole legenda vrstev (obojí je průchozí pro myš – mapa jde posouvat
-i pod nimi). Když zvolené období nemá žádná data, mapa to řekne kartičkou
-s tlačítkem „Zobrazit vše".
+i pod nimi). Když zvolený výběr nemá žádná data, mapa je **chytrá**: zjistí, co
+v databázi vůbec je, a poví vám kolik bodů a **rozsah dat** máte – stačí tedy
+kliknout „Zobrazit všechna data" a mapa skočí přesně na ně (a zruší i případné
+omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou na import.
 
 - **Období** – od/do nebo předvolby (7/30/90 dní, Rok, Letos, Loni, Vše).
 - **Vrstvy** – Trasy (klik = přehrát den), Jednotlivé body (čas po najetí),
@@ -225,7 +236,13 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 
 ## 8. Řešení potíží
 
-- **Mapa je prázdná** – zkontrolujte období (zkuste „Vše") a `/api/range`.
+- **Data se po importu nezobrazují na mapě** – klikněte v kartičce „Zobrazit
+  všechna data" (nebo předvolbu **Vše**). Mapa mohla jen koukat jinam; kartička
+  vypíše, kolik dat a v jakém rozsahu v databázi je.
+- **Import říká, že se nic nenaimportovalo** – vybraný soubor nejspíš není
+  export historie polohy. Stáhněte z Googlu „Location History (Timeline)"
+  a vyberte `Timeline.json` nebo celý `.zip` z Takeoutu. Přehled importu vypíše,
+  které soubory se přeskočily a proč.
 - **Import hlásí chybu** – část dat už mohla být uložena; po opravě souboru
   import spusťte znovu, duplicity se přeskočí.
 - **Špatné časy** – nastavte `TZ` v docker-compose na svou zónu.

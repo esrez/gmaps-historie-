@@ -169,6 +169,24 @@ test.describe("mapa", () => {
       expect(res.status(), url).toBe(200);
     }
   });
+
+  test("prázdné období nabídne dostupný rozsah a Zobrazit vše vrátí data", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() => window.loadAll && document.querySelector("#dbInfo"));
+    // zvolím období bez dat (daleká budoucnost) → chytrá kartička, ne jen „nejsou data"
+    await page.fill("#dateFrom", "2099-01-01");
+    await page.fill("#dateTo", "2099-12-31");
+    await page.click("#loadBtn");
+    const empty = page.locator("#emptyState");
+    await expect(empty).toBeVisible();
+    await expect(empty).toContainText("data máte");        // ví, že data v DB jsou
+    await expect(empty).toContainText("bodů");
+    // Zobrazit vše skutečně data vrátí a kartička zmizí
+    await empty.locator("#emptyAllBtn").click();
+    await expect(empty).toBeHidden();
+    await expect(page.locator("#dbInfo")).toContainText("Zobrazeno");
+    expect(await page.locator("#dateFrom").inputValue()).toBe("");
+  });
 });
 
 test.describe("kniha jízd", () => {
