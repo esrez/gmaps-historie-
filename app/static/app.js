@@ -74,7 +74,12 @@ const play = {
   timer: null, t: 0, marker: null, trail: null, idx: 1,
 };
 const dayScrubber = new DayScrubber($("dayScrubber"));
-initSpeedButtons($("playSpeedBtns"), $("playSpeed"));
+// rychlost přehrávání se pamatuje (obnovit před inicializací tlačítek,
+// ať je aktivní správné; ukládat při každé změně)
+const savedSpeed = localStorage.getItem("map.playSpeed");
+if (savedSpeed) $("playSpeed").value = savedSpeed;
+initSpeedButtons($("playSpeedBtns"), $("playSpeed"),
+  (v) => localStorage.setItem("map.playSpeed", String(v)));
 
 dayScrubber.onSeek((t) => {
   if (!play.points.length) return;
@@ -185,12 +190,46 @@ const baseLayers = {
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19, attribution: "Tiles &copy; Esri" }),
 };
-baseLayers[isDarkTheme() ? "Tmavá (Carto)" : "OpenStreetMap"].addTo(map);
+// zvolený podklad se pamatuje; jinak výchozí podle světlého/tmavého vzhledu
+const savedBase = localStorage.getItem("map.baseLayer");
+const defaultBase = isDarkTheme() ? "Tmavá (Carto)" : "OpenStreetMap";
+baseLayers[(savedBase && baseLayers[savedBase]) ? savedBase : defaultBase].addTo(map);
 const layersControl = L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
 L.control.scale({ imperial: false }).addTo(map);
+map.on("baselayerchange", (e) => localStorage.setItem("map.baseLayer", e.name));
+
+/* Zapamatování nastavení mapy (vrstvy, filtry, rychlost přehrávání…).
+   Uloží se při každé změně a obnoví při dalším otevření – uživatel si tak
+   nemusí vrstvy a filtry pokaždé přenastavovat. */
+const MAP_SETTINGS = [
+  "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
+  "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
+];
+
+function loadMapSettings() {
+  for (const id of MAP_SETTINGS) {
+    const saved = localStorage.getItem("map." + id);
+    if (saved === null) continue;
+    const el = $(id);
+    if (!el) continue;
+    if (el.type === "checkbox") el.checked = saved === "true";
+    else el.value = saved;
+  }
+}
+
+function saveMapSettings() {
+  for (const id of MAP_SETTINGS) {
+    const el = $(id);
+    if (el) localStorage.setItem("map." + id, el.type === "checkbox" ? el.checked : el.value);
+  }
+}
+
+MAP_SETTINGS.forEach((id) => $(id)?.addEventListener("change", saveMapSettings));
+loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
 
 /* Offline mapa (PMTiles): pokud na serveru leží data/map.pmtiles, přidá se
-   plně lokální podklad a rovnou se použije – žádná dlaždice neopustí síť. */
+   plně lokální podklad. Použije se automaticky jen když si uživatel podklad
+   sám nezvolil (nebo si zvolil právě offline). */
 (async function initOfflineBasemap() {
   try {
     const st = await apiFetch("/api/pmtiles/status");
@@ -202,8 +241,10 @@ L.control.scale({ imperial: false }).addTo(map);
     });
     baseLayers["Offline (PMTiles)"] = offline;
     layersControl.addBaseLayer(offline, "Offline (PMTiles)");
-    Object.values(baseLayers).forEach((l) => { if (map.hasLayer(l) && l !== offline) map.removeLayer(l); });
-    offline.addTo(map);
+    if (!savedBase || savedBase === "Offline (PMTiles)") {
+      Object.values(baseLayers).forEach((l) => { if (map.hasLayer(l) && l !== offline) map.removeLayer(l); });
+      offline.addTo(map);
+    }
   } catch (e) { /* offline mapa není k dispozici */ }
 })();
 
