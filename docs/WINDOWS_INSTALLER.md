@@ -41,6 +41,10 @@ Tag `v2.0.0` spustí build automaticky při push.
 - **Volitelný autostart** po přihlášení (vypnuto ve výchozím stavu)
 - **Volitelná URL aktualizací** – zadáte při instalaci (např. `https://vas-server.cz/api/update`)
 - **Odinstalace** – nabídne smazání lokálních dat
+- **Jedna instance** – opětovné spuštění, když už aplikace běží, jen otevře
+  okno v prohlížeči (nespustí druhý server)
+- **Korektní ukončení** – tlačítko *Ukončit aplikaci* (Nástroje → O aplikaci),
+  Ctrl+C v okně konzole i zavření okna konzole aplikaci čistě zastaví
 
 ## Aktualizace (3 způsoby)
 

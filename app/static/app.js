@@ -1981,7 +1981,24 @@ $("profileSwitchBtn")?.addEventListener("click", async () => {
 
 async function showVersion() {
   try {
-    const { version, release } = await api("/api/version");
+    const { version, release, desktop } = await api("/api/version");
     $("appVersion").textContent = `Verze UI: ${version} · vydání ${release || "?"}`;
+    // tlačítko „Ukončit aplikaci" jen u desktopové aplikace (.exe / run.py)
+    if (desktop) {
+      $("quitBtn").hidden = false;
+      $("quitHint").hidden = false;
+    }
   } catch (e) { /* nedostupné */ }
 }
+
+$("quitBtn").addEventListener("click", async () => {
+  if (!confirm("Opravdu ukončit aplikaci GMaps Historie?")) return;
+  $("quitBtn").disabled = true;
+  try {
+    await apiFetch("/api/shutdown", { method: "POST" });
+  } catch (e) { /* server se ukončuje, chyba spojení je v pořádku */ }
+  document.body.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:center;' +
+    'height:100vh;font:16px system-ui;text-align:center;padding:20px;color:#555">' +
+    "Aplikace byla ukončena.<br>Okno prohlížeče teď můžete zavřít.</div>";
+});

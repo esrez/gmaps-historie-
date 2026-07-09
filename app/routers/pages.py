@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ..core.auth import create_session
-from ..core.config import APP_RELEASE, APP_VERSION, AUTH_PASSWORD, STATIC_DIR
+from ..core.config import APP_RELEASE, APP_VERSION, AUTH_PASSWORD, DESKTOP_APP, STATIC_DIR
 
 router = APIRouter(tags=["stránky"])
 
@@ -32,7 +32,18 @@ def api_login(body: LoginBody):
 
 @router.get("/api/version")
 def api_version():
-    return {"version": APP_VERSION, "release": APP_RELEASE}
+    return {"version": APP_VERSION, "release": APP_RELEASE, "desktop": DESKTOP_APP}
+
+
+@router.post("/api/shutdown")
+def api_shutdown():
+    """Korektní ukončení aplikace – jen v desktopovém režimu (.exe / run.py),
+    aby se nedal omylem vypnout server běžící pod Dockerem."""
+    if not DESKTOP_APP:
+        raise HTTPException(403, "Ukončení je dostupné jen v desktopové aplikaci")
+    from ..core import runtime
+    runtime.request_shutdown()
+    return {"ok": True, "message": "Aplikace se ukončuje…"}
 
 
 @router.get("/api/update")

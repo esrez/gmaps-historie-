@@ -285,6 +285,12 @@ def test_cities_resolver():
 def test_version_endpoint(client):
     v = client.get("/api/version").json()
     assert v["version"] and isinstance(v["version"], str)
+    assert v["desktop"] is False           # v testech není desktopový režim
+
+
+def test_shutdown_gated_off_desktop(client):
+    # mimo desktopovou aplikaci (.exe / run.py) nelze server vypnout přes API
+    assert client.post("/api/shutdown").status_code == 403
 
 
 def test_service_worker_has_version(client):
