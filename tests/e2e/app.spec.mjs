@@ -57,6 +57,21 @@ test.describe("mapa", () => {
     await expect(page.locator("#qualityReport")).not.toBeEmpty({ timeout: 15000 });
   });
 
+  test("nastavení mapy se pamatují po znovunačtení", async ({ page }) => {
+    await page.goto("/");
+    await page.check("#layerHeat");
+    await page.uncheck("#layerTracks");
+    await page.selectOption("#transportFilter", "CAR");
+    await page.click('#playSpeedBtns .pb-speed-btn[data-speed="3600"]');
+    await page.waitForTimeout(200);
+    await page.reload();
+    await page.waitForTimeout(500);
+    await expect(page.locator("#layerHeat")).toBeChecked();
+    await expect(page.locator("#layerTracks")).not.toBeChecked();
+    await expect(page.locator("#transportFilter")).toHaveValue("CAR");
+    await expect(page.locator('#playSpeedBtns .pb-speed-btn.active')).toHaveAttribute("data-speed", "3600");
+  });
+
   test("panel lze odsunout tažením a legenda nechytá myš", async ({ page }) => {
     await page.goto("/");
     // legenda i indikátor jsou průchozí pro myš (posun mapy pod nimi)

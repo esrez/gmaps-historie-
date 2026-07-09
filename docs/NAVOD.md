@@ -192,6 +192,13 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 ## 6. Ovládání navíc
 
 - **Vzhled**: tlačítko vedle nadpisu přepíná auto → tmavý → světlý.
+- **Zapamatování nastavení**: aplikace si pamatuje zapnuté **vrstvy**
+  (trasy, body, heatmapa, navštívená místa, moje místa, detail podle výřezu),
+  zvolený **mapový podklad** (OSM / světlý / tmavý / satelit / offline),
+  **filtr dopravy**, okruh a min. pobyt u „Kdy jsem tu byl?", řazení míst,
+  **rychlost přehrávání** i vybraný **vzhled**. Při dalším otevření tak vše
+  zůstane tak, jak jste si to nastavil. Kniha jízd si stejně pamatuje SPZ,
+  řidiče, účel a volby generování. (Ukládá se lokálně v prohlížeči.)
 - **Klávesy** (na mapě): ◀ ▶ šipky listují dny přehrávání, mezerník
   spouští/zastavuje přehrávání.
 - **Mobil**: kniha jízd se zobrazuje jako karty, panel mapy je vysouvací
