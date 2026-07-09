@@ -7,7 +7,12 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ..core.auth import create_session
+from ..core.auth import (
+    create_session,
+    login_allowed,
+    note_login_fail,
+    note_login_ok,
+)
 from ..core.config import APP_RELEASE, APP_VERSION, AUTH_PASSWORD, DESKTOP_APP, STATIC_DIR
 
 router = APIRouter(tags=["stránky"])
@@ -18,12 +23,17 @@ class LoginBody(BaseModel):
 
 
 @router.post("/api/login")
-def api_login(body: LoginBody):
+def api_login(body: LoginBody, request: Request):
     if not AUTH_PASSWORD:
         return {"ok": True, "auth": "disabled"}
+    ip = request.client.host if request.client else "?"
+    if not login_allowed(ip):
+        raise HTTPException(429, "Příliš mnoho pokusů. Zkuste to za pár minut.")
     import secrets
     if not secrets.compare_digest(body.password, AUTH_PASSWORD):
+        note_login_fail(ip)
         raise HTTPException(401, "Špatné heslo")
+    note_login_ok(ip)
     resp = Response(content='{"ok":true}')
     resp.media_type = "application/json"
     create_session(resp)
