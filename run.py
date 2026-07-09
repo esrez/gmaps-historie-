@@ -37,18 +37,62 @@ if getattr(sys, "frozen", False):
 else:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# běží jako desktopová aplikace → povolí tlačítko „Ukončit aplikaci"
+os.environ.setdefault("DESKTOP_APP", "1")
+
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
 OPEN_BROWSER = os.environ.get("OPEN_BROWSER", "1") != "0"
+
+_win_console_handler = None   # držet referenci, ať ji GC neuklidí
+
+
+def _install_win_console_handler() -> None:
+    """Na Windows: zavření okna konzole (křížek), odhlášení či vypnutí systému
+    aplikaci korektně ukončí (jinak by mohla zůstat běžet na pozadí)."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        handler_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+        def _handler(ctrl_type):        # 2=CLOSE, 5=LOGOFF, 6=SHUTDOWN
+            if ctrl_type in (2, 5, 6):
+                os._exit(0)
+            return False                # C/BREAK → nechá zpracovat uvicorn (SIGINT)
+
+        global _win_console_handler
+        _win_console_handler = handler_type(_handler)
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(_win_console_handler, True)
+    except Exception:
+        pass
+
+
+def _app_url() -> str:
+    host = "127.0.0.1" if HOST in ("0.0.0.0", "::") else HOST
+    return f"http://{host}:{PORT}/"
 
 
 def _open_browser_later() -> None:
     import contextlib
     import time
     time.sleep(1.5)
-    url = f"http://{'127.0.0.1' if HOST in ('0.0.0.0', '::') else HOST}:{PORT}/"
     with contextlib.suppress(Exception):
-        webbrowser.open(url)
+        webbrowser.open(_app_url())
+
+
+def _already_running() -> bool:
+    """Zjistí, zda už na daném portu běží tato aplikace (jedna instance)."""
+    import json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(_app_url() + "api/version", timeout=1.5) as r:
+            json.loads(r.read().decode("utf-8"))   # ověří, že je to náš server
+            return True
+    except Exception:
+        return False
 
 
 def main() -> None:
@@ -60,6 +104,15 @@ def main() -> None:
         if "--check-update" in sys.argv and code == 2:
             sys.exit(0)
         sys.exit(0 if code in (0, 2) else 1)
+
+    # jedna instance: pokud už aplikace běží, jen otevřít prohlížeč a skončit
+    if _already_running():
+        print("GMaps Historie už běží – otevírám ji v prohlížeči.")
+        if OPEN_BROWSER and "--no-browser" not in sys.argv:
+            import contextlib
+            with contextlib.suppress(Exception):
+                webbrowser.open(_app_url())
+        return
 
     try:
         # předáváme přímo objekt aplikace (ne řetězec) – funguje i v .exe,
@@ -73,8 +126,21 @@ def main() -> None:
     if OPEN_BROWSER and "--no-browser" not in sys.argv:
         threading.Thread(target=_open_browser_later, daemon=True).start()
 
-    print(f"GMaps Historie běží na http://{HOST}:{PORT}  (Ctrl+C ukončí)")
-    uvicorn.run(app, host=HOST, port=PORT, log_level="info")
+    # explicitní server, ať ho jde zastavit z aplikace (tlačítko „Ukončit")
+    from app.core import runtime
+    config = uvicorn.Config(app, host=HOST, port=PORT, log_level="info")
+    server = uvicorn.Server(config)
+    runtime.set_server(server)
+    _install_win_console_handler()
+
+    print(f"GMaps Historie běží na http://{HOST}:{PORT}")
+    print("Ukonceni: tlacitko Ukoncit aplikaci v Nastrojich, Ctrl+C, nebo zavreni okna.")
+    try:
+        server.run()
+    except OSError as exc:
+        # port obsazený jinou aplikací
+        sys.exit(f"Port {PORT} je obsazený jinou aplikací ({exc}). "
+                 f"Nastavte jiný přes PORT=… nebo tu aplikaci ukončete.")
 
 
 if __name__ == "__main__":

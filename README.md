@@ -200,6 +200,12 @@ Dockeru. Vyžaduje jen **Python 3.11+**.
 Databáze i zálohy zůstávají ve složce `data\` vedle programu. Pro příště stačí
 `start-windows.bat` spustit znovu.
 
+**Ukončení aplikace:** v záložce **Nástroje → O aplikaci** je tlačítko
+**Ukončit aplikaci**, které program korektně zastaví (pak lze zavřít okno
+prohlížeče). Fungují i **Ctrl+C** v okně konzole a **zavření okna** konzole.
+Aplikace je **jednoinstanční** – když ji spustíte, zatímco už běží, jen se
+otevře v prohlížeči a druhá kopie se nespustí.
+
 ### Linux / macOS (a Windows z příkazové řádky)
 
 ```bash

@@ -57,6 +57,13 @@ test.describe("mapa", () => {
     await expect(page.locator("#qualityReport")).not.toBeEmpty({ timeout: 15000 });
   });
 
+  test("tlačítko Ukončit aplikaci je skryté mimo desktop režim", async ({ page }) => {
+    await page.goto("/");
+    await page.click('#tabs [data-tab="nastroje"]');
+    // e2e server neběží jako desktopová aplikace → tlačítko musí být skryté
+    await expect(page.locator("#quitBtn")).toBeHidden();
+  });
+
   test("nastavení mapy se pamatují po znovunačtení", async ({ page }) => {
     await page.goto("/");
     await page.check("#layerHeat");

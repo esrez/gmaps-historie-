@@ -20,6 +20,9 @@ IMPORT_RATE_LIMIT = int(os.environ.get("IMPORT_RATE_LIMIT", "10"))  # za hodinu
 SESSION_MAX_AGE = 30 * 24 * 3600  # 30 dní
 
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
+# nastavuje run.py při běhu jako desktopová aplikace (.exe / python run.py) –
+# povoluje tlačítko „Ukončit aplikaci" a endpoint /api/shutdown
+DESKTOP_APP = os.environ.get("DESKTOP_APP") == "1"
 _VERSION_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "VERSION")
 
 
