@@ -881,6 +881,30 @@ button .ic { margin-right: 1px; }
 #emptyState button { pointer-events: auto; }
 #emptyState .ic { display: block; margin: 0 auto 8px; opacity: 0.6; }
 
+/* Odečet měření vzdálenosti – plovoucí panel nahoře uprostřed */
+#measureReadout {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 960;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+#measureReadout .ic { vertical-align: middle; }
+.measureLbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-red, #d64545);
+  text-shadow: 0 0 3px var(--surface-1), 0 0 3px var(--surface-1);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* Přehled importu v Nástrojích / v průvodci */
 #importStatus, #wizImportStatus { line-height: 1.5; }
 .impHead {

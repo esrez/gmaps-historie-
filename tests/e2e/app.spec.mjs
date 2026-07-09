@@ -177,6 +177,38 @@ test.describe("mapa", () => {
     }
   });
 
+  test("měření vzdálenosti ukáže odečet a Esc ho smaže", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#map").waitFor();
+    await page.click("#measureBtn");
+    await expect(page.locator("#measureBtn")).toContainText("Ukončit měření");
+    // dva kliky do volné části mapy (mimo panel vlevo)
+    await page.locator("#map").click({ position: { x: 620, y: 240 } });
+    await page.locator("#map").click({ position: { x: 760, y: 380 } });
+    const readout = page.locator("#measureReadout");
+    await expect(readout).toBeVisible();
+    await expect(readout).toContainText(/\d/);
+    await expect(readout).toContainText(/m|km/);
+    await page.keyboard.press("Escape");
+    await expect(readout).toHaveCount(0);
+  });
+
+  test("export mapy stáhne PNG", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#map").waitFor();
+    await page.waitForTimeout(400);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.click("#exportPngBtn"),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^mapa-.*\.png$/);
+    const path = await download.path();
+    const fs = await import("node:fs");
+    const buf = fs.readFileSync(path);
+    // PNG signatura
+    expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  });
+
   test("prázdné období nabídne dostupný rozsah a Zobrazit vše vrátí data", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => window.loadAll && document.querySelector("#dbInfo"));

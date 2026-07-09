@@ -57,6 +57,12 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Detail podle výřezu** – při zoomu se automaticky dotáhne plný detail
   viditelné oblasti. Vypnutím se vrátí jeden vzorek pro celé období.
 - **Podkladové mapy** – přepínač vpravo nahoře (OSM, světlá, tmavá, satelit).
+- **Měřit vzdálenost** – klikáním do mapy měříte délku trasy; u každého bodu
+  se ukáže průběžná vzdálenost a nahoře celkový součet. Dvojklik nebo Esc
+  měření ukončí, dalším klikem na tlačítko ho smažete.
+- **Uložit mapu (PNG)** – aktuální výřez mapy i s trasami, body a heatmapou
+  se stáhne jako obrázek PNG (dole razítko se zvoleným obdobím a atribucí) –
+  hodí se do e-mailu nebo dokumentu.
 - **Hledání místa** – vaše místa i libovolná adresa (OpenStreetMap).
 - **„Kdy jsem tu byl?"** – klik do mapy → seznam všech pobytů v okruhu
   100 m–1 km s daty, časy a délkou; export do Excelu; klik na pobyt přehraje den.
