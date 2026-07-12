@@ -431,11 +431,15 @@ function readHash() {
 function fitToData() {
   const pts = state.points;
   if (!pts.length) return;
-  const lats = pts.map((p) => p[1]), lons = pts.map((p) => p[2]);
-  map.fitBounds([
-    [Math.min(...lats), Math.min(...lons)],
-    [Math.max(...lats), Math.max(...lons)],
-  ], { padding: [30, 30] });
+  // smyčka místo Math.min(...pole): spread s 60k+ prvky přeteče zásobník volání
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  for (const p of pts) {
+    if (p[1] < minLat) minLat = p[1];
+    if (p[1] > maxLat) maxLat = p[1];
+    if (p[2] < minLon) minLon = p[2];
+    if (p[2] > maxLon) maxLon = p[2];
+  }
+  map.fitBounds([[minLat, minLon], [maxLat, maxLon]], { padding: [30, 30] });
   state.fitted = true;
 }
 
@@ -471,13 +475,30 @@ function renderTracks() {
   // podkladu (satelit, tmavá mapa) a čáry působí prokresleně
   const casing = isDarkTheme() ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)";
   const segments = splitSegments(state.points);
+  // dvě střídající se modré – sousední samostatné cesty jdou rozlišit
+  const shadePair = [css("--series-1"), isDarkTheme() ? "#6da7ec" : "#5598e7"];
+
+  // Rychlá cesta pro roky dat najednou (tisíce cest v pohledu zdaleka):
+  // místo tisíců interaktivních vrstev tři multi-čáry bez událostí.
+  // Po přiblížení („Detail podle výřezu") segmentů v záběru ubude a
+  // automaticky se zapne plné interaktivní kreslení s tooltipy a šipkami.
+  if (segments.length > 400) {
+    const lls = segments.map((seg) => seg.map((p) => [p[1], p[2]]));
+    L.polyline(lls, { color: casing, weight: 5, opacity: 1,
+                      interactive: false }).addTo(trackLayer);
+    L.polyline(lls.filter((_, i) => i % 2 === 0), { color: shadePair[0],
+      weight: 2.2, opacity: 0.9, interactive: false }).addTo(trackLayer);
+    L.polyline(lls.filter((_, i) => i % 2 === 1), { color: shadePair[1],
+      weight: 2.2, opacity: 0.9, interactive: false }).addTo(trackLayer);
+    return;
+  }
+
   for (const seg of segments) {
     L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: casing, weight: 6, opacity: 1, interactive: false,
     }).addTo(trackLayer);
   }
-  // dvě střídající se modré – sousední samostatné cesty jdou rozlišit
-  const shades = [css("--series-1"), isDarkTheme() ? "#6da7ec" : "#5598e7"];
+  const shades = shadePair;
   let arrows = 0;
   segments.forEach((seg, si) => {
     const from = new Date(seg[0][0] * 1000);
@@ -544,10 +565,11 @@ async function loadCompare() {
     const pts = await api("/api/points",
       { params: { ...r, limit: 60000 }, signal: ctrl.signal });
     const color = css("--series-3");
-    for (const seg of splitSegments(pts.points)) {
-      L.polyline(seg.map((p) => [p[1], p[2]]), {
-        color, weight: 2.5, opacity: 0.85, dashArray: "5 4", interactive: false,
-      }).addTo(compareLayer);
+    // jedna multi-čára pro všechny úseky – u dlouhých období řádově rychlejší
+    const lls = splitSegments(pts.points).map((seg) => seg.map((p) => [p[1], p[2]]));
+    if (lls.length) {
+      L.polyline(lls, { color, weight: 2.5, opacity: 0.85,
+                        dashArray: "5 4", interactive: false }).addTo(compareLayer);
     }
   } catch (e) {
     if (e.name !== "AbortError") toast("Porovnání se nenačetlo: " + e.message, "error");

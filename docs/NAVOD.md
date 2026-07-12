@@ -25,9 +25,11 @@ Podrobný průvodce aplikací GMaps Historie. Rychlý přehled je v [README](../
 
 Import je **idempotentní** – stejný soubor můžete nahrát vícekrát, duplicity se
 přeskočí. Velké soubory (i miliony bodů) se zpracovávají na pozadí, streamovaně
-a po dávkách; na mapě se pak body chytře vzorkují, takže aplikace zůstává
-svižná. Alternativy: nakopírovat soubor do `data/import/` (naimportuje se sám do
-minuty), nebo z příkazové řádky
+a po dávkách; na mapě se pak body chytře vzorkují a trasy zjednodušují
+(Douglas–Peucker), takže i **několik let historie najednou** se vykreslí během
+pár sekund a aplikace zůstává svižná. Po přiblížení se automaticky dotáhne plný
+detail viditelného výřezu. Alternativy: nakopírovat soubor do `data/import/`
+(naimportuje se sám do minuty), nebo z příkazové řádky
 `docker compose exec gmaps-historie python -m app.importer /data/soubor.json`.
 
 **Přehled importu.** Po dokončení uvidíte, co se přesně stalo: kolik přibylo GPS

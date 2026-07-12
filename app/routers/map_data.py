@@ -52,10 +52,19 @@ def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
     lo, hi = ts_range(from_ts, to_ts)
     bsql, bargs = bbox_sql(min_lat, max_lat, min_lon, max_lon)
     with closing(db.connect()) as conn:
+        # U milionů bodů se agreguje jen každý N-tý bod a počty se krokem
+        # přenásobí – hustota (relativní intenzita) zůstává, dotaz je rychlý.
+        n = conn.execute(
+            f"SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?{bsql}",
+            (lo, hi, *bargs)).fetchone()["c"]
+        step = max(1, n // 500_000)
+        ssql = " AND (id % ?) = 0" if step > 1 else ""
+        sargs = (step,) if step > 1 else ()
         rows = conn.execute(
-            f"SELECT ROUND(lat,?) la, ROUND(lon,?) lo, COUNT(*) c FROM points "
-            f"WHERE ts BETWEEN ? AND ?{bsql} GROUP BY la, lo ORDER BY c DESC LIMIT ?",
-            (precision, precision, lo, hi, *bargs, MAX_HEAT_CELLS)).fetchall()
+            f"SELECT ROUND(lat,?) la, ROUND(lon,?) lo, COUNT(*) * ? c FROM points "
+            f"WHERE ts BETWEEN ? AND ?{bsql}{ssql} "
+            f"GROUP BY la, lo ORDER BY c DESC LIMIT ?",
+            (precision, precision, step, lo, hi, *bargs, *sargs, MAX_HEAT_CELLS)).fetchall()
     return {"cells": [[r["la"], r["lo"], r["c"]] for r in rows]}
 
 

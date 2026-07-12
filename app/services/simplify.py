@@ -1,4 +1,10 @@
-"""Zjednodušení GPS tras (Douglas–Peucker) pro vykreslení na mapě."""
+"""Zjednodušení GPS tras (Douglas–Peucker) pro vykreslení na mapě.
+
+Vzdálenosti se počítají v rovinné (equirektangulární) projekci vztažené
+k prvnímu bodu segmentu – na délkách jednotlivých cest (km až desítky km)
+je odchylka od sférického výpočtu zanedbatelná a výpočet je řádově rychlejší,
+což je zásadní pro databáze s miliony bodů (několik let historie).
+"""
 from __future__ import annotations
 
 import math
@@ -23,51 +29,55 @@ def _ts(row: PointRow) -> int:
   return row[0]
 
 
-def cross_track_distance_m(lat: float, lon: float,
-                           lat1: float, lon1: float,
-                           lat2: float, lon2: float) -> float:
-  """Kolmá vzdálenost bodu od úsečky na sféře (cross-track distance)."""
-  if lat1 == lat2 and lon1 == lon2:
-    return haversine_m(lat, lon, lat1, lon1)
-  r = 6_371_000.0
-  d13 = haversine_m(lat1, lon1, lat, lon) / r
-  if d13 == 0:
-    return 0.0
-  b12 = math.atan2(
-    math.sin(math.radians(lon2 - lon1)) * math.cos(math.radians(lat2)),
-    math.cos(math.radians(lat1)) * math.sin(math.radians(lat2))
-    - math.sin(math.radians(lat1)) * math.cos(math.radians(lat2))
-    * math.cos(math.radians(lon2 - lon1)),
-  )
-  b13 = math.atan2(
-    math.sin(math.radians(lon - lon1)) * math.cos(math.radians(lat)),
-    math.cos(math.radians(lat1)) * math.sin(math.radians(lat))
-    - math.sin(math.radians(lat1)) * math.cos(math.radians(lat))
-    * math.cos(math.radians(lon - lon1)),
-  )
-  dxt = math.asin(max(-1.0, min(1.0, math.sin(d13) * math.sin(b13 - b12)))) * r
-  return abs(dxt)
-
-
 def _douglas_peucker(rows: list[PointRow], epsilon_m: float) -> list[PointRow]:
+  """Iterativní DP nad indexy (bez rekurze a slicingu) v rovinné projekci."""
   n = len(rows)
   if n <= 2:
     return rows[:]
-  lat1, lon1 = _coords(rows[0])
-  lat2, lon2 = _coords(rows[-1])
-  max_d = 0.0
-  idx = 0
-  for i in range(1, n - 1):
-    lat, lon = _coords(rows[i])
-    d = cross_track_distance_m(lat, lon, lat1, lon1, lat2, lon2)
-    if d > max_d:
-      max_d = d
-      idx = i
-  if max_d <= epsilon_m:
-    return [rows[0], rows[-1]]
-  left = _douglas_peucker(rows[: idx + 1], epsilon_m)
-  right = _douglas_peucker(rows[idx:], epsilon_m)
-  return left[:-1] + right
+  # projekce do metrů vůči prvnímu bodu segmentu
+  lat0, lon0 = _coords(rows[0])
+  kx = 111_320.0 * math.cos(math.radians(lat0))
+  ky = 110_540.0
+  xs = [0.0] * n
+  ys = [0.0] * n
+  for i, r in enumerate(rows):
+    la, lo = _coords(r)
+    xs[i] = (lo - lon0) * kx
+    ys[i] = (la - lat0) * ky
+
+  keep = bytearray(n)
+  keep[0] = keep[n - 1] = 1
+  eps2 = epsilon_m * epsilon_m
+  stack = [(0, n - 1)]
+  while stack:
+    a, b = stack.pop()
+    if b - a < 2:
+      continue
+    ax, ay = xs[a], ys[a]
+    dx, dy = xs[b] - ax, ys[b] - ay
+    dd = dx * dx + dy * dy
+    max_d2 = 0.0
+    idx = -1
+    for i in range(a + 1, b):
+      px, py = xs[i] - ax, ys[i] - ay
+      if dd:
+        t = (px * dx + py * dy) / dd
+        if t < 0.0:
+          t = 0.0
+        elif t > 1.0:
+          t = 1.0
+        ex, ey = px - t * dx, py - t * dy
+      else:
+        ex, ey = px, py
+      d2 = ex * ex + ey * ey
+      if d2 > max_d2:
+        max_d2 = d2
+        idx = i
+    if idx >= 0 and max_d2 > eps2:
+      keep[idx] = 1
+      stack.append((a, idx))
+      stack.append((idx, b))
+  return [rows[i] for i in range(n) if keep[i]]
 
 
 def split_track_segments(rows: list[PointRow],
@@ -95,30 +105,33 @@ def split_track_segments(rows: list[PointRow],
   return segs
 
 
+def _dp_pass(segments: list[list[PointRow]], eps: float) -> list[PointRow]:
+  out: list[PointRow] = []
+  for seg in segments:
+    if len(seg) <= 2:
+      out.extend(seg)
+    else:
+      out.extend(_douglas_peucker(seg, eps))
+  return out
+
+
 def simplify_track(rows: list[PointRow], limit: int,
                    epsilon_m: float = TRACK_SIMPLIFY_EPSILON_M) -> list[PointRow]:
-  """Zjednoduší trasu Douglas–Peuckerem; při překročení limitu zvýší toleranci."""
+  """Zjednoduší trasu Douglas–Peuckerem; při překročení limitu zvýší toleranci.
+
+  Další průchody s vyšší tolerancí běží už jen nad zjednodušeným výsledkem
+  předchozího kola – u velkých dat tak nedochází k opakované práci nad
+  původními statisíci bodů.
+  """
   if not rows:
     return []
-  segments = split_track_segments(rows)
   eps = epsilon_m
-  for _ in range(16):
-    out: list[PointRow] = []
-    for seg in segments:
-      if len(seg) <= 2:
-        out.extend(seg)
-      else:
-        out.extend(_douglas_peucker(seg, eps))
+  out = _dp_pass(split_track_segments(rows), eps)
+  for _ in range(12):
     if len(out) <= limit or eps > 500:
-      return out[:limit] if len(out) > limit else out
-    eps *= 1.6
-  # nouzový fallback – zachová první/poslední bod každého segmentu
-  out = []
-  for seg in segments:
-    if seg:
-      out.append(seg[0])
-      if len(seg) > 1:
-        out.append(seg[-1])
+      break
+    eps *= 1.8
+    out = _dp_pass(split_track_segments(out), eps)
   return out[:limit]
 
 

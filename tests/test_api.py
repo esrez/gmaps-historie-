@@ -21,6 +21,26 @@ def test_range_and_points(client, test_db, tmp_path):
     assert client.get("/api/points?limit=0").status_code == 422
 
 
+def test_transport_filter_with_thousands_of_activities(client, test_db, tmp_path):
+    """Regrese: filtr dopravy dřív skládal jeden OR výraz přes všechny aktivity
+    a u víceletých dat padal na limitu hloubky výrazu SQLite (chyba 500)."""
+    seed(test_db, tmp_path)
+    with closing(test_db.connect()) as conn:
+        day = 1748844000
+        conn.executemany(
+            "INSERT INTO activities(start_ts,end_ts,type) VALUES(?,?,'DRIVING')",
+            [(day + i * 4000, day + i * 4000 + 1800) for i in range(2500)])
+        conn.executemany(
+            "INSERT OR IGNORE INTO points(ts,lat,lon) VALUES(?,?,?)",
+            [(day + i * 4000 + 60, 49.2 + i * 1e-5, 16.6) for i in range(2500)])
+        conn.commit()
+    r = client.get("/api/points?transport=CAR")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] >= 2500          # body uvnitř intervalů aktivit
+    assert len(body["points"]) > 0
+
+
 def test_stats(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     s = client.get("/api/stats").json()
