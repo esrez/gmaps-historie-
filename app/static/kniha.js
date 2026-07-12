@@ -1,6 +1,7 @@
 /* Kniha jízd – logika stránky (ES modul, sdílené helpery v common.js) */
 import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
-         buildUrl, apiFetch, escapeHtml, toast, initThemeToggle } from "./common.js";
+         buildUrl, apiFetch, escapeHtml, toast, initThemeToggle,
+         appConfirm } from "./common.js";
 import { icon, mountIcons } from "./icons.js";
 
 initThemeToggle($("themeBtn"));
@@ -152,7 +153,8 @@ $("selAll").addEventListener("change", () => {
 
 $("bulkDelBtn").addEventListener("click", async () => {
   const n = selectedIds.size;
-  if (!n || !confirm(`Opravdu smazat ${n} vybraných jízd?`)) return;
+  if (!n || !await appConfirm(`Opravdu smazat ${n} vybraných jízd?`,
+    { okLabel: "Smazat", danger: true })) return;
   try {
     const res = await api("/api/trips/bulk_delete", {
       method: "POST", body: { ids: [...selectedIds] },
@@ -434,7 +436,8 @@ async function propagateKm(t) {
 }
 
 async function onDelete(t, tr) {
-  if (!confirm(`Smazat jízdu ${new Date(t.start_ts * 1000).toLocaleDateString("cs")} (${t.km} km)?`)) return;
+  if (!await appConfirm(`Smazat jízdu ${new Date(t.start_ts * 1000).toLocaleDateString("cs")} (${t.km} km)?`,
+      { okLabel: "Smazat", danger: true })) return;
   await api(`/api/trips/${t.id}`, { method: "DELETE" });
   trips = trips.filter((x) => x.id !== t.id);
   tr.remove();
@@ -700,8 +703,9 @@ $("clearBtn").addEventListener("click", async () => {
     toast("Nejdřív zvolte období (od–do).", "error");
     return;
   }
-  if (!confirm("Opravdu smazat VŠECHNY jízdy ve zvoleném období?"
-    + ($("setFilterPlate").checked ? " (jen filtrované vozidlo)" : ""))) return;
+  if (!await appConfirm("Opravdu smazat VŠECHNY jízdy ve zvoleném období?"
+    + ($("setFilterPlate").checked ? " (jen filtrované vozidlo)" : ""),
+    { okLabel: "Smazat vše", danger: true })) return;
   const res = await api("/api/trips", { method: "DELETE", params: { ...r, ...plateFilter() } });
   toast(`Smazáno ${res.deleted} jízd (lze vrátit tlačítkem Zpět).`, "success");
   loadTrips();

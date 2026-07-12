@@ -6,7 +6,7 @@ from contextlib import closing
 from .. import db
 from ..common import ts_range
 from ..core.config import MAX_TRACK_POINTS
-from .simplify import rows_to_api, simplify_track
+from .simplify import rows_to_api, simplify_track_segments
 
 
 def bbox_sql(min_lat, max_lat, min_lon, max_lon) -> tuple[str, tuple]:
@@ -38,13 +38,19 @@ def _fetch_points(conn, lo, hi, bsql, bargs, pre_limit: int) -> tuple[int, list]
 
 
 def _simplify_response(rows: list, total: int, limit: int) -> dict:
-  simplified = simplify_track(rows, limit)
+  segments = simplify_track_segments(rows, limit)
+  flat: list = []
+  breaks: list[int] = []   # indexy, kde začíná nový úsek (klient nehádá mezery)
+  for seg in segments:
+    breaks.append(len(flat))
+    flat.extend(seg)
   return {
     "total": total,
-    "sampled": len(simplified),
+    "sampled": len(flat),
     "step": 1,
     "simplified": True,
-    "points": rows_to_api(simplified),
+    "points": rows_to_api(flat),
+    "breaks": breaks,
   }
 
 
@@ -78,7 +84,8 @@ def _points_by_transport(lo, hi, limit, bsql, bargs, transport: str):
   if not types:
     return points_data(lo, hi, limit)
   ph = ",".join("?" * len(types))
-  empty = {"total": 0, "sampled": 0, "step": 1, "simplified": True, "points": []}
+  empty = {"total": 0, "sampled": 0, "step": 1, "simplified": True,
+           "points": [], "breaks": []}
   with closing(db.connect()) as conn:
     acts = conn.execute(
       f"SELECT start_ts, end_ts FROM activities WHERE start_ts BETWEEN ? AND ? "

@@ -14,7 +14,7 @@
 </head>
 <body>
 <div id="app">
-  <main id="map"><div id="mapLoading" hidden>Načítám…</div></main>
+  <main id="map"><div id="mapBar" hidden></div><div id="mapLoading" hidden>Načítám…</div></main>
 
   <!-- plovoucí hlavní panel nad mapou -->
   <aside id="panel" class="floating">
@@ -112,6 +112,13 @@
         </label>
         <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
           <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
+        <label title="Podle roku: každý rok jízdy má vlastní barvu – u víceleté historie hned vidíte, kudy jste kdy jezdili">
+          Barvy tras
+          <select id="trackColorMode">
+            <option value="alt">střídat odstíny</option>
+            <option value="year">podle roku</option>
+          </select>
+        </label>
         <button id="drawPolyBtn" title="Klikáním do mapy obkreslíte areál (zákazník, sklad…) a pojmenujete ho – přesnější než kruh">
           <span data-icon="polygon"></span> Pojmenovat oblast (polygon)</button>
         <div class="row" style="gap:6px">
@@ -200,7 +207,13 @@
     <div class="tab-page" data-page="analyza">
       <section>
         <h2>Analýza</h2>
+        <h3>Nejčastější trasy</h3>
+        <div id="topRoutes"></div>
+        <h3>Km po měsících podle dopravy</h3>
+        <div id="transportChart" class="chart"></div>
+        <div id="transportLegend" class="chartLegend"></div>
         <h3>Km podle dne v týdnu</h3>
+        <div id="workWeekend" class="muted"></div>
         <div id="weekdayChart" class="chart"></div>
         <h3>Aktivita podle hodiny</h3>
         <div id="hourlyChart" class="chart"></div>

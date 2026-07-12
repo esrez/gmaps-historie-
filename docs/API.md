@@ -9,12 +9,12 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | Endpoint | Metoda | Popis |
 |---|---|---|
 | `/api/range` | GET | rozsah dat a počty záznamů v databázi |
-| `/api/points` | GET | GPS body; `limit` (vzorkování), volitelný výřez `min_lat`/`max_lat`/`min_lon`/`max_lon` |
+| `/api/points` | GET | GPS body; `limit` (vzorkování), volitelný výřez `min_lat`/`max_lat`/`min_lon`/`max_lon`; `breaks` = indexy začátků souvislých úseků (klient podle nich kreslí čáry) |
 | `/api/heatmap` | GET | agregované buňky; `precision` = desetinná místa mřížky (2–6), volitelný výřez |
 | `/api/visits` | GET | navštívená místa se jmény a časy |
 | `/api/day` | GET | body + návštěvy + cesty jednoho dne (`from_ts`, `to_ts` povinné) |
 | `/api/stats` | GET | souhrn: km, dny, návštěvy, po měsících, top místa, rekordy (`records`: nejdelší den/cesta/série); `min_stay_min` (výchozí 2) vyřadí průjezdy |
-| `/api/analysis` | GET | km podle dne v týdnu, aktivita po hodinách, km po letech, místa po měsících |
+| `/api/analysis` | GET | km podle dne v týdnu, aktivita po hodinách, km po letech, místa po měsících, `monthly_by_type` (km po měsících podle dopravy), `top_routes` (nejčastější pojmenované trasy) |
 | `/api/search_visits` | GET | fulltext ve vlastních místech (`q`) |
 | `/api/at_location` | GET | pobyty v okruhu (`lat`, `lon`, `radius_m`, `min_stay_min` – výchozí 2 min vyřadí průjezdy); slučuje GPS pobyty se záznamy návštěv |
 | `/api/calendar` | GET | denní km + počty bodů pro kalendář roku (`year`) |

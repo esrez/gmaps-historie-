@@ -59,6 +59,9 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Detail podle výřezu** – při zoomu se automaticky dotáhne plný detail
   viditelné oblasti. Vypnutím se vrátí jeden vzorek pro celé období.
 - **Podkladové mapy** – přepínač vpravo nahoře (OSM, světlá, tmavá, satelit).
+- **Barvy tras** – „střídat odstíny" rozliší sousední jízdy, „**podle roku**"
+  dá každému roku vlastní barvu (legenda vpravo dole) – u víceleté historie
+  na první pohled vidíte, kudy jste kdy jezdili.
 - **Měřit vzdálenost** – klikáním do mapy měříte délku trasy; u každého bodu
   se ukáže průběžná vzdálenost a nahoře celkový součet. Dvojklik nebo Esc
   měření ukončí, dalším klikem na tlačítko ho smažete.
@@ -72,9 +75,11 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   pouhý průjezd místem se tak neoznačí jako návštěva; totéž platí pro
   statistiky návštěv a top místa.
 - **Statistiky / Analýza** (záložky) – km celkem a po měsících, rozpad podle
-  dopravy, top místa; km podle dne v týdnu, aktivita podle hodiny, km po
-  letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu stejně
-  dlouhému období) a miniaturní křivku km po měsících. Blok **Rekordy
+  dopravy, top místa; **nejčastější trasy** (odkud ⇄ kam, kolikrát a průměrné
+  km), **km po měsících podle dopravy** (skládaný graf auto/pěšky/MHD/kolo),
+  **všední dny vs. víkend**, km podle dne v týdnu, aktivita podle hodiny,
+  km po letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu
+  stejně dlouhému období) a miniaturní křivku km po měsících. Blok **Rekordy
   období** shrnuje nejvíc najetých km za den, nejdelší jednotlivou cestu
   a nejdelší sérii po sobě jdoucích dní s jízdou.
 - **Porovnání období** – lze zapnout druhé období, které se vykreslí

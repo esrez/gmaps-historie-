@@ -216,6 +216,25 @@ test.describe("mapa", () => {
     expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   });
 
+  test("analýza: doprava po měsících, všední vs. víkend, trasy", async ({ page }) => {
+    await page.goto("/");
+    await page.click('#tabs [data-tab="analyza"]');
+    await expect(page.locator("#transportChart svg")).toBeVisible();
+    await expect(page.locator("#transportLegend")).toContainText("Autem");
+    await expect(page.locator("#workWeekend")).toContainText("Všední dny");
+    await expect(page.locator("#topRoutes")).not.toBeEmpty();
+  });
+
+  test("barvení tras podle roku ukáže legendu roků", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.selectOption("#trackColorMode", "year");
+    await expect(page.locator("#trackYearLegend")).toContainText("2025");
+    await page.selectOption("#trackColorMode", "alt");   // zpět – legenda zmizí
+    await expect(page.locator("#trackYearLegend")).toHaveCount(0);
+  });
+
   test("prázdné období nabídne dostupný rozsah a Zobrazit vše vrátí data", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => window.loadAll && document.querySelector("#dbInfo"));
@@ -279,8 +298,9 @@ test.describe("kniha jízd", () => {
     await expect(page.locator("#bulkDelBtn")).toBeHidden();
     await page.locator("#tripsBody tr.dayRow .selDay").first().check();
     await expect(page.locator("#bulkDelBtn")).toContainText("Smazat vybrané");
-    page.once("dialog", (d) => d.accept());   // potvrzení mazání
     await page.click("#bulkDelBtn");
+    // vlastní modální potvrzení (místo nativního confirm)
+    await page.locator("#appDialog .dlgOk").click();
     await expect(page.locator("#toast")).toContainText("Smazáno");
     await expect(page.locator("#tripsBody tr.dayRow")).toHaveCount(before - 1);
     // hromadné smazání je jeden krok zpět

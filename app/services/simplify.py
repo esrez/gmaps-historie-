@@ -105,34 +105,52 @@ def split_track_segments(rows: list[PointRow],
   return segs
 
 
-def _dp_pass(segments: list[list[PointRow]], eps: float) -> list[PointRow]:
-  out: list[PointRow] = []
-  for seg in segments:
-    if len(seg) <= 2:
-      out.extend(seg)
-    else:
-      out.extend(_douglas_peucker(seg, eps))
+def _dp_pass(segments: list[list[PointRow]],
+             eps: float) -> list[list[PointRow]]:
+  return [seg if len(seg) <= 2 else _douglas_peucker(seg, eps)
+          for seg in segments]
+
+
+def simplify_track_segments(rows: list[PointRow], limit: int,
+                            epsilon_m: float = TRACK_SIMPLIFY_EPSILON_M,
+                            ) -> list[list[PointRow]]:
+  """Zjednoduší trasu po úsecích; při překročení limitu zvyšuje toleranci.
+
+  Vrací seznam úseků – hranice úseků (mezera v čase/skok v prostoru) se
+  určují z PŮVODNÍCH dat. Po zjednodušení už časová heuristika nefunguje
+  (mezi ponechanými body vznikají dlouhé rozestupy), proto hranice putují
+  až do API a klient je nemá znovu odhadovat.
+  """
+  if not rows:
+    return []
+  eps = epsilon_m
+  segs = _dp_pass(split_track_segments(rows), eps)
+  for _ in range(12):
+    if sum(len(s) for s in segs) <= limit or eps > 500:
+      break
+    eps *= 1.8
+    segs = _dp_pass(segs, eps)
+  # tvrdý ořez při přetečení limitu – zachovat strukturu úseků
+  total = 0
+  out: list[list[PointRow]] = []
+  for seg in segs:
+    if total + len(seg) > limit:
+      keep = limit - total
+      if keep > 1:
+        out.append(seg[:keep])
+      break
+    out.append(seg)
+    total += len(seg)
   return out
 
 
 def simplify_track(rows: list[PointRow], limit: int,
                    epsilon_m: float = TRACK_SIMPLIFY_EPSILON_M) -> list[PointRow]:
-  """Zjednoduší trasu Douglas–Peuckerem; při překročení limitu zvýší toleranci.
-
-  Další průchody s vyšší tolerancí běží už jen nad zjednodušeným výsledkem
-  předchozího kola – u velkých dat tak nedochází k opakované práci nad
-  původními statisíci bodů.
-  """
-  if not rows:
-    return []
-  eps = epsilon_m
-  out = _dp_pass(split_track_segments(rows), eps)
-  for _ in range(12):
-    if len(out) <= limit or eps > 500:
-      break
-    eps *= 1.8
-    out = _dp_pass(split_track_segments(out), eps)
-  return out[:limit]
+  """Zpětně kompatibilní plochá varianta (bez hranic úseků)."""
+  out: list[PointRow] = []
+  for seg in simplify_track_segments(rows, limit, epsilon_m):
+    out.extend(seg)
+  return out
 
 
 def rows_to_api(rows: list[PointRow]) -> list[list]:

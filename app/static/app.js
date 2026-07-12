@@ -1,7 +1,7 @@
 /* GMaps Historie – frontendová logika (ES modul, sdílené helpery v common.js) */
 import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
          buildUrl, apiFetch, escapeHtml, toast,
-         isDarkTheme, initThemeToggle } from "./common.js";
+         isDarkTheme, initThemeToggle, appConfirm, appPrompt } from "./common.js";
 import { icon, mountIcons } from "./icons.js";
 import { typeLabel, tile, trend, sparkline, renderRecords,
          renderMonthlyChart, renderAnalysis } from "./charts.js";
@@ -207,7 +207,7 @@ map.on("baselayerchange", (e) => localStorage.setItem("map.baseLayer", e.name));
 const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
-  "geoOnline",
+  "geoOnline", "trackColorMode",
 ];
 
 function loadMapSettings() {
@@ -232,6 +232,7 @@ MAP_SETTINGS.forEach((id) => $(id)?.addEventListener("change", saveMapSettings))
 loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
 // zapnutí online adres → překreslit místa, ať se adresy začnou dotahovat
 $("geoOnline")?.addEventListener("change", () => renderMyPlaces());
+$("trackColorMode")?.addEventListener("change", () => renderTracks());
 
 /* Offline mapa (PMTiles): pokud na serveru leží data/map.pmtiles, přidá se
    plně lokální podklad. Použije se automaticky jen když si uživatel podklad
@@ -268,7 +269,8 @@ const locLayer = L.layerGroup().addTo(map);
 const canvasRenderer = L.canvas({ padding: 0.3 });
 let heatLayer = null;
 
-const state = { points: [], heatCells: [], visits: [], fitted: false, loadedOnce: false };
+const state = { points: [], breaks: [], heatCells: [], visits: [],
+                fitted: false, loadedOnce: false };
 
 const css = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -338,12 +340,14 @@ async function loadMapData() {
   mapAbort = ctrl;
   const r = { ...currentRange(), ...viewportParams(), ...transportParam() };
   $("mapLoading").hidden = false;
+  $("mapBar").hidden = false;
   try {
     const [pts, heat] = await Promise.all([
       apiFetch("/api/points", { params: r, signal: ctrl.signal }),
       apiFetch("/api/heatmap", { params: r, signal: ctrl.signal }),
     ]);
     state.points = pts.points;
+    state.breaks = pts.breaks || [];
     state.heatCells = heat.cells;
     renderTracks();
     renderPoints();
@@ -359,6 +363,7 @@ async function loadMapData() {
     if (mapAbort === ctrl) {
       mapAbort = null;
       $("mapLoading").hidden = true;
+      $("mapBar").hidden = true;
     }
   }
 }
@@ -445,8 +450,19 @@ function fitToData() {
 
 // --------------------------------------------------------------- vrstvy
 
-function splitSegments(points) {
-  // rozdělí body na souvislé úseky: mezera > 30 min nebo skok > 50 km
+function splitSegments(points, breaks) {
+  // Hranice úseků poslal server (breaks = indexy začátků úseků) – po
+  // zjednodušení tras už časová heuristika neplatí (mezi ponechanými body
+  // vznikají dlouhé rozestupy) a rozbila by dlouhé rovné jízdy.
+  if (breaks && breaks.length) {
+    const out = [];
+    for (let b = 0; b < breaks.length; b++) {
+      const seg = points.slice(breaks[b], breaks[b + 1] ?? points.length);
+      if (seg.length > 1) out.push(seg);
+    }
+    return out;
+  }
+  // fallback: rozdělit podle mezery > 30 min nebo skoku > 50 km (surová data)
   const segs = [];
   let cur = [];
   for (let i = 0; i < points.length; i++) {
@@ -468,28 +484,57 @@ function splitSegments(points) {
   return segs;
 }
 
+/* Pevné barvy roků: rok má vždy stejnou barvu bez ohledu na zvolené období
+   (barva sleduje entitu). Identitu vždy doplňuje legenda + tooltipy. */
+const YEAR_COLORS = ["#2a78d6", "#1baf7a", "#e0810f", "#8a5cd6", "#d64583", "#0f9bb0"];
+const yearColor = (y) => YEAR_COLORS[((y % YEAR_COLORS.length) + YEAR_COLORS.length) % YEAR_COLORS.length];
+const segYear = (seg) => new Date(seg[0][0] * 1000).getFullYear();
+
+function renderYearLegend(years) {
+  let box = document.getElementById("trackYearLegend");
+  if (!years || !years.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "trackYearLegend";
+    $("mapLegend").prepend(box);
+  }
+  box.innerHTML = years.map((y) =>
+    `<span class="lg-year"><span class="lg-line" style="background:${yearColor(y)}"></span>${y}</span>`).join(" ");
+}
+
 function renderTracks() {
   trackLayer.clearLayers();
-  if (!$("layerTracks").checked) return;
+  if (!$("layerTracks").checked) { renderYearLegend(null); return; }
   // „casing": světlý/tmavý podklad pod čarou – trasa je čitelná na každém
   // podkladu (satelit, tmavá mapa) a čáry působí prokresleně
   const casing = isDarkTheme() ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)";
-  const segments = splitSegments(state.points);
+  const segments = splitSegments(state.points, state.breaks);
+  const byYear = $("trackColorMode")?.value === "year";
   // dvě střídající se modré – sousední samostatné cesty jdou rozlišit
   const shadePair = [css("--series-1"), isDarkTheme() ? "#6da7ec" : "#5598e7"];
+  const segColor = (seg, i) => (byYear ? yearColor(segYear(seg)) : shadePair[i % 2]);
+  renderYearLegend(byYear
+    ? [...new Set(segments.map(segYear))].sort() : null);
 
   // Rychlá cesta pro roky dat najednou (tisíce cest v pohledu zdaleka):
-  // místo tisíců interaktivních vrstev tři multi-čáry bez událostí.
+  // místo tisíců interaktivních vrstev pár multi-čar bez událostí.
   // Po přiblížení („Detail podle výřezu") segmentů v záběru ubude a
   // automaticky se zapne plné interaktivní kreslení s tooltipy a šipkami.
   if (segments.length > 400) {
     const lls = segments.map((seg) => seg.map((p) => [p[1], p[2]]));
     L.polyline(lls, { color: casing, weight: 5, opacity: 1,
                       interactive: false }).addTo(trackLayer);
-    L.polyline(lls.filter((_, i) => i % 2 === 0), { color: shadePair[0],
-      weight: 2.2, opacity: 0.9, interactive: false }).addTo(trackLayer);
-    L.polyline(lls.filter((_, i) => i % 2 === 1), { color: shadePair[1],
-      weight: 2.2, opacity: 0.9, interactive: false }).addTo(trackLayer);
+    // seskupit úseky podle výsledné barvy → jedna multi-čára na barvu
+    const groups = new Map();
+    segments.forEach((seg, i) => {
+      const c = segColor(seg, i);
+      if (!groups.has(c)) groups.set(c, []);
+      groups.get(c).push(lls[i]);
+    });
+    for (const [color, group] of groups) {
+      L.polyline(group, { color, weight: 2.2, opacity: 0.9,
+                          interactive: false }).addTo(trackLayer);
+    }
     return;
   }
 
@@ -498,12 +543,11 @@ function renderTracks() {
       color: casing, weight: 6, opacity: 1, interactive: false,
     }).addTo(trackLayer);
   }
-  const shades = shadePair;
   let arrows = 0;
   segments.forEach((seg, si) => {
     const from = new Date(seg[0][0] * 1000);
     const to = new Date(seg[seg.length - 1][0] * 1000);
-    const shade = shades[si % 2];
+    const shade = segColor(seg, si);
     const line = L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: shade,
       weight: 2.5,
@@ -566,7 +610,7 @@ async function loadCompare() {
       { params: { ...r, limit: 60000 }, signal: ctrl.signal });
     const color = css("--series-3");
     // jedna multi-čára pro všechny úseky – u dlouhých období řádově rychlejší
-    const lls = splitSegments(pts.points).map((seg) => seg.map((p) => [p[1], p[2]]));
+    const lls = splitSegments(pts.points, pts.breaks).map((seg) => seg.map((p) => [p[1], p[2]]));
     if (lls.length) {
       L.polyline(lls, { color, weight: 2.5, opacity: 0.85,
                         dashArray: "5 4", interactive: false }).addTo(compareLayer);
@@ -771,7 +815,8 @@ $("placesList").addEventListener("click", async (ev) => {
 
   if (ev.target.closest(".edit")) { startPlaceEdit(card, p); return; }
   if (ev.target.closest(".del")) {
-    if (!confirm(`Smazat pojmenování místa „${p.name}"?`)) return;
+    if (!await appConfirm(`Smazat pojmenování místa „${p.name}"?`,
+        { okLabel: "Smazat", danger: true })) return;
     await apiFetch(`/api/places/${id}`, { method: "DELETE" });
     toast("Místo smazáno.", "success");
     renderMyPlaces();
@@ -894,7 +939,8 @@ function startPlaceEdit(card, p) {
   panel.querySelector(".peShape").addEventListener("click", () => { close(); startGeometryEdit(p); });
   panel.querySelector(".peArea").addEventListener("click", () => { close(); startAreaRedraw(p); });
   panel.querySelector(".peToCircle")?.addEventListener("click", async () => {
-    if (!confirm("Zrušit vymezenou oblast? Místo se vrátí na kruhový okruh.")) return;
+    if (!await appConfirm("Zrušit vymezenou oblast? Místo se vrátí na kruhový okruh.",
+        { okLabel: "Zrušit oblast", danger: true })) return;
     try {
       await apiFetch(`/api/places/${p.id}`, { method: "PATCH", body: { polygon: [] } });
       toast("Oblast zrušena, místo je nyní kruhové.", "success");
@@ -1162,7 +1208,8 @@ async function finishPolygonDraw() {
       });
       toast(`Oblast upravena: ${drawState.editName}`, "success");
     } else {
-      const name = prompt("Název oblasti (zákazník, sklad, areál…):");
+      const name = await appPrompt("Název oblasti (zákazník, sklad, areál…):",
+        { title: "Pojmenovat oblast", placeholder: "Zákazník Novák" });
       if (name === null || !name.trim()) { drawCleanup(); return; }
       await apiFetch("/api/places", {
         method: "POST", body: { name: name.trim(), polygon: drawState.pts },
@@ -1542,9 +1589,9 @@ function showAllData() {
    místo souřadnic a lze ho kdykoli změnit stejnou cestou. */
 async function renamePlace(lat, lon, currentLabel) {
   const suggestion = /\d+\.\d+/.test(currentLabel || "") ? "" : (currentLabel || "");
-  const name = prompt(
+  const name = await appPrompt(
     "Název místa (např. Zákazník Novák nebo adresa).\nPrázdný název = zrušit vlastní pojmenování.",
-    suggestion);
+    { title: "Pojmenovat místo", value: suggestion });
   if (name === null) return;
   if (name.trim() === "") {
     // smazat případný vlastní název v okolí
@@ -2009,7 +2056,7 @@ $("cleanupBtn").addEventListener("click", async () => {
   const dry = await apiFetch("/api/cleanup", { method: "POST", params: { ...qualityParams(), dry_run: true } });
   const total = dry.low_accuracy + dry.outliers + dry.bad_visits + dry.duplicate_activities;
   if (!total) { $("qualityReport").innerHTML = '<p class="muted">Není co opravovat.</p>'; return; }
-  if (!confirm(`Smazat ${dry.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
+  if (!await appConfirm(`Smazat ${dry.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
     + `${dry.outliers.toLocaleString("cs")} teleportů, ${dry.bad_visits.toLocaleString("cs")} vadných návštěv `
     + `a ${dry.duplicate_activities.toLocaleString("cs")} duplicitních cest?\n`
     + "Doporučení: originální exporty od Googlu si nechte – kdykoli je lze naimportovat znovu.")) return;
@@ -2214,7 +2261,7 @@ async function loadBackups() {
 $("restoreBtn").addEventListener("click", async () => {
   const name = $("restoreSelect").value;
   if (!name) { toast("Nejdřív vyberte zálohu.", "error"); return; }
-  if (!confirm("Obnovit databázi z této zálohy? Současná data se přepíšou " +
+  if (!await appConfirm("Obnovit databázi z této zálohy? Současná data se přepíšou " +
                "(předtím se ale sama zazálohují, obnovu lze vzít zpět).")) return;
   try {
     const res = await api("/api/restore", { method: "POST", params: { name } });
@@ -2283,7 +2330,7 @@ async function loadProfiles() {
 }
 
 $("profileCreateBtn")?.addEventListener("click", async () => {
-  const name = prompt("Název nového profilu:");
+  const name = await appPrompt("Název nového profilu:", { title: "Nový profil" });
   if (!name || !name.trim()) return;
   try {
     await apiFetch("/api/profiles", { method: "POST", body: { name: name.trim() } });
@@ -2319,7 +2366,8 @@ async function showVersion() {
 }
 
 $("quitBtn").addEventListener("click", async () => {
-  if (!confirm("Opravdu ukončit aplikaci GMaps Historie?")) return;
+  if (!await appConfirm("Opravdu ukončit aplikaci GMaps Historie?",
+        { okLabel: "Ukončit", danger: true })) return;
   $("quitBtn").disabled = true;
   try {
     await apiFetch("/api/shutdown", { method: "POST" });
