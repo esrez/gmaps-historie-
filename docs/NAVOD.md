@@ -78,6 +78,10 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Barvy tras** – „střídat odstíny" rozliší sousední jízdy, „**podle roku**"
   dá každému roku vlastní barvu (legenda vpravo dole) – u víceleté historie
   na první pohled vidíte, kudy jste kdy jezdili.
+- **Časosběr měsíců** – přehraje historii měsíc po měsíci: starší trasy
+  blednou, právě přehrávaný měsíc je zvýrazněný oranžově. Lišta nahoře má
+  play/pauzu (mezerník), posuvník měsíců a rychlost ½–4×; Esc zavře.
+  Přehrává zvolené období, bez volby celou databázi.
 - **Měřit vzdálenost** – klikáním do mapy měříte délku trasy; u každého bodu
   se ukáže průběžná vzdálenost a nahoře celkový součet. Dvojklik nebo Esc
   měření ukončí, dalším klikem na tlačítko ho smažete.

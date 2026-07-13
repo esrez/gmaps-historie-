@@ -1106,3 +1106,18 @@ button .ic { margin-right: 1px; }
   white-space: nowrap; transform: translate(-50%, -14px);
   pointer-events: none;
 }
+
+/* časosběr měsíců – lišta nahoře uprostřed */
+#timelapseBar {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 990; padding: 8px 12px;
+  display: flex; align-items: center; gap: 10px;
+  max-width: min(94vw, 640px);
+}
+#timelapseBar .tl-label { min-width: 118px; text-align: center; font-size: 14px; }
+#timelapseBar .tl-slider { flex: 1; min-width: 120px; }
+#timelapseBar .tl-speed { display: flex; gap: 3px; }
+#timelapseBar .tl-speed button { font-size: 11px; padding: 3px 7px; }
+#timelapseBar .tl-speed button.active {
+  background: var(--series-1); color: #fff; border-color: var(--series-1);
+}

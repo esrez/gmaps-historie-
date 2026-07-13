@@ -15,6 +15,8 @@
   automaticky dotáhne detail výřezu a vrátí interaktivita
 
 ### Mapa
+- **časosběr měsíců**: animace historie měsíc po měsíci (starší trasy
+  blednou, aktuální zvýrazněný; posuvník, rychlost ½–4×)
 - **měření vzdálenosti** (M) a **export výřezu do PNG** s razítkem období
 - **barvy tras podle roku** + legenda – u víceleté historie hned vidíte,
   kudy jste kdy jezdili
