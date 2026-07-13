@@ -52,7 +52,9 @@ objeví tečka a tlačítko „Zkontrolovat a opravit" vás zavede k návrhům o
 
 Mapa zabírá celou obrazovku; ovládání je v plovoucím panelu vlevo se
 záložkami **Mapa · Místa · Statistiky · Analýza · Nástroje**. Panel lze
-šipkou vpravo nahoře **sbalit** (▾/▸) a hlavně ho lze **odsunout tažením za
+šipkou vpravo nahoře **sbalit** (▾/▸), **roztáhnout tažením za pravou
+hranu** (šířka se pamatuje – širší panel = komplexnější přehled statistik)
+a hlavně ho lze **odsunout tažením za
 hlavičku** (kurzor ruky), takže se dostanete k celé mapě a můžete s ní volně
 posouvat i tam, kde panel původně překážel. Dole je plovoucí lišta přehrávání
 dne, vpravo dole legenda vrstev (obojí je průchozí pro myš – mapa jde posouvat

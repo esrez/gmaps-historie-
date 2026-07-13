@@ -90,7 +90,11 @@ def api_purge_range(from_ts: int = Query(...), to_ts: int = Query(...),
         conn.execute("DELETE FROM activities WHERE start_ts BETWEEN ? AND ?",
                      (from_ts, to_ts))
         conn.commit()
-        conn.execute("VACUUM")
+        try:
+            conn.execute("VACUUM")   # jen optimalizace místa
+        except Exception as exc:
+            from ..core.logging import log
+            log.warning("VACUUM odložen (DB zamčená): %s", exc)
         db.after_import(conn)                   # přepočet agregací (kalendář…)
     return {"dry_run": False, **counts, "backup": os.path.basename(backup)}
 
@@ -146,6 +150,10 @@ def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
         if not dry_run:
             conn.commit()
             if sum(v for k, v in result.items() if k != "dry_run") > 0:
-                conn.execute("VACUUM")
+                try:
+                    conn.execute("VACUUM")   # jen optimalizace místa
+                except Exception as exc:
+                    from ..core.logging import log
+                    log.warning("VACUUM odložen (DB zamčená): %s", exc)
                 db.after_import(conn)
     return result

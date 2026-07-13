@@ -60,6 +60,13 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
             "SELECT type, COUNT(*) n, SUM(COALESCE(distance_m,0)) dist "
             "FROM activities WHERE start_ts BETWEEN ? AND ? "
             "GROUP BY type ORDER BY dist DESC", (lo, hi)).fetchall()
+        travel = conn.execute(
+            "SELECT COUNT(*) n, SUM(MAX(end_ts - start_ts, 0)) secs "
+            "FROM activities WHERE start_ts BETWEEN ? AND ?", (lo, hi)).fetchone()
+        unique_places = conn.execute(
+            "SELECT COUNT(DISTINCT ROUND(lat,3) || ',' || ROUND(lon,3)) c "
+            "FROM visits WHERE start_ts BETWEEN ? AND ? "
+            "AND end_ts - start_ts >= ?", (lo, hi, min_stay_s)).fetchone()["c"]
         n_visits, visit_secs = conn.execute(
             "SELECT COUNT(*), SUM(end_ts - start_ts) FROM visits "
             "WHERE start_ts BETWEEN ? AND ? AND end_ts - start_ts >= ?",
@@ -97,6 +104,9 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
         "days_with_data": days,
         "visits": n_visits,
         "visit_hours": round((visit_secs or 0) / 3600, 1),
+        "travel_hours": round((travel["secs"] or 0) / 3600, 1),
+        "trips_count": travel["n"],
+        "unique_places": unique_places,
         "total_km": round(total_km, 1),
         "by_type": [{"type": r["type"], "count": r["n"],
                      "km": round((r["dist"] or 0) / 1000, 1)} for r in by_type],

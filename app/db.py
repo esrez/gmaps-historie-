@@ -227,13 +227,31 @@ def connect() -> sqlite3.Connection:
 
 
 def after_import(conn: sqlite3.Connection | None = None):
-    """Po importu: přepočet agregací (kalendář, měsíční km…)."""
+    """Po importu: přepočet agregací (kalendář, měsíční km…).
+
+    Souběh s denní zálohou či jiným zápisem umí databázi krátce zamknout –
+    proto se přepočet opakuje a po vyčerpání pokusů se jen zaloguje
+    (agregace se dopočítají při příští akci; hlavní operace už proběhla).
+    """
+    import time as _time
+
+    from .core.logging import log
     own = conn is None
     if own:
         conn = connect()
     try:
         from .services.aggregations import refresh_aggregations
-        refresh_aggregations(conn)
+        for attempt in range(4):
+            try:
+                refresh_aggregations(conn)
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 3:
+                    if attempt == 3:
+                        log.warning("Přepočet agregací odložen (DB zamčená): %s", exc)
+                        return
+                    raise
+                _time.sleep(1.2 * (attempt + 1))
     finally:
         if own:
             conn.close()

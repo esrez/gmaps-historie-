@@ -22,7 +22,9 @@ def make_backup() -> str:
         n += 1
     dest = os.path.join(backup_dir, name)
     src = sqlite3.connect(db.DB_PATH)
+    src.execute("PRAGMA busy_timeout=15000")   # velká DB + souběžné zápisy
     dst = sqlite3.connect(dest)
+    dst.execute("PRAGMA busy_timeout=15000")
     try:
         with dst:
             src.backup(dst)
