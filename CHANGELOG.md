@@ -1,6 +1,6 @@
 # Změny
 
-## Nevydáno
+## 2.2.0 (2026-07)
 
 ### Testy a vývojářské zázemí
 - pokrytí testy z 82 % na 88 %: nové testy pro upload import na pozadí
