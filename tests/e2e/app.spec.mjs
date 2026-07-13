@@ -266,6 +266,26 @@ test.describe("mapa", () => {
     expect(res.status()).toBe(409);
   });
 
+  test("časosběr měsíců: animace běží, posuvník i Esc fungují", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.click("#timelapseBtn");
+    await expect(page.locator("#timelapseBar")).toBeVisible();
+    // animace postupuje: popisek měsíce se po chvíli změní (nebo dojede na konec)
+    await page.waitForFunction(() => {
+      const t = document.querySelector(".tl-label")?.textContent;
+      return t && t !== "…";
+    });
+    await expect(page.locator(".tl-label")).toContainText("2025");
+    // posuvník skočí na začátek
+    await page.locator(".tl-slider").fill("0");
+    await page.waitForTimeout(400);
+    // Esc zavře a vrátí běžné trasy
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#timelapseBar")).toHaveCount(0);
+  });
+
   test("zajímavosti, rytmus týdne a statistiky na mapě", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() =>

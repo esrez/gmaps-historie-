@@ -11,6 +11,7 @@ import { transportParam, renderNewPlaces } from "./map-filters.js";
 import { DayScrubber, initSpeedButtons, formatPlayClock, daySummaryText } from "./day-playback.js";
 import { initMapTools } from "./map-tools.js";
 import { initImportUi, startImport } from "./import-ui.js";
+import { initTimelapse } from "./timelapse.js";
 import { initYearCard } from "./year-card.js";
 
 initThemeToggle($("themeBtn"));
@@ -265,6 +266,20 @@ loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
 // zapnutí online adres → překreslit místa, ať se adresy začnou dotahovat
 $("geoOnline")?.addEventListener("change", () => renderMyPlaces());
 $("trackColorMode")?.addEventListener("change", () => renderTracks());
+
+// --------------------------------------- časosběr měsíců (timelapse.js)
+
+const timelapse = initTimelapse({
+  map,
+  css: (n) => css(n),   // closure – css je definováno níže (TDZ)
+  onEnter: () => {          // běžné trasy by se s časosběrem tloukly
+    stopPlayback();
+    map.removeLayer(trackLayer);
+  },
+  onExit: () => {
+    if ($("layerTracks").checked) map.addLayer(trackLayer);
+  },
+});
 
 // ------------------------------------------- statistiky na mapě (insights)
 
