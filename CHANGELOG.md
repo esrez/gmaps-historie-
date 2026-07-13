@@ -2,6 +2,14 @@
 
 ## Nevydáno
 
+### Zveřejnění projektu
+- přidána licence **MIT** (soubor `LICENSE`)
+- **nové README** – představení aplikace s galerií 8 screenshotů (mapa,
+  heatmapa, přehrávání dne, časosběr, statistiky, analýza, kniha jízd,
+  tmavý režim), rychlý start pro Windows/Docker/Python, odznaky CI a licence
+- screenshoty se nově generují z bohatších vestavěných ukázkových dat
+  (`scripts/make_screenshots.mjs`)
+
 ### Windows 11
 - **ikona v systémové liště** místo černého konzolového okna: klik otevře
   aplikaci, pravý klik nabídne Knihu jízd a Ukončit; výpisy jdou do
