@@ -1,11 +1,17 @@
 [project]
 name = "gmaps-historie"
-version = "2.0.0"
+version = "2.1.0"
 description = "Self-hosted nástroj pro historii polohy z Google Maps"
 requires-python = ">=3.11"
 
 [project.optional-dependencies]
 dev = ["pytest", "httpx", "ruff"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # starlette testclient si stěžuje na httpx – náhrada zatím není stabilní
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.ruff]
 line-length = 100

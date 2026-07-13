@@ -1,5 +1,18 @@
 # Změny
 
+## Nevydáno
+
+### Kvalita kódu
+- **ESLint** pro frontend (nedefinované proměnné, nepoužité symboly,
+  `==` vs `===`) – `npm run lint`, kontroluje se i v CI
+- **places-ui.js**: mapa míst, přehled v záložce Místa, kreslení polygonů
+  a úprava tvaru vyčleněny z `app.js` do samostatného modulu
+- backend: sloučení duplicitního výpočtu nejčastějších tras, importy na
+  začátku modulů, ochrana proti neomezenému růstu paměti u rate-limiteru
+  a brzdy proti hádání hesla
+- sjednocená čeština v komentářích a hláškách, pojmenované konstanty
+  místo magických čísel, potlačené zastaralé varování v testech
+
 ## 2.1.0 (2026-07)
 
 ### Výkon – víceletá historie (miliony bodů)

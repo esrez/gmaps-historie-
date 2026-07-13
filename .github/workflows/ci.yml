@@ -15,22 +15,21 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
           pip install -r requirements.txt pytest httpx ruff
+          npm ci
 
       - name: Lint (ruff)
         run: ruff check app/ tests/
 
-      - name: Syntax-check frontend (ES modules)
-        run: |
-          for f in app/static/common.js app/static/app.js app/static/kniha.js \
-                  app/static/map-filters.js app/static/sync-events.js app/static/day-playback.js \
-                  app/static/charts.js app/static/icons.js app/static/map-tools.js \
-                  app/static/import-ui.js app/static/year-card.js; do
-            node --input-type=module --check < "$f" && echo "$f ok"
-          done
+      - name: Lint frontend (ESLint)
+        run: npm run lint
 
       - name: Run tests
         run: pytest -q

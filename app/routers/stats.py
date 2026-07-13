@@ -122,6 +122,10 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
     }
 
 
+# noc mimo domov = poslední bod dne dál než tolik metrů od domova
+AWAY_NIGHT_M = 30_000
+
+
 def _detect_home(conn, lo: int, hi: int):
     """Domov = místo s nejvíce stráveným časem (přednost semantic HOME)."""
     row = conn.execute(
@@ -190,7 +194,6 @@ def api_insights(from_ts: int | None = Query(None), to_ts: int | None = Query(No
                 farthest = {"km": round(dmax / 1000, 1),
                             "lat": pmax["lat"], "lon": pmax["lon"],
                             "date": local_dt(pmax["ts"]).strftime("%Y-%m-%d")}
-            # noc mimo domov = poslední bod dne dál než 30 km od domova
             last_pts = conn.execute(
                 "SELECT lat, lon FROM ("
                 "  SELECT lat, lon, ROW_NUMBER() OVER ("
@@ -200,10 +203,11 @@ def api_insights(from_ts: int | None = Query(None), to_ts: int | None = Query(No
                 (lo, hi, *sargs)).fetchall()
             away_nights = sum(
                 1 for p in last_pts
-                if haversine_m(home["lat"], home["lon"], p["lat"], p["lon"]) > 30_000)
+                if haversine_m(home["lat"], home["lon"],
+                               p["lat"], p["lon"]) > AWAY_NIGHT_M)
 
         # trasy se souřadnicemi pro „pavouka" na mapě
-        routes = _top_routes_geo(conn, lo, hi)
+        routes = _top_routes(conn, lo, hi, with_geo=True)
 
     # typický začátek/konec dne (medián minut, všední dny)
     def _median_minutes(vals):
@@ -228,43 +232,6 @@ def api_insights(from_ts: int | None = Query(None), to_ts: int | None = Query(No
         "punchcard": [[r["w"], r["h"], r["c"]] for r in punch],
         "routes_geo": routes,
     }
-
-
-def _top_routes_geo(conn, lo: int, hi: int, limit: int = 8) -> list[dict]:
-    """Jako _top_routes, ale s průměrnými souřadnicemi konců (pro mapu)."""
-    acts = conn.execute(
-        "SELECT start_lat sla, start_lon slo, end_lat ela, end_lon elo, distance_m d "
-        "FROM activities WHERE start_ts BETWEEN ? AND ? "
-        "AND start_lat IS NOT NULL AND end_lat IS NOT NULL LIMIT 50000",
-        (lo, hi)).fetchall()
-    if not acts:
-        return []
-    namer = trips.PlaceNamer(conn)
-    agg: dict[tuple, dict] = {}
-    for a in acts:
-        na, nb = namer.name(a["sla"], a["slo"]), namer.name(a["ela"], a["elo"])
-        if na == nb or _COORD_LABEL in na or _COORD_LABEL in nb:
-            continue
-        key = tuple(sorted((na, nb)))
-        first = key[0] == na
-        g = agg.setdefault(key, {"count": 0, "km": 0.0, "km_n": 0,
-                                 "fla": 0.0, "flo": 0.0, "tla": 0.0, "tlo": 0.0})
-        g["count"] += 1
-        g["fla"] += a["sla"] if first else a["ela"]
-        g["flo"] += a["slo"] if first else a["elo"]
-        g["tla"] += a["ela"] if first else a["sla"]
-        g["tlo"] += a["elo"] if first else a["slo"]
-        if a["d"]:
-            g["km"] += a["d"] / 1000
-            g["km_n"] += 1
-    top = sorted(agg.items(), key=lambda kv: -kv[1]["count"])[:limit]
-    return [{"from": k[0], "to": k[1], "count": g["count"],
-             "km_avg": round(g["km"] / g["km_n"], 1) if g["km_n"] else None,
-             "from_lat": round(g["fla"] / g["count"], 5),
-             "from_lon": round(g["flo"] / g["count"], 5),
-             "to_lat": round(g["tla"] / g["count"], 5),
-             "to_lon": round(g["tlo"] / g["count"], 5)}
-            for k, g in top]
 
 
 @router.get("/api/calendar")
@@ -306,8 +273,10 @@ _TYPE_GROUPS = {
 _COORD_LABEL = ", "   # fallback jméno „49.1900, 16.6000" obsahuje čárku+mezeru
 
 
-def _top_routes(conn, lo: int, hi: int, limit: int = 8) -> list[dict]:
-    """Nejčastější trasy: dvojice pojmenovaných míst (obousměrně) z aktivit."""
+def _top_routes(conn, lo: int, hi: int, limit: int = 8,
+                with_geo: bool = False) -> list[dict]:
+    """Nejčastější trasy: dvojice pojmenovaných míst (obousměrně) z aktivit.
+    S with_geo=True navíc vrátí průměrné souřadnice konců (pro mapu)."""
     acts = conn.execute(
         "SELECT start_lat sla, start_lon slo, end_lat ela, end_lon elo, distance_m d "
         "FROM activities WHERE start_ts BETWEEN ? AND ? "
@@ -323,15 +292,29 @@ def _top_routes(conn, lo: int, hi: int, limit: int = 8) -> list[dict]:
         if na == nb or _COORD_LABEL in na or _COORD_LABEL in nb:
             continue
         key = tuple(sorted((na, nb)))
-        g = agg.setdefault(key, {"count": 0, "km": 0.0, "km_n": 0})
+        g = agg.setdefault(key, {"count": 0, "km": 0.0, "km_n": 0,
+                                 "fla": 0.0, "flo": 0.0, "tla": 0.0, "tlo": 0.0})
         g["count"] += 1
         if a["d"]:
             g["km"] += a["d"] / 1000
             g["km_n"] += 1
+        first = key[0] == na
+        g["fla"] += a["sla"] if first else a["ela"]
+        g["flo"] += a["slo"] if first else a["elo"]
+        g["tla"] += a["ela"] if first else a["sla"]
+        g["tlo"] += a["elo"] if first else a["slo"]
     top = sorted(agg.items(), key=lambda kv: -kv[1]["count"])[:limit]
-    return [{"from": k[0], "to": k[1], "count": g["count"],
-             "km_avg": round(g["km"] / g["km_n"], 1) if g["km_n"] else None}
-            for k, g in top]
+    out = []
+    for k, g in top:
+        row = {"from": k[0], "to": k[1], "count": g["count"],
+               "km_avg": round(g["km"] / g["km_n"], 1) if g["km_n"] else None}
+        if with_geo:
+            row.update(from_lat=round(g["fla"] / g["count"], 5),
+                       from_lon=round(g["flo"] / g["count"], 5),
+                       to_lat=round(g["tla"] / g["count"], 5),
+                       to_lon=round(g["tlo"] / g["count"], 5))
+        out.append(row)
+    return out
 
 
 @router.get("/api/analysis")

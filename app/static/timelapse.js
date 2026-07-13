@@ -8,6 +8,9 @@ import { icon } from "./icons.js";
 const MONTH_NAMES = ["leden", "únor", "březen", "duben", "květen", "červen",
   "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
 
+// strop bodů na měsíc – dost na tvar tras, málo na to, aby animace škubala
+const MONTH_POINT_LIMIT = 8000;
+
 export function initTimelapse({ map, css, onEnter, onExit }) {
   let layer = null;        // vrstva časosběru
   let bar = null;          // plovoucí lišta
@@ -36,7 +39,7 @@ export function initTimelapse({ map, css, onEnter, onExit }) {
   async function monthData(m) {
     if (cache.has(m)) return cache.get(m);
     const res = await apiFetch("/api/points",
-      { params: { ...monthRange(m), limit: 8000 } });
+      { params: { ...monthRange(m), limit: MONTH_POINT_LIMIT } });
     const segs = [];
     const b = res.breaks || [];
     for (let i = 0; i < b.length; i++) {

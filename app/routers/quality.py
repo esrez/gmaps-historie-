@@ -1,6 +1,7 @@
 """Kontrola kvality dat a opravy."""
 from __future__ import annotations
 
+import os
 from contextlib import closing
 from datetime import timedelta
 
@@ -8,7 +9,9 @@ from fastapi import APIRouter, Query
 
 from .. import db
 from ..common import local_dt, ts_range
+from ..core.backup import make_backup
 from ..core.config import DEFAULT_ACC_LIMIT
+from ..core.logging import log
 from ..services.quality import find_duplicate_activities, find_outliers
 
 router = APIRouter(tags=["kvalita"])
@@ -78,9 +81,6 @@ def api_purge_range(from_ts: int = Query(...), to_ts: int = Query(...),
     if dry_run or total == 0:
         return {"dry_run": True, **counts, "backup": None}
 
-    import os
-
-    from ..core.backup import make_backup
     backup = make_backup()                      # pojistka před destrukcí
     with closing(db.connect()) as conn:
         conn.execute("DELETE FROM points WHERE ts BETWEEN ? AND ?",
@@ -93,7 +93,6 @@ def api_purge_range(from_ts: int = Query(...), to_ts: int = Query(...),
         try:
             conn.execute("VACUUM")   # jen optimalizace místa
         except Exception as exc:
-            from ..core.logging import log
             log.warning("VACUUM odložen (DB zamčená): %s", exc)
         db.after_import(conn)                   # přepočet agregací (kalendář…)
     return {"dry_run": False, **counts, "backup": os.path.basename(backup)}
@@ -153,7 +152,6 @@ def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
                 try:
                     conn.execute("VACUUM")   # jen optimalizace místa
                 except Exception as exc:
-                    from ..core.logging import log
                     log.warning("VACUUM odložen (DB zamčená): %s", exc)
                 db.after_import(conn)
     return result
