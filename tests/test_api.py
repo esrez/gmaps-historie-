@@ -135,6 +135,27 @@ def test_analysis_top_routes(client, test_db, tmp_path):
     assert r["count"] == 5 and r["km_avg"] == 4.2
 
 
+def test_demo_data_only_on_empty_db(client, test_db, tmp_path):
+    """Ukázková data: naplní prázdnou DB, nad neprázdnou odmítne (409)."""
+    res = client.post("/api/demo")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["points"] > 1000 and body["visits"] > 50
+    r = client.get("/api/range").json()
+    assert r["points"] == body["points"]
+    # druhé volání: databáze už není prázdná → jasná chyba
+    assert client.post("/api/demo").status_code == 409
+
+
+def test_health_and_integrity(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    h = client.get("/api/health").json()
+    assert h["db_size"] > 0 and h["points"] == 100
+    assert "profile" in h and "trips" in h
+    chk = client.post("/api/health/check").json()
+    assert chk["ok"] is True and chk["detail"] == ["ok"]
+
+
 def test_exports(client, test_db, tmp_path):
     seed(test_db, tmp_path)
     assert client.get("/api/export.xlsx").status_code == 200

@@ -30,6 +30,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | Endpoint | Metoda | Popis |
 |---|---|---|
 | `/api/import` | POST | upload souboru (JSON/ZIP); vrací `job_id`, běží na pozadí |
+| `/api/demo` | POST | naplní PRÁZDNOU databázi ukázkovými daty (~3 měsíce); nad neprázdnou vrací 409 |
 | `/api/import/status/{job_id}` | GET | průběh importu: `points/visits/activities/files`, `skipped` + `skipped_names` (přeskočené soubory a důvod), `reports` (detail po souborech: formát a přírůstky), `status`, `error` |
 | `/api/autoimport` | GET | log souborů zpracovaných ze složky `data/import/` |
 | `/api/quality` | GET | kontrola: nepřesné body (`accuracy_limit`), teleporty, vadné návštěvy, duplicitní cesty, dny bez dat |
@@ -38,6 +39,8 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/backups` | GET | seznam dostupných záloh (jméno, velikost, čas) |
 | `/api/restore` | POST | obnoví DB z vybrané zálohy (`name`); současný stav se předtím zazálohuje |
 | `/api/version` | GET | verze frontendu (otisk statických souborů; verzuje i cache PWA) |
+| `/api/health` | GET | stav aplikace: velikost DB, počty záznamů, profil, čas poslední zálohy |
+| `/api/health/check` | POST | kontrola integrity databáze (PRAGMA quick_check) |
 
 ## Exporty
 

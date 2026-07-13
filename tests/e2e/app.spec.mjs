@@ -216,6 +216,23 @@ test.describe("mapa", () => {
     expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   });
 
+  test("nápověda zkratek na ? a stav aplikace v Nástrojích", async ({ page }) => {
+    await page.goto("/");
+    await page.keyboard.press("?");
+    await expect(page.locator("#shortcutHelp")).toBeVisible();
+    await expect(page.locator("#shortcutHelp")).toContainText("mezerník");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#shortcutHelp")).toBeHidden();
+    // stav aplikace: velikost DB + kontrola integrity
+    await page.click('#tabs [data-tab="nastroje"]');
+    await expect(page.locator("#appHealth")).toContainText("MB");
+    await page.click("#dbCheckBtn");
+    await expect(page.locator("#dbCheckResult")).toContainText("v pořádku");
+    // demo data nejdou nahrát do neprázdné databáze (guard)
+    const res = await page.request.post("/api/demo");
+    expect(res.status()).toBe(409);
+  });
+
   test("analýza: doprava po měsících, všední vs. víkend, trasy", async ({ page }) => {
     await page.goto("/");
     await page.click('#tabs [data-tab="analyza"]');

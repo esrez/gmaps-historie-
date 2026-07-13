@@ -11,6 +11,10 @@ Podrobný průvodce aplikací GMaps Historie. Rychlý přehled je v [README](../
    Takeout i export z telefonu) a jak je nahrát. Průvodce lze kdykoli znovu
    otevřít tlačítkem **?** v hlavičce (nebo „Kde vzít data z Googlu?" v sekci
    Import). Zaškrtnutím „Nezobrazovat po spuštění" se přestane otevírat sám.
+   Průvodce nabízí i tlačítko **„Jen si to vyzkoušet"** – nahraje ~3 měsíce
+   ukázkových dat (dojíždění, nákupy, výlety), abyste si aplikaci prohlédli
+   bez vlastního exportu. Funguje jen nad prázdnou databází, ukázku pak
+   smažete např. přepnutím na nový profil.
 3. Nahrajte export z Googlu (viz níže) – formát se pozná automaticky.
 
 ### Kde vzít data z Googlu
@@ -232,7 +236,12 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 - **Undo**: kniha jízd drží posledních 10 akcí (generování, propagace,
   pravidla, mazání jednotlivých jízd i hromadné mazání) – tlačítko
   „Vrátit" lze použít opakovaně.
-- **Verze**: aktuální verzi frontendu ukazuje záložka Nástroje („O aplikaci").
+- **Verze a stav**: záložka Nástroje → „O aplikaci" ukazuje verzi frontendu,
+  velikost databáze, počty záznamů, čas poslední automatické zálohy
+  (zálohuje se 1× denně) a tlačítko **Zkontrolovat databázi** (integrita
+  SQLite; při potížích obnovte poslední zálohu).
+- **Klávesové zkratky**: stiskem **?** se zobrazí přehled (← → den,
+  mezerník přehrávání, M měření vzdálenosti, Esc zrušit/zavřít).
   Po `git pull && docker compose up -d --build` se díky ní sama zneplatní
   cache PWA, takže nové UI naběhne bez ručního mazání mezipaměti prohlížeče.
 

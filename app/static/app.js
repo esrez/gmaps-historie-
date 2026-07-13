@@ -1683,7 +1683,38 @@ $("calNext").addEventListener("click", () => { calYear++; renderCalendar(); });
 
 // ------------------------------------------------------ klávesové zkratky
 
+const SHORTCUTS = [
+  ["← →", "předchozí / další den přehrávání"],
+  ["mezerník", "spustit / pozastavit přehrávání dne"],
+  ["M", "měření vzdálenosti (na mapě)"],
+  ["Esc", "zrušit kreslení, měření či zavřít okno"],
+  ["?", "tato nápověda"],
+];
+
+function toggleShortcutHelp(force) {
+  let el = document.getElementById("shortcutHelp");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "shortcutHelp";
+    el.hidden = true;
+    el.innerHTML =
+      `<div class="dlgCard"><h3 class="dlgTitle">Klávesové zkratky</h3>` +
+      `<table class="shortcutTable">${SHORTCUTS.map(([k, d]) =>
+        `<tr><td><kbd>${k}</kbd></td><td>${d}</td></tr>`).join("")}</table>` +
+      `<div class="dlgBtns"><button class="primary" type="button">Zavřít</button></div></div>`;
+    document.body.appendChild(el);
+    el.querySelector("button").addEventListener("click", () => { el.hidden = true; });
+    el.addEventListener("mousedown", (ev) => { if (ev.target === el) el.hidden = true; });
+  }
+  el.hidden = force !== undefined ? !force : !el.hidden;
+}
+
 document.addEventListener("keydown", (e) => {
+  const help = document.getElementById("shortcutHelp");
+  if (e.key === "Escape" && help && !help.hidden) {
+    help.hidden = true;
+    return;
+  }
   if (e.key === "Escape" && drawState.active) {
     drawCleanup();
     toast("Kreslení oblasti zrušeno.");
@@ -1699,7 +1730,9 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey) return;
-  if (e.key === "ArrowLeft") { shiftDay(-1); }
+  if (e.key === "?") { e.preventDefault(); toggleShortcutHelp(); }
+  else if (e.key === "m" || e.key === "M") { $("measureBtn").click(); }
+  else if (e.key === "ArrowLeft") { shiftDay(-1); }
   else if (e.key === "ArrowRight") { shiftDay(1); }
   else if (e.code === "Space") { e.preventDefault(); $("playBtn").click(); }
 });
@@ -2235,6 +2268,27 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("wizard").hidden) closeWizard();
 });
 
+// tlačítko v průvodci: ukázková data pro vyzkoušení bez vlastního exportu
+$("wizDemoBtn")?.addEventListener("click", async () => {
+  $("wizDemoBtn").disabled = true;
+  const orig = $("wizDemoBtn").innerHTML;
+  $("wizDemoBtn").innerHTML = `${icon("wand")} Generuji ukázku…`;
+  try {
+    const res = await apiFetch("/api/demo", { method: "POST" });
+    toast(`Ukázka nahrána: ${res.points.toLocaleString("cs")} bodů, ` +
+      `${res.visits} návštěv. Rozhlédněte se!`, "success");
+    closeWizard();
+    loadPlaceSuggest();
+    renderCalendar();
+    showAllData();
+  } catch (e) {
+    toast("Ukázku nejde nahrát: " + e.message, "error");
+  } finally {
+    $("wizDemoBtn").disabled = false;
+    $("wizDemoBtn").innerHTML = orig;
+  }
+});
+
 // tlačítko v průvodci: vybrat soubor a rovnou importovat
 $("wizImportBtn").addEventListener("click", () => {
   const onPick = () => {
@@ -2264,7 +2318,9 @@ $("restoreBtn").addEventListener("click", async () => {
   if (!await appConfirm("Obnovit databázi z této zálohy? Současná data se přepíšou " +
                "(předtím se ale sama zazálohují, obnovu lze vzít zpět).")) return;
   try {
-    const res = await api("/api/restore", { method: "POST", params: { name } });
+    // apiFetch, ne api(): wrapper api() bere 2. argument jen jako query
+    // parametry a metodu by zahodil (obnova by se volala jako GET → 405)
+    const res = await apiFetch("/api/restore", { method: "POST", params: { name } });
     toast(`Databáze obnovena ze zálohy. Předchozí stav uložen jako ${res.safety_backup}.`,
       "success");
     loadBackups();
@@ -2309,6 +2365,7 @@ async function showAutoImportLog() {
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   showVersion();
+  showHealth();
   loadProfiles();
   loadBackups();
   loadPlaceSuggest();
@@ -2350,6 +2407,32 @@ $("profileSwitchBtn")?.addEventListener("click", async () => {
     location.reload();
   } catch (e) {
     toast("Přepnutí profilu selhalo: " + e.message, "error");
+  }
+});
+
+async function showHealth() {
+  try {
+    const h = await api("/api/health");
+    const mb = (h.db_size / 1e6).toLocaleString("cs", { maximumFractionDigits: 1 });
+    $("appHealth").innerHTML =
+      `Databáze (profil ${escapeHtml(h.profile)}): <b>${mb} MB</b> · ` +
+      `${h.points.toLocaleString("cs")} bodů, ${h.visits.toLocaleString("cs")} návštěv, ` +
+      `${h.trips.toLocaleString("cs")} jízd v knize<br>` +
+      `Poslední záloha: <b>${h.last_backup || "zatím žádná"}</b> ` +
+      '<span class="muted">(zálohuje se automaticky 1× denně)</span>';
+  } catch (e) { $("appHealth").textContent = ""; }
+}
+
+$("dbCheckBtn")?.addEventListener("click", async () => {
+  $("dbCheckResult").textContent = "Kontroluji…";
+  try {
+    const r = await apiFetch("/api/health/check", { method: "POST" });
+    $("dbCheckResult").innerHTML = r.ok
+      ? `${icon("check", 13)} Databáze je v pořádku.`
+      : `${icon("alert", 13)} Nalezeny potíže: ${escapeHtml(r.detail.join("; "))} – ` +
+        "obnovte poslední zálohu.";
+  } catch (e) {
+    $("dbCheckResult").textContent = "Kontrola selhala: " + e.message;
   }
 });
 

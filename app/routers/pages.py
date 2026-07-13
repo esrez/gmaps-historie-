@@ -45,6 +45,44 @@ def api_version():
     return {"version": APP_VERSION, "release": APP_RELEASE, "desktop": DESKTOP_APP}
 
 
+@router.get("/api/health")
+def api_health():
+    """Stav aplikace pro sekci „O aplikaci": databáze, poslední záloha."""
+    import os
+    from contextlib import closing
+
+    from .. import db
+    from ..core.config import data_dir
+    db_size = os.path.getsize(db.DB_PATH) if os.path.exists(db.DB_PATH) else 0
+    backup_dir = os.path.join(data_dir(), "backups")
+    last_backup = None
+    if os.path.isdir(backup_dir):
+        stamps = [os.path.getmtime(os.path.join(backup_dir, f))
+                  for f in os.listdir(backup_dir)
+                  if f.startswith("history-") and f.endswith(".db")]
+        if stamps:
+            from datetime import datetime
+            last_backup = datetime.fromtimestamp(max(stamps)) \
+                .strftime("%d.%m.%Y %H:%M")
+    with closing(db.connect()) as conn:
+        counts = {t: conn.execute(f"SELECT COUNT(*) c FROM {t}").fetchone()["c"]
+                  for t in ("points", "visits", "activities", "trips")}
+    return {"db_size": db_size, "db_path": os.path.basename(db.DB_PATH),
+            "last_backup": last_backup, "profile": db.active_profile(), **counts}
+
+
+@router.post("/api/health/check")
+def api_health_check():
+    """Kontrola integrity SQLite databáze (PRAGMA quick_check)."""
+    from contextlib import closing
+
+    from .. import db
+    with closing(db.connect()) as conn:
+        rows = [r[0] for r in conn.execute("PRAGMA quick_check")]
+    ok = rows == ["ok"]
+    return {"ok": ok, "detail": rows[:5]}
+
+
 @router.post("/api/shutdown")
 def api_shutdown():
     """Korektní ukončení aplikace – jen v desktopovém režimu (.exe / run.py),

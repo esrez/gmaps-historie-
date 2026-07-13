@@ -305,6 +305,9 @@
       <section>
         <h2>O aplikaci</h2>
         <div id="appVersion" class="muted"></div>
+        <div id="appHealth" class="muted"></div>
+        <button id="dbCheckBtn"><span data-icon="check"></span> Zkontrolovat databázi</button>
+        <span id="dbCheckResult" class="muted"></span>
         <button id="quitBtn" class="danger" hidden><span data-icon="x"></span> Ukončit aplikaci</button>
         <p id="quitHint" class="muted" hidden>Ukončí program běžící na tomto počítači.
            Poté můžete okno prohlížeče zavřít.</p>
@@ -375,6 +378,11 @@
          jen na tomto počítači, <b>data nikam neodesíláme</b>.</p>
       <p class="muted">Nejdřív potřebujeme váš export z Googlu. Ukážeme vám ve
          dvou krocích, kde ho vzít a jak ho sem nahrát.</p>
+      <p><button id="wizDemoBtn"><span data-icon="wand"></span>
+         Jen si to vyzkoušet – nahrát ukázková data</button></p>
+      <p class="muted">Vygeneruje ~3 měsíce smyšlené historie (dojíždění,
+         nákupy, výlety), ať vidíte, co aplikace umí. Před nahráním vlastních
+         dat ukázku smažete jedním klikem v Nástrojích (Smazat vše / profil).</p>
     </section>
 
     <!-- krok 2: získání dat -->

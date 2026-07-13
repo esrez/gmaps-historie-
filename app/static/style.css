@@ -33,11 +33,6 @@
     --series-2: #199e70;
     --series-3: #f0a020;
     --accent-red: #e66767;
-  --cat-1: #3987e5;
-  --cat-2: #199e70;
-  --cat-3: #c07a12;
-  --cat-4: #9a6ee0;
-  --cat-other: #6f6d65;
     --cat-1: #3987e5;
     --cat-2: #199e70;
     --cat-3: #c07a12;
@@ -58,6 +53,11 @@
   --series-2: #199e70;
   --series-3: #f0a020;
   --accent-red: #e66767;
+  --cat-1: #3987e5;
+  --cat-2: #199e70;
+  --cat-3: #c07a12;
+  --cat-4: #9a6ee0;
+  --cat-other: #6f6d65;
 }
 
 * { box-sizing: border-box; }
@@ -1037,4 +1037,19 @@ button .ic { margin-right: 1px; }
 @keyframes mapBarSlide {
   0% { transform: translateX(-110%); }
   100% { transform: translateX(390%); }
+}
+
+/* ------ nápověda klávesových zkratek (?) ------ */
+#shortcutHelp {
+  position: fixed; inset: 0; z-index: 3000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}
+.shortcutTable { border-collapse: collapse; margin: 4px 0 12px; font-size: 13px; }
+.shortcutTable td { padding: 4px 10px 4px 0; }
+.shortcutTable kbd {
+  display: inline-block; min-width: 26px; text-align: center;
+  padding: 2px 7px; border: 1px solid var(--baseline); border-bottom-width: 2px;
+  border-radius: 5px; background: var(--page); font-family: inherit; font-size: 12px;
 }
