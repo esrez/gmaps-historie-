@@ -51,6 +51,10 @@ def test_stats(client, test_db, tmp_path):
     assert s["total_km"] == 21.0            # 5 × 4.2 km
     assert s["monthly_source"] == "activities"
     assert s["top_places"][0]["count"] == 5
+    # nové dlaždice: cesty, hodiny na cestách, unikátní místa
+    assert s["trips_count"] == 5
+    assert s["travel_hours"] == round(5 * 40 / 60, 1)   # 5 cest po 40 min
+    assert s["unique_places"] == 1                       # jen Práce
 
 
 def test_stats_fallback_to_points(client, test_db, tmp_path):

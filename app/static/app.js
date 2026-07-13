@@ -460,6 +460,39 @@ document.querySelectorAll(".presets button").forEach((b) =>
   b.addEventListener("click", () => setPreset(b.dataset.days)));
 $("loadBtn").addEventListener("click", loadAll);
 
+// --------------------------------------------- šířka panelu (tažením)
+
+/* Pravou hranu panelu jde táhnout – širší panel = komplexnější přehled
+   statistik (dlaždice i grafy se šířce přizpůsobí). Šířka se pamatuje. */
+(function panelResizable() {
+  const panel = $("panel");
+  const saved = Number(localStorage.getItem("panel.width"));
+  const maxW = () => Math.min(920, window.innerWidth - 24);
+  if (saved >= 320) panel.style.width = Math.min(saved, maxW()) + "px";
+  const h = document.createElement("div");
+  h.id = "panelResize";
+  h.title = "Tažením změníte šířku panelu";
+  panel.appendChild(h);
+  h.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = panel.getBoundingClientRect().width;
+    h.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const w = Math.max(320, Math.min(maxW(), startW + ev.clientX - startX));
+      panel.style.width = w + "px";
+    };
+    const up = () => {
+      h.removeEventListener("pointermove", move);
+      h.removeEventListener("pointerup", up);
+      localStorage.setItem("panel.width",
+        String(Math.round(panel.getBoundingClientRect().width)));
+    };
+    h.addEventListener("pointermove", move);
+    h.addEventListener("pointerup", up);
+  });
+})();
+
 // ------------------------------------------------------------------ API
 
 const api = (path, params) => apiFetch(path, { params });
@@ -1489,7 +1522,16 @@ function renderStats(s, prev) {
     tile(s.visits.toLocaleString("cs"), "návštěv míst",
       trend(s.visits, p.visits)) +
     tile(s.visit_hours.toLocaleString("cs"), "hodin na místech",
-      trend(s.visit_hours, p.visit_hours));
+      trend(s.visit_hours, p.visit_hours)) +
+    tile(s.days_with_data
+        ? (s.total_km / s.days_with_data).toLocaleString("cs", { maximumFractionDigits: 1 })
+        : "0", "Ø km na den se záznamem") +
+    tile((s.trips_count || 0).toLocaleString("cs"), "cest celkem",
+      trend(s.trips_count, p.trips_count)) +
+    tile((s.travel_hours || 0).toLocaleString("cs"), "hodin na cestách",
+      trend(s.travel_hours, p.travel_hours)) +
+    tile((s.unique_places || 0).toLocaleString("cs"), "různých míst",
+      trend(s.unique_places, p.unique_places));
 
   renderMonthlyChart(s.monthly_km);
   $("monthlyNote").textContent =

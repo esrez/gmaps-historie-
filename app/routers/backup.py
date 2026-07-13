@@ -108,7 +108,9 @@ def api_restore(name: str = Query(...)):
         raise HTTPException(404, "Záloha nenalezena")
     safety = make_backup()
     src = sqlite3.connect(path)
+    src.execute("PRAGMA busy_timeout=15000")
     dst = sqlite3.connect(db.DB_PATH)
+    dst.execute("PRAGMA busy_timeout=15000")
     try:
         with dst:
             src.backup(dst)

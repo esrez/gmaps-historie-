@@ -30,6 +30,10 @@
   v barvách aplikace; interaktivní úprava tvaru míst (okruh i polygon)
 
 ### Statistiky a analýza
+- **roztažitelný panel**: pravou hranu jde táhnout (šířka se pamatuje) –
+  dlaždice i grafy se přizpůsobí pro komplexní přehled
+- **8 dlaždic**: nově Ø km/den se záznamem, cest celkem, hodin na cestách,
+  různých navštívených míst
 - **Zajímavosti**: akční rádius (50/90/99 % záznamů od domova), nejdál od
   domova, noci mimo domov, typický začátek/konec všedního dne
 - **Rytmus týdne**: punchcard den × hodina – kdy se hýbete
@@ -51,6 +55,11 @@
   duplicity) s tečkou na Nástrojích a průvodcem opravou
 - **ukázková data** na jedno kliknutí pro vyzkoušení bez vlastního exportu
 - připomínka, když jsou data starší 30 dní
+
+### Opravy stability
+- **database is locked**: záložní spojení bez busy_timeout blokovala zápisy;
+  nyní 15s timeout, přepočet agregací se opakuje a při trvalém zámku se jen
+  odloží (žádná 500), VACUUM je tolerantní
 
 ### Soukromí a provoz
 - **smazání období**: všechna polohová data ve zvoleném rozmezí jdou smazat

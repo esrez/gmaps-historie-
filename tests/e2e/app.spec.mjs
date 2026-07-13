@@ -22,7 +22,7 @@ test.describe("mapa", () => {
   test("načte statistiky, grafy a kalendář", async ({ page }) => {
     await page.goto("/");
     await page.click('#tabs [data-tab="stat"]');
-    await expect(page.locator("#statTiles .tile")).toHaveCount(4);
+    await expect(page.locator("#statTiles .tile")).toHaveCount(8);
     await expect(page.locator("#statTiles")).toContainText("km celkem");
     await expect(page.locator("#monthlyChart svg")).toBeVisible();
     await expect(page.locator("#calendar svg")).toBeVisible();
@@ -264,6 +264,31 @@ test.describe("mapa", () => {
     // demo data nejdou nahrát do neprázdné databáze (guard)
     const res = await page.request.post("/api/demo");
     expect(res.status()).toBe(409);
+  });
+
+  test("panel jde roztáhnout za pravou hranu a šířka se pamatuje", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    const width = () => page.locator("#panel")
+      .evaluate((el) => el.getBoundingClientRect().width);
+    const before = await width();
+    const h = await page.locator("#panelResize").boundingBox();
+    await page.mouse.move(h.x + 5, h.y + h.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(h.x + 225, h.y + h.height / 2, { steps: 6 });
+    await page.mouse.up();
+    const after = await width();
+    expect(after).toBeGreaterThan(before + 150);
+    // po reloadu šířka zůstává; statistiky ukazují 8 dlaždic
+    await page.reload();
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    expect(await width()).toBeGreaterThan(before + 150);
+    await page.click('#tabs [data-tab="stat"]');
+    await expect(page.locator("#statTiles .tile")).toHaveCount(8);
+    await expect(page.locator("#statTiles")).toContainText("hodin na cestách");
+    await expect(page.locator("#statTiles")).toContainText("různých míst");
   });
 
   test("kalendář: najetí ukáže tooltip s detaily a náhled dne na mapě", async ({ page }) => {

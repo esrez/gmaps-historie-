@@ -1121,3 +1121,20 @@ button .ic { margin-right: 1px; }
 #timelapseBar .tl-speed button.active {
   background: var(--series-1); color: #fff; border-color: var(--series-1);
 }
+
+/* ------ roztažitelný panel: úchyt na pravé hraně ------ */
+#panelResize {
+  position: absolute; top: 0; right: -5px; width: 12px; height: 100%;
+  cursor: ew-resize; touch-action: none; z-index: 5;
+}
+#panelResize::after {
+  content: ""; position: absolute; top: 50%; right: 5px;
+  transform: translateY(-50%);
+  width: 3px; height: 48px; border-radius: 2px;
+  background: var(--baseline); opacity: 0.8;
+}
+#panelResize:hover::after { background: var(--series-1); }
+@media (max-width: 560px) { #panelResize { display: none; } }
+
+/* dlaždice statistik se přizpůsobí šířce panelu (víc sloupců na širokém) */
+.tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important; }
