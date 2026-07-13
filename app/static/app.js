@@ -4,7 +4,8 @@ import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
          isDarkTheme, initThemeToggle, appConfirm, appPrompt } from "./common.js";
 import { icon, mountIcons } from "./icons.js";
 import { typeLabel, tile, trend, sparkline, renderRecords,
-         renderMonthlyChart, renderAnalysis } from "./charts.js";
+         renderMonthlyChart, renderAnalysis,
+         renderPunchcard, renderInsightFacts } from "./charts.js";
 import { initEventStream } from "./sync-events.js";
 import { transportParam, renderNewPlaces } from "./map-filters.js";
 import { DayScrubber, initSpeedButtons, formatPlayClock, daySummaryText } from "./day-playback.js";
@@ -26,6 +27,7 @@ document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
     document.querySelectorAll(".tab-page").forEach((p) =>
       p.classList.toggle("active", p.dataset.page === btn.dataset.tab));
     if (btn.dataset.tab === "mista") loadPlacesTab();
+    if (btn.dataset.tab === "analyza") renderInsightsPanel();
   }));
 
 $("panelCollapse").addEventListener("click", () => {
@@ -237,7 +239,7 @@ map.on("baselayerchange", (e) => localStorage.setItem("map.baseLayer", e.name));
 const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
-  "geoOnline", "trackColorMode", "roadSnap",
+  "geoOnline", "trackColorMode", "roadSnap", "statRadius", "statRoutes",
 ];
 
 function loadMapSettings() {
@@ -263,6 +265,78 @@ loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
 // zapnutí online adres → překreslit místa, ať se adresy začnou dotahovat
 $("geoOnline")?.addEventListener("change", () => renderMyPlaces());
 $("trackColorMode")?.addEventListener("change", () => renderTracks());
+
+// ------------------------------------------- statistiky na mapě (insights)
+
+const insightLayer = L.layerGroup().addTo(map);
+let insightsCache = null;     // {key, data|promise}
+
+async function getInsights() {
+  const key = $("dateFrom").value + "|" + $("dateTo").value;
+  if (insightsCache?.key === key) return insightsCache.data;
+  const promise = api("/api/insights", currentRange());
+  insightsCache = { key, data: promise };
+  try {
+    const data = await promise;
+    insightsCache = { key, data };
+    return data;
+  } catch (e) {
+    insightsCache = null;
+    throw e;
+  }
+}
+
+async function drawMapStats() {
+  insightLayer.clearLayers();
+  if (!$("statRadius").checked && !$("statRoutes").checked) return;
+  let ins;
+  try { ins = await getInsights(); } catch (e) {
+    toast("Statistiky se nepodařilo spočítat: " + e.message, "error");
+    return;
+  }
+  if ($("statRadius").checked && ins.radius && ins.home) {
+    const color = css("--series-3");
+    for (const [key, label, dash] of [["p50_m", "50 %", null],
+                                      ["p90_m", "90 %", "7 7"],
+                                      ["p99_m", "99 %", "2 7"]]) {
+      L.circle([ins.home.lat, ins.home.lon], {
+        radius: ins.radius[key], fill: false, color, weight: 2,
+        dashArray: dash, interactive: false,
+      }).addTo(insightLayer);
+      const latOff = ins.radius[key] / 111320;   // popisek na severnim okraji
+      L.marker([ins.home.lat + latOff, ins.home.lon], {
+        interactive: false,
+        icon: L.divIcon({ className: "radiusLbl",
+                          html: `${label} zaznamu`, iconSize: [0, 0] }),
+      }).addTo(insightLayer);
+    }
+  }
+  if ($("statRoutes").checked && ins.routes_geo?.length) {
+    const maxN = ins.routes_geo[0].count;
+    for (const r of ins.routes_geo) {
+      L.polyline([[r.from_lat, r.from_lon], [r.to_lat, r.to_lon]], {
+        color: css("--cat-4"), weight: 2 + 8 * (r.count / maxN),
+        opacity: 0.75, lineCap: "round",
+      }).bindTooltip(`${escapeHtml(r.from)} ⇄ ${escapeHtml(r.to)}<br>` +
+        `${r.count}×${r.km_avg != null ? ` · Ø ${r.km_avg.toLocaleString("cs")} km` : ""}`,
+        { sticky: true }).addTo(insightLayer);
+    }
+  }
+}
+
+["statRadius", "statRoutes"].forEach((id) =>
+  $(id).addEventListener("change", drawMapStats));
+
+/* Analyza: zajimavosti a rytmus tydne se dopocitaji pri otevreni zalozky. */
+async function renderInsightsPanel() {
+  try {
+    const ins = await getInsights();
+    renderInsightFacts($("insightFacts"), ins);
+    renderPunchcard($("punchcard"), ins.punchcard);
+  } catch (e) {
+    $("insightFacts").textContent = "Zajimavosti se nepodarilo nacist: " + e.message;
+  }
+}
 
 // ------------------------------------------------ ovládací sloupec mapy
 
@@ -453,6 +527,10 @@ async function loadAll() {
     if (document.querySelector('.tab-page[data-page="mista"]').classList.contains("active"))
       loadPlacesTab();   // přehled míst drží krok se zvoleným obdobím
     state.loadedOnce = true;
+    insightsCache = null;   // zmena obdobi -> statistiky prepocitat
+    if ($("statRadius").checked || $("statRoutes").checked) drawMapStats();
+    if (document.querySelector('.tab-page[data-page="analyza"]').classList.contains("active"))
+      renderInsightsPanel();
     if (!state.fitted) fitToData();
     writeHash();
   } catch (e) {

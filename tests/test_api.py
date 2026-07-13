@@ -483,3 +483,27 @@ def test_login_sets_secure_cookie_behind_https_proxy(client, test_db, tmp_path,
     assert "Secure" in r.headers.get("set-cookie", "")
     r2 = client.post("/api/login", json={"password": "tajne"})
     assert "Secure" not in r2.headers.get("set-cookie", "")
+
+
+def test_insights(client, test_db, tmp_path):
+    """Zajímavosti: domov, akční rádius, rytmus týdne, trasy se souřadnicemi."""
+    seed(test_db, tmp_path)
+    from tests.fixtures import HOME
+    with closing(test_db.connect()) as conn:
+        conn.execute(
+            "INSERT INTO visits(start_ts, end_ts, lat, lon, semantic) "
+            "VALUES(1748848000, 1748905600, ?, ?, 'Home')", HOME)   # dlouhý pobyt doma
+        conn.commit()
+    ins = client.get("/api/insights").json()
+    assert ins["home"]["label"] == "Domov"
+    assert abs(ins["home"]["lat"] - HOME[0]) < 0.001
+    # celý pohyb je domov<->práce (~3 km) → rádius pod 5 km, žádná noc mimo
+    assert 0 < ins["radius"]["p50_m"] <= ins["radius"]["p99_m"] < 5000
+    assert ins["away_nights"] == 0
+    assert ins["farthest"]["km"] > 0 and ins["farthest"]["date"]
+    assert ins["first_move"] and ins["last_move"]
+    assert len(ins["punchcard"]) > 0
+    assert all(len(row) == 3 for row in ins["punchcard"])
+    r = ins["routes_geo"][0]
+    assert {r["from"], r["to"]} == {"Domov", "Práce"}
+    assert abs(r["from_lat"] - HOME[0]) < 0.01 or abs(r["to_lat"] - HOME[0]) < 0.01

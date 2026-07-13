@@ -72,6 +72,9 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Přichycení k silnicím** – v Soukromí lze zapnout srovnání přehrávaného
   dne na silniční síť (online služba OSRM; výchozí vypnuto, souřadnice dne
   se posílají jen s vaším souhlasem).
+- **Statistiky na mapě** – „Akční rádius" nakreslí kolem domova kružnice,
+  uvnitř kterých leží 50/90/99 % všech záznamů; „Nejčastější trasy (pavouk)"
+  spojí nejčastější dvojice míst čarami s tloušťkou podle četnosti.
 - **Barvy tras** – „střídat odstíny" rozliší sousední jízdy, „**podle roku**"
   dá každému roku vlastní barvu (legenda vpravo dole) – u víceleté historie
   na první pohled vidíte, kudy jste kdy jezdili.
@@ -88,8 +91,10 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   pouhý průjezd místem se tak neoznačí jako návštěva; totéž platí pro
   statistiky návštěv a top místa.
 - **Statistiky / Analýza** (záložky) – km celkem a po měsících, rozpad podle
-  dopravy, top místa; **nejčastější trasy** (odkud ⇄ kam, kolikrát a průměrné
-  km), **km po měsících podle dopravy** (skládaný graf auto/pěšky/MHD/kolo),
+  dopravy, top místa; **Zajímavosti** (akční rádius, nejdál od domova, noci
+  mimo domov, typický začátek a konec všedního dne), **Rytmus týdne**
+  (den × hodina – kdy se hýbete), **nejčastější trasy** (odkud ⇄ kam,
+  kolikrát a průměrné km), **km po měsících podle dopravy** (skládaný graf auto/pěšky/MHD/kolo),
   **všední dny vs. víkend**, km podle dne v týdnu, aktivita podle hodiny,
   km po letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu
   stejně dlouhému období) a miniaturní křivku km po měsících. Blok **Rekordy

@@ -16,6 +16,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/match_day` | GET | přichytí stopu dne k silniční síti (online OSRM; opt-in, cachováno; 502 bez internetu) |
 | `/api/stats` | GET | souhrn: km, dny, návštěvy, po měsících, top místa, rekordy (`records`: nejdelší den/cesta/série); `min_stay_min` (výchozí 2) vyřadí průjezdy |
 | `/api/analysis` | GET | km podle dne v týdnu, aktivita po hodinách, km po letech, místa po měsících, `monthly_by_type` (km po měsících podle dopravy), `top_routes` (nejčastější pojmenované trasy) |
+| `/api/insights` | GET | zajímavosti: `home` (rozpoznaný domov), `radius` (p50/p90/p99 m od domova), `away_nights`, `farthest`, `first_move`/`last_move` (medián, všední dny), `punchcard` (den×hodina), `routes_geo` (trasy se souřadnicemi pro mapu) |
 | `/api/search_visits` | GET | fulltext ve vlastních místech (`q`) |
 | `/api/at_location` | GET | pobyty v okruhu (`lat`, `lon`, `radius_m`, `min_stay_min` – výchozí 2 min vyřadí průjezdy); slučuje GPS pobyty se záznamy návštěv |
 | `/api/calendar` | GET | denní km + počty bodů pro kalendář roku (`year`) |

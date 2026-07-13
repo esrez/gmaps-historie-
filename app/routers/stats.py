@@ -112,6 +112,151 @@ def api_stats(from_ts: int | None = Query(None), to_ts: int | None = Query(None)
     }
 
 
+def _detect_home(conn, lo: int, hi: int):
+    """Domov = místo s nejvíce stráveným časem (přednost semantic HOME)."""
+    row = conn.execute(
+        "SELECT AVG(lat) lat, AVG(lon) lon, SUM(end_ts-start_ts) secs "
+        "FROM visits WHERE start_ts BETWEEN ? AND ? "
+        "AND UPPER(COALESCE(semantic,'')) = 'HOME'", (lo, hi)).fetchone()
+    if row and row["secs"]:
+        return {"lat": row["lat"], "lon": row["lon"], "label": "Domov"}
+    row = conn.execute(
+        "SELECT lat, lon, SUM(end_ts-start_ts) secs, "
+        "COALESCE(NULLIF(name,''), semantic, 'Nejčastější místo') label "
+        "FROM visits WHERE start_ts BETWEEN ? AND ? "
+        "GROUP BY ROUND(lat,3), ROUND(lon,3) ORDER BY secs DESC LIMIT 1",
+        (lo, hi)).fetchone()
+    if row and row["secs"]:
+        return {"lat": row["lat"], "lon": row["lon"], "label": row["label"]}
+    return None
+
+
+@router.get("/api/insights")
+def api_insights(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
+    """Zajímavosti navíc: akční rádius, noci mimo domov, rytmus týdne…
+
+    Počítá se líně (až když si o to frontend řekne – záložka Analýza nebo
+    vrstvy statistik na mapě); u milionů bodů se vzorkuje.
+    """
+    from ..common import haversine_m
+    lo, hi = ts_range(from_ts, to_ts)
+    with closing(db.connect()) as conn:
+        home = _detect_home(conn, lo, hi)
+
+        n = conn.execute("SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?",
+                         (lo, hi)).fetchone()["c"]
+        step = max(1, n // 60_000)
+        ssql = " AND (id % ?) = 0" if step > 1 else ""
+        sargs = (step,) if step > 1 else ()
+
+        # rytmus týdne: kdy (den × hodina) se hýbu; počty škálované krokem
+        punch = conn.execute(
+            "SELECT CAST(strftime('%w', ts, 'unixepoch', 'localtime') AS INT) w, "
+            "CAST(strftime('%H', ts, 'unixepoch', 'localtime') AS INT) h, "
+            f"COUNT(*) * ? c FROM points WHERE ts BETWEEN ? AND ?{ssql} "
+            "GROUP BY w, h", (step, lo, hi, *sargs)).fetchall()
+
+        # denní minima/maxima (typický odjezd/návrat – jen všední dny)
+        days = conn.execute(
+            "SELECT date(ts,'unixepoch','localtime') d, MIN(ts) a, MAX(ts) b, "
+            "CAST(strftime('%w', ts, 'unixepoch', 'localtime') AS INT) w "
+            "FROM points WHERE ts BETWEEN ? AND ? GROUP BY d", (lo, hi)).fetchall()
+
+        radius = None
+        farthest = None
+        away_nights = None
+        if home:
+            pts = conn.execute(
+                f"SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ?{ssql}",
+                (lo, hi, *sargs)).fetchall()
+            dists = sorted(
+                ((haversine_m(home["lat"], home["lon"], p["lat"], p["lon"]), p)
+                 for p in pts), key=lambda t: t[0])
+            if dists:
+                pct = lambda q: dists[min(len(dists) - 1, int(len(dists) * q))][0]  # noqa: E731
+                radius = {"p50_m": round(pct(0.50)), "p90_m": round(pct(0.90)),
+                          "p99_m": round(pct(0.99))}
+                dmax, pmax = dists[-1]
+                farthest = {"km": round(dmax / 1000, 1),
+                            "lat": pmax["lat"], "lon": pmax["lon"],
+                            "date": local_dt(pmax["ts"]).strftime("%Y-%m-%d")}
+            # noc mimo domov = poslední bod dne dál než 30 km od domova
+            last_pts = conn.execute(
+                "SELECT lat, lon FROM ("
+                "  SELECT lat, lon, ROW_NUMBER() OVER ("
+                "    PARTITION BY date(ts,'unixepoch','localtime') "
+                "    ORDER BY ts DESC) rn "
+                f"  FROM points WHERE ts BETWEEN ? AND ?{ssql}) WHERE rn = 1",
+                (lo, hi, *sargs)).fetchall()
+            away_nights = sum(
+                1 for p in last_pts
+                if haversine_m(home["lat"], home["lon"], p["lat"], p["lon"]) > 30_000)
+
+        # trasy se souřadnicemi pro „pavouka" na mapě
+        routes = _top_routes_geo(conn, lo, hi)
+
+    # typický začátek/konec dne (medián minut, všední dny)
+    def _median_minutes(vals):
+        if not vals:
+            return None
+        vals = sorted(vals)
+        m = vals[len(vals) // 2]
+        return f"{m // 60:02d}:{m % 60:02d}"
+    workdays = [d for d in days if d["w"] not in (0, 6)]
+    first_move = _median_minutes(
+        [local_dt(d["a"]).hour * 60 + local_dt(d["a"]).minute for d in workdays])
+    last_move = _median_minutes(
+        [local_dt(d["b"]).hour * 60 + local_dt(d["b"]).minute for d in workdays])
+
+    return {
+        "home": home,
+        "radius": radius,
+        "farthest": farthest,
+        "away_nights": away_nights,
+        "first_move": first_move,
+        "last_move": last_move,
+        "punchcard": [[r["w"], r["h"], r["c"]] for r in punch],
+        "routes_geo": routes,
+    }
+
+
+def _top_routes_geo(conn, lo: int, hi: int, limit: int = 8) -> list[dict]:
+    """Jako _top_routes, ale s průměrnými souřadnicemi konců (pro mapu)."""
+    acts = conn.execute(
+        "SELECT start_lat sla, start_lon slo, end_lat ela, end_lon elo, distance_m d "
+        "FROM activities WHERE start_ts BETWEEN ? AND ? "
+        "AND start_lat IS NOT NULL AND end_lat IS NOT NULL LIMIT 50000",
+        (lo, hi)).fetchall()
+    if not acts:
+        return []
+    namer = trips.PlaceNamer(conn)
+    agg: dict[tuple, dict] = {}
+    for a in acts:
+        na, nb = namer.name(a["sla"], a["slo"]), namer.name(a["ela"], a["elo"])
+        if na == nb or _COORD_LABEL in na or _COORD_LABEL in nb:
+            continue
+        key = tuple(sorted((na, nb)))
+        first = key[0] == na
+        g = agg.setdefault(key, {"count": 0, "km": 0.0, "km_n": 0,
+                                 "fla": 0.0, "flo": 0.0, "tla": 0.0, "tlo": 0.0})
+        g["count"] += 1
+        g["fla"] += a["sla"] if first else a["ela"]
+        g["flo"] += a["slo"] if first else a["elo"]
+        g["tla"] += a["ela"] if first else a["sla"]
+        g["tlo"] += a["elo"] if first else a["slo"]
+        if a["d"]:
+            g["km"] += a["d"] / 1000
+            g["km_n"] += 1
+    top = sorted(agg.items(), key=lambda kv: -kv[1]["count"])[:limit]
+    return [{"from": k[0], "to": k[1], "count": g["count"],
+             "km_avg": round(g["km"] / g["km_n"], 1) if g["km_n"] else None,
+             "from_lat": round(g["fla"] / g["count"], 5),
+             "from_lon": round(g["flo"] / g["count"], 5),
+             "to_lat": round(g["tla"] / g["count"], 5),
+             "to_lon": round(g["tlo"] / g["count"], 5)}
+            for k, g in top]
+
+
 @router.get("/api/calendar")
 def api_calendar(year: int = Query(..., ge=2000, le=2100)):
     lo = int(datetime(year, 1, 1, tzinfo=LOCAL_TZ).timestamp())
