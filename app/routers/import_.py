@@ -39,16 +39,22 @@ async def api_import(request: Request, file: UploadFile):
     job = {"status": "running", "counters": counters, "error": None,
            "filename": file.filename}
     IMPORT_JOBS[job_id] = job
+    # dokončené úlohy nedržet donekonečna (status si frontend čte hned po běhu)
+    while len(IMPORT_JOBS) > 50:
+        oldest = next(iter(IMPORT_JOBS))
+        if IMPORT_JOBS[oldest]["status"] == "running":
+            break
+        IMPORT_JOBS.pop(oldest)
 
     def run():
         try:
+            # import_path si přepočet agregací (after_import) udělá sám
             importer.import_path(tmp_path, counters=counters)
             with closing(db.connect()) as conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO import_meta(key,value) VALUES(?,?)",
                     ("last_import", datetime.now().isoformat(timespec="seconds")))
                 conn.commit()
-            db.after_import()
             job["status"] = "done"
             event_bus.publish_sync("import_done", {"job_id": job_id, **counters.as_dict()})
         except Exception as exc:

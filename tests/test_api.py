@@ -568,3 +568,70 @@ def test_update_check(client, test_db, monkeypatch):
     monkeypatch.setitem(pages._update_cache, "ts", 0.0)
     u = client.get("/api/update_check").json()
     assert u["available"] is None and u["latest"] is None
+
+
+NS_GPX = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+          '<gpx version="1.1" creator="test" '
+          'xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>'
+          '<trkpt lat="50.1" lon="14.4"><time>2025-06-02T08:00:00Z</time></trkpt>'
+          '<trkpt lat="50.2" lon="14.5"><time>2025-06-02T08:05:00Z</time></trkpt>'
+          '<trkpt lat="50.3" lon="14.6"><time>2025-06-02T08:10:00Z</time></trkpt>'
+          '</trkseg></trk></gpx>')
+
+
+def test_sync_gpx_with_namespace_keeps_times(client, test_db):
+    """Regrese: standardní (namespacované) GPX dřív přišlo o všechny časy
+    (Element bez potomků je falsy) a nenaimportoval se ani bod."""
+    r = client.post("/api/sync/gpx", content=NS_GPX.encode())
+    assert r.status_code == 200
+    assert r.json()["points"] == 3
+    pts = client.get("/api/points").json()
+    assert pts["total"] == 3
+
+
+def test_export_gpx_roundtrip(client, test_db, tmp_path):
+    """Vlastní GPX export musí jít naimportovat zpět (do prázdného profilu)."""
+    seed(test_db, tmp_path)
+    gpx = client.get("/api/export.gpx").content
+    from app.routers.sync import import_gpx_file
+    p = tmp_path / "export.gpx"
+    p.write_bytes(gpx)
+    # nový „profil" = čistá DB, ať se body nepotkají s duplicitami
+
+    from app import db as _db
+    _db.DB_PATH = str(tmp_path / "second.db")
+    _db._schema_done = False
+    c = import_gpx_file(str(p))
+    assert c.points > 0
+
+
+def test_autoimport_folder_handles_gpx(client, test_db, tmp_path):
+    """Regrese: auto-import .gpx padal na importu z neexistujícího modulu
+    a soubor končil jako .error."""
+    import os
+
+    from app.routers.backup import AUTOIMPORT_LOG, process_import_folder
+    AUTOIMPORT_LOG.clear()
+    folder = tmp_path / "import"
+    folder.mkdir()
+    (folder / "track.gpx").write_text(NS_GPX, encoding="utf-8")
+    process_import_folder()
+    assert AUTOIMPORT_LOG and AUTOIMPORT_LOG[-1]["status"] == "ok"
+    assert AUTOIMPORT_LOG[-1]["points"] == 3
+    assert os.path.exists(folder / "track.gpx.imported")
+
+
+def test_update_zip_rejects_traversal(tmp_path):
+    """Balík aktualizace s cestou mimo cílovou složku se odmítne (zip slip)."""
+    import zipfile
+
+    import pytest
+
+    from app.core.updater import apply_update_zip
+    zp = tmp_path / "evil.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        zf.writestr("version.json", "{}")
+        zf.writestr("dist/GMapsHistorie.exe", "x")
+        zf.writestr("../evil.txt", "x")
+    with pytest.raises(ValueError, match="podezřelou cestu"):
+        apply_update_zip(zp, tmp_path / "app")

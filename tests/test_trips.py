@@ -235,3 +235,26 @@ def test_month_lock_skips_generation(client, test_db, tmp_path):
     assert res["created"] == 0 and res["skipped_locked"] == 3   # uzavřený měsíc se negeneruje
     client.post("/api/trips/lock", json={"month": mkey, "plate": "1AB 2345", "locked": False})
     assert gen(client)["created"] == 3                 # po odemčení znovu jde
+
+
+def test_odometer_alerts_respect_plate(client, test_db, tmp_path):
+    """Tachometr je na vozidlo – jízdy jiné SPZ nesmí vyvolat falešné překročení."""
+    from datetime import datetime
+
+    ts = int(datetime(2025, 3, 3, 8, 0).timestamp())
+    for plate, km in (("AAA 1111", 50), ("BBB 2222", 500)):
+        client.post("/api/trips", json={
+            "start_ts": ts, "end_ts": ts + 1800, "km": km,
+            "origin": "A", "destination": "B", "plate": plate})
+        ts += 3600
+    client.put("/api/trips/odometer",
+               json={"year": 2025, "km": 100, "plate": "AAA 1111"})
+
+    over = client.get("/api/trips/alerts").json()["odometer_exceeded"]
+    assert over == []           # AAA má 50 z 100 km – jízdy BBB se nepočítají
+
+    client.put("/api/trips/odometer",
+               json={"year": 2025, "km": 100, "plate": "BBB 2222"})
+    over = client.get("/api/trips/alerts").json()["odometer_exceeded"]
+    assert [o["plate"] for o in over] == ["BBB 2222"]
+    assert over[0]["booked_km"] == 500
