@@ -370,13 +370,18 @@ test.describe("mapa", () => {
 
   test("prázdné období nabídne dostupný rozsah a Zobrazit vše vrátí data", async ({ page }) => {
     await page.goto("/");
-    await page.waitForFunction(() => window.loadAll && document.querySelector("#dbInfo"));
+    // počkat na DOKONČENÉ úvodní načtení – na pomalém CI je tlačítko Načíst
+    // během initu disabled a předčasný klik by se tiše zahodil (flaky test)
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.waitForFunction(() => !document.querySelector("#loadBtn").disabled);
+    await page.waitForTimeout(600);   // nechat doběhnout post-fit dotažení výřezu
     // zvolím období bez dat (daleká budoucnost) → chytrá kartička, ne jen „nejsou data"
     await page.fill("#dateFrom", "2099-01-01");
     await page.fill("#dateTo", "2099-12-31");
     await page.click("#loadBtn");
     const empty = page.locator("#emptyState");
-    await expect(empty).toBeVisible();
+    await expect(empty).toBeVisible({ timeout: 10000 });
     await expect(empty).toContainText("data máte");        // ví, že data v DB jsou
     await expect(empty).toContainText("bodů");
     // Zobrazit vše skutečně data vrátí a kartička zmizí
