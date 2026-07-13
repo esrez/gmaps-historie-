@@ -21,40 +21,43 @@ GPX_NS = {"gpx": "http://www.topografix.com/GPX/1/1"}
 def import_gpx_file(path: str) -> importer.Counters:
     tree = ET.parse(path)
     root = tree.getroot()
-    conn = db.connect()
     c = importer.Counters()
-    w = importer.Writer(conn, c, "gpx")
-    for trkpt in root.findall(".//gpx:trkpt", GPX_NS) + root.findall(".//trkpt"):
-        lat = float(trkpt.get("lat", 0))
-        lon = float(trkpt.get("lon", 0))
-        time_el = trkpt.find("gpx:time", GPX_NS) or trkpt.find("time")
-        ts = importer.parse_ts(time_el.text if time_el is not None else None)
-        if ts and lat and lon:
-            w.point(ts, lat, lon)
-    w.flush()
-    conn.close()
+    with closing(db.connect()) as conn:
+        w = importer.Writer(conn, c, "gpx")
+        for trkpt in root.findall(".//gpx:trkpt", GPX_NS) + root.findall(".//trkpt"):
+            lat = float(trkpt.get("lat", 0))
+            lon = float(trkpt.get("lon", 0))
+            # pozor: Element bez potomků je falsy – „el or fallback" by u
+            # standardního (namespacovaného) GPX zahodil všechny časy
+            time_el = trkpt.find("gpx:time", GPX_NS)
+            if time_el is None:
+                time_el = trkpt.find("time")
+            ts = importer.parse_ts(time_el.text if time_el is not None else None)
+            if ts and lat and lon:
+                w.point(ts, lat, lon)
+        w.flush()
     return c
 
 
 def import_geojson_file(path: str) -> importer.Counters:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    conn = db.connect()
     c = importer.Counters()
-    w = importer.Writer(conn, c, "geojson")
-    feats = data.get("features", [data] if data.get("type") == "Feature" else [])
-    for f in feats:
-        geom = f.get("geometry") or {}
-        props = f.get("properties") or {}
-        ts = importer.parse_ts(props.get("ts") or props.get("timestamp"))
-        coords = geom.get("coordinates") or []
-        if geom.get("type") == "Point" and len(coords) >= 2:
-            w.point(ts or int(datetime.now(UTC).timestamp()), coords[1], coords[0])
-        elif geom.get("type") == "LineString":
-            for i, pt in enumerate(coords):
-                w.point((ts or 0) + i * 60, pt[1], pt[0])
-    w.flush()
-    conn.close()
+    with closing(db.connect()) as conn:
+        w = importer.Writer(conn, c, "geojson")
+        feats = data.get("features", [data] if data.get("type") == "Feature" else [])
+        for f in feats:
+            geom = f.get("geometry") or {}
+            props = f.get("properties") or {}
+            ts = importer.parse_ts(props.get("ts") or props.get("timestamp"))
+            coords = geom.get("coordinates") or []
+            if geom.get("type") == "Point" and len(coords) >= 2:
+                w.point(ts or int(datetime.now(UTC).timestamp()), coords[1], coords[0])
+            elif geom.get("type") == "LineString":
+                start = ts if ts is not None else props.get("start_ts")
+                for i, pt in enumerate(coords):
+                    w.point((start or 0) + i * 60, pt[1], pt[0])
+        w.flush()
     return c
 
 

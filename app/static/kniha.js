@@ -575,7 +575,8 @@ async function refreshAlerts() {
       items.push(`${icon("pencil", 13)} <b>${al.incomplete_trips} jízd je neúplných</b> (chybí km nebo cíl).`);
     }
     for (const o of al.odometer_exceeded) {
-      items.push(`${icon("alert", 13)} <b>Rok ${o.year}: v knize ${o.booked_km.toLocaleString("cs")} km, ` +
+      const veh = o.plate ? ` (${escapeHtml(o.plate)})` : "";
+      items.push(`${icon("alert", 13)} <b>Rok ${o.year}${veh}: v knize ${o.booked_km.toLocaleString("cs")} km, ` +
         `ale tachometr jen ${o.odometer_km.toLocaleString("cs")} km</b> – zkontrolujte km jízd.`);
     }
     box.innerHTML = items.length

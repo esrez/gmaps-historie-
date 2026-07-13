@@ -70,6 +70,11 @@ def apply_update_zip(zip_path: Path, app_dir: Path) -> list[str]:
         exe_members = [n for n in names if n.replace("\\", "/") == "dist/GMapsHistorie.exe"]
         if not exe_members:
             raise ValueError("Balík neobsahuje dist/GMapsHistorie.exe")
+        # ochrana proti „zip slip": žádný člen nesmí mířit mimo cílovou složku
+        for n in names:
+            parts = n.replace("\\", "/").split("/")
+            if n.startswith(("/", "\\")) or ".." in parts or (parts and ":" in parts[0]):
+                raise ValueError(f"Balík obsahuje podezřelou cestu: {n}")
         zf.extractall(zip_path.parent)
     root = zip_path.parent
     exe_src = root / "dist" / "GMapsHistorie.exe"

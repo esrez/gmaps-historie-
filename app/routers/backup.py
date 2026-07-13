@@ -33,7 +33,7 @@ def process_import_folder():
         entry = {"file": name, "when": datetime.now().strftime("%d.%m. %H:%M")}
         try:
             if low.endswith(".gpx") or low.endswith(".geojson"):
-                from ..services.sync import import_geojson_file, import_gpx_file
+                from .sync import import_geojson_file, import_gpx_file
                 if low.endswith(".gpx"):
                     counters = import_gpx_file(path)
                 else:

@@ -573,13 +573,17 @@ def alerts(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
             "SELECT COUNT(*) c FROM trips WHERE start_ts BETWEEN ? AND ? AND excluded=0 "
             "AND (km <= 0 OR COALESCE(TRIM(destination),'') = '')", (lo, hi)).fetchone()["c"]
         odo_over = []
-        for r in conn.execute("SELECT year, km FROM odometer"):
+        for r in conn.execute("SELECT year, plate, km FROM odometer"):
+            # tachometr je vedený na vozidlo – porovnávat jen jeho jízdy,
+            # jinak by při více vozidlech vycházela falešná překročení
+            psql, pargs = _plate_sql(r["plate"])
             booked = conn.execute(
-                "SELECT COALESCE(SUM(km),0) s FROM trips WHERE excluded=0 "
-                "AND strftime('%Y', start_ts, 'unixepoch', 'localtime') = ?",
-                (str(r["year"]),)).fetchone()["s"]
+                f"SELECT COALESCE(SUM(km),0) s FROM trips WHERE excluded=0 "
+                f"AND strftime('%Y', start_ts, 'unixepoch', 'localtime') = ?{psql}",
+                (str(r["year"]), *pargs)).fetchone()["s"]
             if booked > r["km"]:
-                odo_over.append({"year": r["year"], "odometer_km": r["km"],
+                odo_over.append({"year": r["year"], "plate": r["plate"],
+                                 "odometer_km": r["km"],
                                  "booked_km": round(booked, 1)})
     return {"incomplete_trips": incomplete, "odometer_exceeded": odo_over}
 

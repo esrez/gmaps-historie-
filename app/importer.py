@@ -407,6 +407,9 @@ def main(argv: list[str]):
     for path in argv:
         print(f"Importuji {path} ...")
         import_path(path, conn, c)
+    # se sdíleným spojením přepočet neproběhl uvnitř import_path – dohnat,
+    # jinak by po CLI importu zůstal prázdný kalendář a měsíční km
+    db.after_import(conn)
     conn.close()
     print(f"Hotovo: {c.files} souborů, {c.points} bodů, "
           f"{c.visits} návštěv, {c.activities} aktivit (nové záznamy).")

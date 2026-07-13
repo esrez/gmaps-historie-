@@ -2,6 +2,24 @@
 
 ## Nevydáno
 
+### Opravy z kontroly kódu
+- **GPX import zahazoval časy** u standardního (namespacovaného) GPX –
+  přes `/api/sync/gpx` i auto-import se nenaimportoval ani bod; opraveno
+  (vč. round-trip testu na vlastní GPX export)
+- **auto-import `.gpx`/`.geojson` ze složky `data/import/` byl celý
+  rozbitý** (import z neexistujícího modulu) – soubory končily jako
+  `.error`; opraveno + test
+- **tachometr v upozorněních ignoroval SPZ** – při více vozidlech hlásil
+  falešné překročení ročního nájezdu; nyní se porovnávají jen jízdy
+  daného vozidla (a hláška vozidlo vypisuje)
+- **CLI import (`python -m app.importer`) nepřepočítal agregace** –
+  kalendář a měsíční km zůstaly prázdné do dalšího importu přes UI
+- import přes UI přepočítával agregace dvakrát (zbytečná práce navíc)
+- aktualizační balík se před rozbalením kontroluje na cesty mimo cílovou
+  složku (zip slip) + test; GeoJSON LineString bez `ts` použije `start_ts`
+- úklid: spojení SQLite v sync importech se zavírá i při chybě, seznam
+  importních úloh v paměti se promazává
+
 ### Zveřejnění projektu
 - přidána licence **MIT** (soubor `LICENSE`)
 - **nové README** – představení aplikace s galerií 8 screenshotů (mapa,
