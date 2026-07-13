@@ -266,6 +266,29 @@ test.describe("mapa", () => {
     expect(res.status()).toBe(409);
   });
 
+  test("zajímavosti, rytmus týdne a statistiky na mapě", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    // vrstvy statistik: kružnice akčního rádia mají DOM popisky
+    await page.check("#statRadius");
+    await page.check("#statRoutes");
+    // divIcon má 0×0 box (obsah přetéká transformem) → testujeme počet, ne viditelnost
+    await expect(page.locator(".radiusLbl")).toHaveCount(3, { timeout: 10000 });
+    // Analýza: zajímavosti + punchcard se dopočítají při otevření
+    await page.click('#tabs [data-tab="analyza"]');
+    await expect(page.locator("#insightFacts")).toContainText("Akční rádius");
+    await expect(page.locator("#insightFacts")).toContainText("Typický všední den");
+    await expect(page.locator("#punchcard svg")).toBeVisible();
+    expect(await page.locator("#punchcard .pc").count()).toBeGreaterThan(5);
+    // vypnutí vrstvy popisky odstraní
+    await page.click('#tabs [data-tab="mapa"]');
+    await page.uncheck("#statRadius");
+    await page.uncheck("#statRoutes");
+    await page.waitForTimeout(400);
+    await expect(page.locator(".radiusLbl")).toHaveCount(0);
+  });
+
   test("analýza: doprava po měsících, všední vs. víkend, trasy", async ({ page }) => {
     await page.goto("/");
     await page.click('#tabs [data-tab="analyza"]');

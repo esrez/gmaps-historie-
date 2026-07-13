@@ -24,6 +24,11 @@
   v barvách aplikace; interaktivní úprava tvaru míst (okruh i polygon)
 
 ### Statistiky a analýza
+- **Zajímavosti**: akční rádius (50/90/99 % záznamů od domova), nejdál od
+  domova, noci mimo domov, typický začátek/konec všedního dne
+- **Rytmus týdne**: punchcard den × hodina – kdy se hýbete
+- **statistiky na mapě**: kružnice akčního rádia kolem domova a „pavouk"
+  nejčastějších tras (tloušťka = četnost)
 - **nejčastější trasy** (odkud ⇄ kam, počet, průměrné km)
 - **km po měsících podle dopravy** (skládaný graf), všední dny vs. víkend
 - kalendář jasně odlišuje dny se záznamem od dní bez záznamu (+ legenda)

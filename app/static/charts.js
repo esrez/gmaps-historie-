@@ -258,6 +258,76 @@ export function renderWorkWeekend(weekdayKm) {
     `<b>${wkend.toLocaleString("cs", { maximumFractionDigits: 0 })} km</b> (${100 - pw} %)</span></div>`;
 }
 
+/* Rytmus týdne (punchcard): den × hodina, velikost kolečka = kolik záznamů.
+   Jedna barva (sekvenční kódování velikostí), tooltip s přesným počtem. */
+export function renderPunchcard(el, cells) {
+  if (!cells || !cells.length) { el.innerHTML = ""; return false; }
+  const DAYS = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
+  const toRow = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 };  // %w → Po..Ne
+  const grid = new Map(cells.map(([w, h, c]) => [`${toRow[w]}-${h}`, c]));
+  const maxC = Math.max(...cells.map((c) => c[2]), 1);
+  const cw = 12.4, rh = 15, padL = 26, padT = 6;
+  const W = padL + 24 * cw + 4, H = padT + 7 * rh + 16;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Aktivita podle dne v týdnu a hodiny">`;
+  DAYS.forEach((d, r) => {
+    svg += `<text x="${padL - 6}" y="${padT + r * rh + 10}" text-anchor="end">${d}</text>`;
+  });
+  for (let h = 0; h < 24; h += 4) {
+    svg += `<text x="${padL + h * cw + cw / 2}" y="${H - 3}" text-anchor="middle">${h}</text>`;
+  }
+  for (let r = 0; r < 7; r++) {
+    for (let h = 0; h < 24; h++) {
+      const c = grid.get(`${r}-${h}`) || 0;
+      if (!c) continue;
+      const rad = 1.4 + 4.4 * Math.sqrt(c / maxC);
+      svg += `<circle class="pc" data-d="${DAYS[r]}" data-h="${h}" data-c="${c}" ` +
+        `cx="${padL + h * cw + cw / 2}" cy="${padT + r * rh + rh / 2}" r="${rad.toFixed(1)}"/>`;
+    }
+  }
+  svg += "</svg>";
+  el.innerHTML = svg;
+  el.querySelectorAll(".pc").forEach((dot) => {
+    dot.addEventListener("mousemove", (ev) => {
+      tooltip.innerHTML = `<span class="t-label">${dot.dataset.d} ${dot.dataset.h}:00–${dot.dataset.h}:59</span> ` +
+        `<b>${Number(dot.dataset.c).toLocaleString("cs")} záznamů</b>`;
+      tooltip.hidden = false;
+      tooltip.style.left = ev.clientX + 12 + "px";
+      tooltip.style.top = ev.clientY - 10 + "px";
+    });
+    dot.addEventListener("mouseleave", () => { tooltip.hidden = true; });
+  });
+  return true;
+}
+
+/* Zajímavosti: akční rádius, noci mimo domov, typický den, nejdál od domova. */
+export function renderInsightFacts(el, ins) {
+  const rows = [];
+  const fmtKm = (m) => (m / 1000).toLocaleString("cs", { maximumFractionDigits: 1 });
+  if (ins.radius) {
+    rows.push([icon("target", 13), "Akční rádius",
+      `${fmtKm(ins.radius.p90_m)} km`,
+      `90 % záznamů do této vzdálenosti od: ${escapeHtml(ins.home.label)}`]);
+  }
+  if (ins.farthest) {
+    rows.push([icon("pin", 13), "Nejdál od domova",
+      `${ins.farthest.km.toLocaleString("cs")} km`,
+      new Date(ins.farthest.date).toLocaleDateString("cs")]);
+  }
+  if (ins.away_nights != null) {
+    rows.push([icon("moon", 13), "Nocí mimo domov",
+      `${ins.away_nights}`, "poslední bod dne dál než 30 km"]);
+  }
+  if (ins.first_move && ins.last_move) {
+    rows.push([icon("sun", 13), "Typický všední den",
+      `${ins.first_move} – ${ins.last_move}`, "první a poslední pohyb (medián)"]);
+  }
+  el.innerHTML = rows.length
+    ? rows.map(([ic, label, val, sub]) =>
+        `<div class="recRow">${ic}<span>${label}</span>` +
+        `<b>${val}</b><span class="muted">${sub}</span></div>`).join("")
+    : '<p class="muted">Pro zajímavosti je potřeba víc dat (a rozpoznaný domov).</p>';
+}
+
 export function renderAnalysis(a) {
   renderTopRoutes(a.top_routes);
   renderTransportChart(a.monthly_by_type);

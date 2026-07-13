@@ -118,6 +118,10 @@
         </label>
         <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
           <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
+        <label class="check" title="Kružnice kolem domova: 50/90/99 % všech záznamů leží uvnitř">
+          <input type="checkbox" id="statRadius"> Akční rádius (kružnice)</label>
+        <label class="check" title="Čáry mezi nejčastějšími dvojicemi míst; tloušťka = četnost">
+          <input type="checkbox" id="statRoutes"> Nejčastější trasy (pavouk)</label>
         <label title="Podle roku: každý rok jízdy má vlastní barvu – u víceleté historie hned vidíte, kudy jste kdy jezdili">
           Barvy tras
           <select id="trackColorMode">
@@ -215,6 +219,12 @@
     <div class="tab-page" data-page="analyza">
       <section>
         <h2>Analýza</h2>
+        <h3>Zajímavosti</h3>
+        <div id="insightFacts" class="muted">Načítám…</div>
+        <h3>Rytmus týdne</h3>
+        <p class="muted" style="margin:2px 0 4px">Kdy se hýbete: den × hodina,
+           velikost kolečka = množství záznamů.</p>
+        <div id="punchcard" class="chart"></div>
         <h3>Nejčastější trasy</h3>
         <div id="topRoutes"></div>
         <h3>Km po měsících podle dopravy</h3>
