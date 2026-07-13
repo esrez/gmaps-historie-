@@ -44,13 +44,15 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/version` | GET | verze frontendu (otisk statických souborů; verzuje i cache PWA) |
 | `/api/health` | GET | stav aplikace: velikost DB, počty záznamů, profil, čas poslední zálohy |
 | `/api/health/check` | POST | kontrola integrity databáze (PRAGMA quick_check) |
+| `/api/update_check` | GET | je k dispozici novější vydání? (`current`, `latest`, `available`, `url`); server se ptá GitHubu max. 1× za 6 h, vypnutí `UPDATE_CHECK_URL=` |
 
 ## Exporty
 
 | Endpoint | Metoda | Popis |
 |---|---|---|
 | `/api/export.xlsx` | GET | listy Návštěvy, Cesty, Km po měsících, Top místa, GPS body |
-| `/api/export.gpx` | GET | trasa pro jiné mapové aplikace (`limit`) |
+| `/api/export.gpx` | GET | trasy pro jiné mapové aplikace; `<trkseg>` na každou cestu (`limit`) |
+| `/api/export.geojson` | GET | trasy (LineString), body a návštěvy; `anonymize`+`grid_m` zaokrouhlí souřadnice, `points=false` vynechá surové body |
 | `/api/export_location.xlsx` | GET | pobyty na místě (`lat`, `lon`, `radius_m`, `label`) |
 
 ## Kniha jízd (`/api/trips`)

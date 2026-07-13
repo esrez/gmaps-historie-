@@ -2,6 +2,24 @@
 
 ## Nevydáno
 
+### Windows 11
+- **ikona v systémové liště** místo černého konzolového okna: klik otevře
+  aplikaci, pravý klik nabídne Knihu jízd a Ukončit; výpisy jdou do
+  `data/logs/app.log`
+- **vlastní ikona aplikace** (exe, zástupci i instalátor – dosud generická)
+- instalátor: volitelné **pravidlo brány firewall** pro přístup z domácí
+  sítě (při odinstalaci se odstraní)
+- **upozornění na novou verzi**: nenápadná kontrola vydání max. 1× denně
+  (vypnutí `UPDATE_CHECK_URL=`), odkaz ke stažení v Nástroje → O aplikaci
+- nová sekce **„Windows 11: tipy"** v návodu (výjimka Defenderu pro rychlý
+  import, autostart, jiný port, umístění dat)
+
+### Exporty
+- **GPX** se dělí na `<trkseg>` po jednotlivých cestách – jiné aplikace už
+  nekreslí rovné „teleportační" čáry mezi dny
+- **GeoJSON** nově obsahuje trasy jako LineString (v QGIS apod. rovnou
+  čitelné čáry); `points=false` vynechá surové body
+
 ### Kvalita kódu
 - **ESLint** pro frontend (nedefinované proměnné, nepoužité symboly,
   `==` vs `===`) – `npm run lint`, kontroluje se i v CI

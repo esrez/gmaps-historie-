@@ -1894,8 +1894,25 @@ function maybeShowStaleNotice(maxTs) {
   showAutoImportLog();
   renderCalendar();
   loadAll();
+  maybeCheckUpdate();
   if (new URLSearchParams(location.hash.slice(1)).get("play")) playDay();
 })();
+
+// Nenápadné upozornění na novou verzi – nejvýš 1× denně, každou verzi
+// oznámí jen jednou. Detail (odkaz ke stažení) je v Nástroje → O aplikaci.
+async function maybeCheckUpdate() {
+  const last = Number(localStorage.getItem("updateCheck.ts") || 0);
+  if (Date.now() - last < 86400e3) return;
+  localStorage.setItem("updateCheck.ts", String(Date.now()));
+  try {
+    const u = await api("/api/update_check");
+    if (u.available && localStorage.getItem("updateSeen") !== u.latest) {
+      localStorage.setItem("updateSeen", u.latest);
+      toast(`Je k dispozici nová verze ${u.latest} (máte ${u.current}). ` +
+            "Odkaz najdete v Nástroje → O aplikaci.", "info");
+    }
+  } catch (e) { /* offline / kontrola vypnutá */ }
+}
 
 async function loadProfiles() {
   try {
@@ -1943,6 +1960,14 @@ async function showHealth() {
       `Poslední záloha: <b>${h.last_backup || "zatím žádná"}</b> ` +
       '<span class="muted">(zálohuje se automaticky 1× denně)</span>';
   } catch (e) { $("appHealth").textContent = ""; }
+  try {
+    const u = await api("/api/update_check");
+    if (u.available) {
+      $("appHealth").innerHTML +=
+        `<br>${icon("refresh", 12)} K dispozici je novější verze <b>${escapeHtml(u.latest)}</b>` +
+        (u.url ? ` – <a href="${escapeHtml(u.url)}" target="_blank" rel="noopener">stáhnout</a>` : "");
+    }
+  } catch (e) { /* kontrola není dostupná */ }
 }
 
 $("dbCheckBtn")?.addEventListener("click", async () => {

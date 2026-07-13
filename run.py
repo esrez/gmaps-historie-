@@ -47,6 +47,67 @@ OPEN_BROWSER = os.environ.get("OPEN_BROWSER", "1") != "0"
 _win_console_handler = None   # držet referenci, ať ji GC neuklidí
 
 
+def _setup_windowed_logging() -> None:
+    """V okenním exe (bez konzole) nejsou stdout/stderr – přesměrovat výpisy
+    do souboru data/logs/app.log, jinak by print() padal a chyby se ztrácely."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        log_dir = os.path.join(os.environ.get("DATA_DIR", "data"), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        path = os.path.join(log_dir, "app.log")
+        # jednoduchá rotace, ať log neroste donekonečna
+        if os.path.exists(path) and os.path.getsize(path) > 2_000_000:
+            os.replace(path, path + ".1")
+        # soubor zůstává otevřený po celý běh (je to nový stdout/stderr)
+        f = open(path, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
+        if sys.stdout is None:
+            sys.stdout = f
+        if sys.stderr is None:
+            sys.stderr = f
+    except Exception:
+        pass
+
+
+def _start_tray() -> None:
+    """Ikona v systémové liště (Windows): Otevřít / Kniha jízd / Ukončit.
+    Bez pystray/Pillow (nebo mimo Windows) se prostě nezobrazí – aplikace
+    běží dál, jen ji uživatel ukončí tlačítkem v Nástrojích."""
+    if os.name != "nt":
+        return
+    try:
+        import pystray
+        from PIL import Image
+    except Exception:
+        return
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    try:
+        image = Image.open(os.path.join(base, "app", "static", "icon.ico"))
+    except Exception:
+        return
+
+    def _open(icon=None, item=None):
+        webbrowser.open(_app_url())
+
+    def _open_kniha(icon=None, item=None):
+        webbrowser.open(_app_url() + "kniha")
+
+    def _quit(icon, item=None):
+        icon.visible = False
+        icon.stop()
+        from app.core import runtime
+        runtime.request_shutdown()
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Otevřít GMaps Historie", _open, default=True),
+        pystray.MenuItem("Kniha jízd", _open_kniha),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Ukončit", _quit),
+    )
+    icon = pystray.Icon("gmaps-historie", image, "GMaps Historie", menu)
+    threading.Thread(target=icon.run, daemon=True).start()
+
+
 def _install_win_console_handler() -> None:
     """Na Windows: zavření okna konzole (křížek), odhlášení či vypnutí systému
     aplikaci korektně ukončí (jinak by mohla zůstat běžet na pozadí)."""
@@ -96,6 +157,7 @@ def _already_running() -> bool:
 
 
 def main() -> None:
+    _setup_windowed_logging()
     if "--update" in sys.argv or "--check-update" in sys.argv:
         from pathlib import Path
 
@@ -132,9 +194,10 @@ def main() -> None:
     server = uvicorn.Server(config)
     runtime.set_server(server)
     _install_win_console_handler()
+    _start_tray()
 
     print(f"GMaps Historie běží na http://{HOST}:{PORT}")
-    print("Ukonceni: tlacitko Ukoncit aplikaci v Nastrojich, Ctrl+C, nebo zavreni okna.")
+    print("Ukonceni: ikona v systemove liste, tlacitko Ukoncit aplikaci, nebo Ctrl+C.")
     try:
         server.run()
     except OSError as exc:

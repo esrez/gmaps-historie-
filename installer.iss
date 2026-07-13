@@ -25,7 +25,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=no
 OutputDir=dist
 OutputBaseFilename=GMapsHistorie-Setup-{#AppVersion}
-SetupIconFile=compiler:SetupClassicIcon.ico
+SetupIconFile=app\static\icon.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -50,6 +50,7 @@ czech.UpdateUrlDesc=Adresa serveru pro kontrolu aktualizací (volitelné). Ponec
 czech.UpdateUrlLabel=URL aktualizací (volitelné):
 czech.TaskAutostart=Spustit GMaps Historie po přihlášení do Windows
 czech.TaskUpdateMenu=Vytvořit zástupce „Aktualizovat GMaps Historie“
+czech.TaskFirewall=Povolit přístup z domácí sítě (pravidlo brány Windows Firewall)
 
 [Types]
 Name: "full"; Description: "Úplná instalace"
@@ -63,6 +64,7 @@ Name: "shortcuts"; Description: "Zástupce v nabídce Start"; Types: full compac
 [Tasks]
 Name: "desktopicon"; Description: "Vytvořit zástupce na ploše"; GroupDescription: "Další úlohy:"; Components: shortcuts
 Name: "autostart"; Description: "{cm:TaskAutostart}"; GroupDescription: "Další úlohy:"; Flags: unchecked
+Name: "firewall"; Description: "{cm:TaskFirewall}"; GroupDescription: "Další úlohy:"; Flags: unchecked
 Name: "updatemenu"; Description: "{cm:TaskUpdateMenu}"; GroupDescription: "Další úlohy:"; Components: shortcuts; Flags: checkedonce
 
 [Files]
@@ -86,8 +88,17 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
   ValueData: """{app}\{#AppExeName}"" --no-browser"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
+; pravidlo jen pro privátní profil sítě – z internetu aplikace dostupná není
+Filename: "netsh"; \
+  Parameters: "advfirewall firewall add rule name=""GMaps Historie"" dir=in action=allow program=""{app}\{#AppExeName}"" profile=private"; \
+  Flags: runhidden; Tasks: firewall
 Filename: "{app}\{#AppExeName}"; Description: "Spustit {#AppName}"; \
   Flags: nowait postinstall skipifsilent shellexec
+
+[UninstallRun]
+Filename: "netsh"; \
+  Parameters: "advfirewall firewall delete rule name=""GMaps Historie"""; \
+  Flags: runhidden; RunOnceId: "DelFirewall"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\backups"

@@ -92,21 +92,38 @@ def api_export_gpx(from_ts: int | None = Query(None), to_ts: int | None = Query(
     pts = points_data(from_ts, to_ts, limit=limit)
     parts = ['<?xml version="1.0" encoding="UTF-8"?>\n'
              '<gpx version="1.1" creator="gmaps-historie" '
-             'xmlns="http://www.topografix.com/GPX/1/1">\n<trk><trkseg>\n']
-    for ts, lat, lon in pts["points"]:
-        t = datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        parts.append(f'<trkpt lat="{lat}" lon="{lon}"><time>{t}</time></trkpt>\n')
-    parts.append("</trkseg></trk>\n</gpx>\n")
+             'xmlns="http://www.topografix.com/GPX/1/1">\n'
+             "<trk><name>GMaps Historie</name>\n"]
+    # dělení na <trkseg> podle hranic úseků – jiné aplikace pak nekreslí
+    # rovné „teleportační" čáry mezi jednotlivými dny a cestami
+    for seg in _segments(pts):
+        parts.append("<trkseg>\n")
+        for ts, lat, lon in seg:
+            t = datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            parts.append(f'<trkpt lat="{lat}" lon="{lon}"><time>{t}</time></trkpt>\n')
+        parts.append("</trkseg>\n")
+    parts.append("</trk>\n</gpx>\n")
     return Response("".join(parts), media_type="application/gpx+xml",
                     headers={"Content-Disposition": 'attachment; filename="gmaps-historie.gpx"'})
+
+
+def _segments(pts: dict) -> list[list]:
+    """Rozdělí body na úseky podle hranic z points_data (breaks)."""
+    points = pts["points"]
+    if not points:
+        return []
+    bounds = sorted({0, *pts.get("breaks", []), len(points)})
+    return [points[a:b] for a, b in zip(bounds, bounds[1:], strict=False) if b > a]
 
 
 @router.get("/api/export.geojson")
 def api_export_geojson(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                        limit: int = Query(50_000, ge=1, le=200_000),
                        anonymize: bool = Query(False),
-                       grid_m: float = Query(500, ge=100, le=5000)):
-    """Export bodů a návštěv jako GeoJSON. anonymize=true zaokrouhlí souřadnice."""
+                       grid_m: float = Query(500, ge=100, le=5000),
+                       points: bool = Query(True)):
+    """Export tras (LineString), bodů a návštěv jako GeoJSON.
+    anonymize=true zaokrouhlí souřadnice, points=false vynechá surové body."""
     lo, hi = ts_range(from_ts, to_ts)
     pts = points_data(from_ts, to_ts, limit=limit)
     features = []
@@ -117,12 +134,24 @@ def api_export_geojson(from_ts: int | None = Query(None), to_ts: int | None = Qu
         step = grid_m / 111_000
         return [round(lon / step) * step, round(lat / step) * step]
 
-    for ts, lat, lon in pts["points"]:
+    # trasy jako LineString po úsecích – v QGIS a spol. rovnou čitelné čáry
+    for seg in _segments(pts):
+        if len(seg) < 2:
+            continue
         features.append({
             "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": coord(lat, lon)},
-            "properties": {"ts": ts, "kind": "point"},
+            "geometry": {"type": "LineString",
+                         "coordinates": [coord(lat, lon) for _, lat, lon in seg]},
+            "properties": {"kind": "track",
+                           "start_ts": seg[0][0], "end_ts": seg[-1][0]},
         })
+    if points:
+        for ts, lat, lon in pts["points"]:
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": coord(lat, lon)},
+                "properties": {"ts": ts, "kind": "point"},
+            })
     with closing(db.connect()) as conn:
         visits = conn.execute(
             "SELECT start_ts, end_ts, lat, lon, name, semantic FROM visits "

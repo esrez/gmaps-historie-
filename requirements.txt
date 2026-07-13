@@ -5,3 +5,6 @@ ijson>=3.2
 openpyxl>=3.1
 tzdata>=2024.1
 reportlab>=4.0
+# ikona v systémové liště (jen desktopová aplikace na Windows)
+pystray>=0.19 ; sys_platform == "win32"
+pillow>=10 ; sys_platform == "win32"
