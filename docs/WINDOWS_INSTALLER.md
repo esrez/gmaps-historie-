@@ -38,13 +38,19 @@ Tag `v2.0.0` spustí build automaticky při push.
 - **Instalace do Program Files** (vyžaduje souhlas administrátora – standardní bezpečný postup)
 - **Data mimo Program Files** – databáze v `%LOCALAPPDATA%\GMapsHistorie\data` (zápis bez admin práv)
 - **Zástupce** – Start, volitelně plocha, „Aktualizovat…“, odinstalace
-- **Volitelný autostart** po přihlášení (vypnuto ve výchozím stavu)
+- **Volitelný autostart** po přihlášení (vypnuto ve výchozím stavu; běží tiše
+  jako ikona v systémové liště)
+- **Volitelné pravidlo brány firewall** – povolí přístup z domácí (privátní)
+  sítě, např. z telefonu; při odinstalaci se pravidlo odstraní
 - **Volitelná URL aktualizací** – zadáte při instalaci (např. `https://vas-server.cz/api/update`)
 - **Odinstalace** – nabídne smazání lokálních dat
 - **Jedna instance** – opětovné spuštění, když už aplikace běží, jen otevře
   okno v prohlížeči (nespustí druhý server)
-- **Korektní ukončení** – tlačítko *Ukončit aplikaci* (Nástroje → O aplikaci),
-  Ctrl+C v okně konzole i zavření okna konzole aplikaci čistě zastaví
+- **Bez konzole** – aplikace běží jako **ikona v systémové liště** (klik =
+  otevřít, pravý klik = Kniha jízd / Ukončit); výpisy jdou do
+  `%LOCALAPPDATA%\GMapsHistorie\data\logs\app.log`
+- **Korektní ukončení** – Ukončit v nabídce ikony v liště, nebo tlačítko
+  *Ukončit aplikaci* (Nástroje → O aplikaci)
 
 ## Aktualizace (3 způsoby)
 

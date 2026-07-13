@@ -524,3 +524,47 @@ def test_heatmap_modes_and_hours(client, test_db, tmp_path):
     night = client.get("/api/heatmap?hour_from=22&hour_to=5").json()["cells"]
     assert sum(c[2] for c in morning) == 100
     assert night == []
+
+
+def test_export_gpx_segments_and_geojson_tracks(client, test_db, tmp_path):
+    """GPX se dělí na <trkseg> po cestách; GeoJSON obsahuje LineString trasy."""
+    seed(test_db, tmp_path)
+    gpx = client.get("/api/export.gpx")
+    assert gpx.status_code == 200
+    assert gpx.content.count(b"<trkseg>") == 5     # úsek na každý den fixture
+    gj = client.get("/api/export.geojson").json()
+    kinds = {f["properties"]["kind"] for f in gj["features"]}
+    assert {"track", "point", "visit"} <= kinds
+    lines = [f for f in gj["features"] if f["geometry"]["type"] == "LineString"]
+    assert len(lines) == 5
+    assert all(len(f["geometry"]["coordinates"]) >= 2 for f in lines)
+    # points=false vynechá surové body, trasy a návštěvy zůstanou
+    gj2 = client.get("/api/export.geojson?points=false").json()
+    kinds2 = {f["properties"]["kind"] for f in gj2["features"]}
+    assert "point" not in kinds2 and {"track", "visit"} <= kinds2
+
+
+def test_update_check(client, test_db, monkeypatch):
+    """Kontrola nové verze: porovnání verzí, cache a chování offline."""
+    from app.routers import pages
+    monkeypatch.setattr(pages, "_fetch_latest_release",
+                        lambda: {"tag_name": "v99.0.0",
+                                 "html_url": "https://example.com/rel"})
+    monkeypatch.setitem(pages._update_cache, "ts", 0.0)
+    u = client.get("/api/update_check").json()
+    assert u["available"] is True and u["latest"] == "99.0.0"
+    assert u["url"] == "https://example.com/rel"
+
+    # stejná/starší verze → available False
+    monkeypatch.setattr(pages, "_fetch_latest_release",
+                        lambda: {"tag_name": "v0.1", "html_url": ""})
+    monkeypatch.setitem(pages._update_cache, "ts", 0.0)
+    assert client.get("/api/update_check").json()["available"] is False
+
+    # GitHub nedostupný → available None, žádná chyba
+    def _boom():
+        raise OSError("offline")
+    monkeypatch.setattr(pages, "_fetch_latest_release", _boom)
+    monkeypatch.setitem(pages._update_cache, "ts", 0.0)
+    u = client.get("/api/update_check").json()
+    assert u["available"] is None and u["latest"] is None

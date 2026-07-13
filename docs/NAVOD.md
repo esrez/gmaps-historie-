@@ -283,7 +283,33 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 | Logy | `docker compose logs -f` |
 | Interaktivní API | `http://server:8000/api/docs` |
 
-## 8. Řešení potíží
+## 8. Windows 11: tipy
+
+Aplikace nainstalovaná z `GMapsHistorie-Setup-*.exe` běží **bez černého okna**
+– po spuštění se objeví **ikona v systémové liště** (vedle hodin). Klik na ni
+otevře aplikaci v prohlížeči, pravý klik nabídne Knihu jízd a Ukončit.
+Výpisy programu najdete v `%LOCALAPPDATA%\GMapsHistorie\data\logs\app.log`.
+
+| Co | Jak |
+|---|---|
+| Automatický start | úloha „Spustit po přihlášení do Windows" v instalátoru (běží tiše v liště) |
+| Přístup z telefonu | úloha „Povolit přístup z domácí sítě" v instalátoru + spuštění s `HOST=0.0.0.0`; pak `http://IP-počítače:8000` |
+| Umístění dat | `%LOCALAPPDATA%\GMapsHistorie\data` (databáze, zálohy, logy) – při aktualizaci zůstává |
+| Jiný port | spustit s proměnnou `PORT=8080` (např. v zástupci: `cmd /c "set PORT=8080 && GMapsHistorie.exe"`) |
+| Aktualizace | aplikace 1× denně nenápadně zkontroluje nová vydání (vypnutí: `UPDATE_CHECK_URL=`); odkaz je v Nástroje → O aplikaci, ruční aktualizace přes zástupce „Aktualizovat GMaps Historie" |
+
+**Rychlejší import velkých Takeout ZIPů:** Windows Defender skenuje každý
+zápis do databáze. Pokud import několika GB trvá dlouho, přidejte složku
+`%LOCALAPPDATA%\GMapsHistorie` do výjimek: Zabezpečení Windows → Ochrana
+před viry a hrozbami → Spravovat nastavení → Vyloučení. Je to bezpečné –
+složka obsahuje jen vaši databázi a zálohy.
+
+**OneDrive:** data se ukládají mimo synchronizované složky (Dokumenty,
+Plocha), takže se databáze nesynchronizuje do cloudu – to je záměr
+(soukromí a rychlost). Zálohy si případně kopírujte ručně ze složky
+`…\GMapsHistorie\data\backups`.
+
+## 9. Řešení potíží
 
 - **Data se po importu nezobrazují na mapě** – klikněte v kartičce „Zobrazit
   všechna data" (nebo předvolbu **Vše**). Mapa mohla jen koukat jinam; kartička

@@ -24,6 +24,16 @@ for pkg in ("uvicorn", "reportlab", "openpyxl", "ijson", "tzdata", "anyio"):
     binaries += b
     hiddenimports += h
 
+# tray ikona (jen Windows; při buildu na jiné platformě balíčky chybí)
+for pkg in ("pystray", "PIL"):
+    try:
+        d, b, h = collect_all(pkg)
+        datas += d
+        binaries += b
+        hiddenimports += h
+    except Exception:
+        pass
+
 a = Analysis(
     ["run.py"],
     pathex=[],
@@ -51,7 +61,8 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,          # okno s logem; zavřením se aplikace ukončí
+    console=False,         # bez konzole – běží z ikony v systémové liště,
+                           # výpisy jdou do data/logs/app.log
     disable_windowed_traceback=False,
     icon="app/static/icon.ico" if __import__("os").path.exists("app/static/icon.ico") else None,
 )

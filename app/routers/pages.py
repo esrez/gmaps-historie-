@@ -1,8 +1,11 @@
 """Statické stránky, PWA, PMTiles, přihlášení."""
 from __future__ import annotations
 
+import json
 import os
 import secrets
+import time
+import urllib.request
 from contextlib import closing
 from datetime import datetime
 
@@ -95,6 +98,59 @@ def api_shutdown():
         raise HTTPException(403, "Ukončení je dostupné jen v desktopové aplikaci")
     runtime.request_shutdown()
     return {"ok": True, "message": "Aplikace se ukončuje…"}
+
+
+# -------- nenápadná kontrola nové verze (GitHub releases) ----------------
+# Vypnutí: UPDATE_CHECK_URL="" (nikam se pak nepřipojuje). Frontend se ptá
+# nejvýš 1× denně; server drží odpověď v paměti, ať GitHub nezatěžujeme.
+UPDATE_CHECK_URL = os.environ.get(
+    "UPDATE_CHECK_URL",
+    "https://api.github.com/repos/esrez/gmaps-historie-/releases/latest")
+_UPDATE_CACHE_S = 6 * 3600
+_update_cache: dict = {"ts": 0.0, "data": None}
+
+
+def _fetch_latest_release() -> dict:
+    """Stáhne metadata posledního vydání (oddělené kvůli testům)."""
+    req = urllib.request.Request(UPDATE_CHECK_URL, headers={
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "gmaps-historie",
+    })
+    with urllib.request.urlopen(req, timeout=4) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def _ver_tuple(v: str) -> tuple[int, ...]:
+    parts = []
+    for p in v.strip().lstrip("vV").split("."):
+        digits = "".join(ch for ch in p if ch.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+@router.get("/api/update_check")
+def api_update_check():
+    """Je k dispozici novější vydání? {current, latest, available, url}."""
+    if not UPDATE_CHECK_URL:
+        return {"current": APP_RELEASE, "latest": None, "available": None, "url": None}
+    now = time.time()
+    if now - _update_cache["ts"] > _UPDATE_CACHE_S:
+        try:
+            rel = _fetch_latest_release()
+            tag = str(rel.get("tag_name") or "").strip()
+            _update_cache["data"] = {
+                "latest": tag.lstrip("vV") or None,
+                "url": rel.get("html_url"),
+            }
+        except Exception:
+            _update_cache["data"] = None    # offline / GitHub nedostupný
+        _update_cache["ts"] = now
+    data = _update_cache["data"]
+    if not data or not data["latest"]:
+        return {"current": APP_RELEASE, "latest": None, "available": None, "url": None}
+    available = _ver_tuple(data["latest"]) > _ver_tuple(APP_RELEASE)
+    return {"current": APP_RELEASE, "latest": data["latest"],
+            "available": available, "url": data["url"]}
 
 
 @router.get("/api/update")
