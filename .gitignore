@@ -10,3 +10,5 @@ playwright-report/
 # PyInstaller výstupy
 build/
 dist/
+.coverage
+htmlcov/
