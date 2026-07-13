@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from .. import db, importer
 from ..core.events import event_bus
+from ..core.rate_limit import RateLimiter
 
 router = APIRouter(tags=["sync"])
 
@@ -57,9 +58,15 @@ def import_geojson_file(path: str) -> importer.Counters:
     return c
 
 
+_sync_limiter = RateLimiter(240)   # bodů za hodinu na IP – proti zahlcení
+
+
 @router.post("/api/sync/owntracks")
 async def api_owntracks(request: Request):
     """OwnTracks HTTP webhook – přijme JSON polohu a uloží bod."""
+    client = request.client.host if request.client else "?"
+    if not _sync_limiter.allow(client):
+        raise HTTPException(429, "Příliš mnoho požadavků – zkuste to později")
     try:
         body = await request.json()
     except Exception as exc:
@@ -82,6 +89,9 @@ async def api_owntracks(request: Request):
 
 @router.post("/api/sync/gpx")
 async def api_sync_gpx(request: Request):
+    client = request.client.host if request.client else "?"
+    if not _sync_limiter.allow(client):
+        raise HTTPException(429, "Příliš mnoho požadavků – zkuste to později")
     body = await request.body()
     import os
     import tempfile

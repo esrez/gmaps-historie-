@@ -61,15 +61,16 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_session(response: Response) -> str:
+def create_session(response: Response, secure: bool = False) -> str:
     token = _session_token()
     with _lock:
         _prune()
         _sessions[_hash_token(token)] = time.time() + SESSION_MAX_AGE
         _persist()
+    # secure=True při HTTPS (i za reverse proxy) – cookie neunikne přes HTTP
     response.set_cookie(
         "gmaps_session", token, httponly=True, samesite="lax",
-        max_age=SESSION_MAX_AGE, path="/",
+        max_age=SESSION_MAX_AGE, path="/", secure=secure,
     )
     return token
 

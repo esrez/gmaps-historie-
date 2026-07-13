@@ -448,3 +448,38 @@ def test_update_package_served(client, test_db, tmp_path, monkeypatch):
     r = client.get("/api/update/package")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/zip"
+
+
+def test_purge_range_with_backup(client, test_db, tmp_path, monkeypatch):
+    """Smazání období: dry-run jen počítá; ostrý běh nejdřív zazálohuje,
+    smaže jen zvolené rozmezí a přepočítá agregace."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    seed(test_db, tmp_path)
+    before = client.get("/api/range").json()
+    # den 2. 6. 2025 (první den fixture)
+    day = {"from_ts": 1748815200, "to_ts": 1748901599}
+    dry = client.post("/api/purge_range", params={**day, "dry_run": True}).json()
+    assert dry["dry_run"] is True and dry["points"] == 20
+    assert client.get("/api/range").json()["points"] == before["points"]
+
+    res = client.post("/api/purge_range", params={**day, "dry_run": False}).json()
+    assert res["dry_run"] is False and res["points"] == 20
+    assert res["backup"] and res["backup"].startswith("history-")
+    assert (tmp_path / "backups" / res["backup"]).exists()
+    after = client.get("/api/range").json()
+    assert after["points"] == before["points"] - 20
+    assert after["visits"] == before["visits"] - 1
+
+
+def test_login_sets_secure_cookie_behind_https_proxy(client, test_db, tmp_path,
+                                                     monkeypatch):
+    from app.core import config
+    monkeypatch.setattr(config, "AUTH_PASSWORD", "tajne")
+    import app.routers.pages as pages
+    monkeypatch.setattr(pages, "AUTH_PASSWORD", "tajne")
+    r = client.post("/api/login", json={"password": "tajne"},
+                    headers={"x-forwarded-proto": "https"})
+    assert r.status_code == 200
+    assert "Secure" in r.headers.get("set-cookie", "")
+    r2 = client.post("/api/login", json={"password": "tajne"})
+    assert "Secure" not in r2.headers.get("set-cookie", "")

@@ -56,6 +56,45 @@ def api_quality(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
     }
 
 
+@router.post("/api/purge_range")
+def api_purge_range(from_ts: int = Query(...), to_ts: int = Query(...),
+                    dry_run: bool = Query(True)):
+    """Smaže VŠECHNA polohová data ve zvoleném období (soukromí) – body,
+    návštěvy i cesty. Kniha jízd zůstává. Před skutečným smazáním se
+    automaticky vytvoří záloha, takže krok jde vrátit obnovou."""
+    with closing(db.connect()) as conn:
+        counts = {
+            "points": conn.execute(
+                "SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?",
+                (from_ts, to_ts)).fetchone()["c"],
+            "visits": conn.execute(
+                "SELECT COUNT(*) c FROM visits WHERE start_ts BETWEEN ? AND ?",
+                (from_ts, to_ts)).fetchone()["c"],
+            "activities": conn.execute(
+                "SELECT COUNT(*) c FROM activities WHERE start_ts BETWEEN ? AND ?",
+                (from_ts, to_ts)).fetchone()["c"],
+        }
+    total = sum(counts.values())
+    if dry_run or total == 0:
+        return {"dry_run": True, **counts, "backup": None}
+
+    import os
+
+    from ..core.backup import make_backup
+    backup = make_backup()                      # pojistka před destrukcí
+    with closing(db.connect()) as conn:
+        conn.execute("DELETE FROM points WHERE ts BETWEEN ? AND ?",
+                     (from_ts, to_ts))
+        conn.execute("DELETE FROM visits WHERE start_ts BETWEEN ? AND ?",
+                     (from_ts, to_ts))
+        conn.execute("DELETE FROM activities WHERE start_ts BETWEEN ? AND ?",
+                     (from_ts, to_ts))
+        conn.commit()
+        conn.execute("VACUUM")
+        db.after_import(conn)                   # přepočet agregací (kalendář…)
+    return {"dry_run": False, **counts, "backup": os.path.basename(backup)}
+
+
 @router.post("/api/cleanup")
 def api_cleanup(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                 remove_low_accuracy: bool = Query(True),

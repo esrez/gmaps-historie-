@@ -36,7 +36,9 @@ def api_login(body: LoginBody, request: Request):
     note_login_ok(ip)
     resp = Response(content='{"ok":true}')
     resp.media_type = "application/json"
-    create_session(resp)
+    https = (request.url.scheme == "https"
+             or request.headers.get("x-forwarded-proto", "").startswith("https"))
+    create_session(resp, secure=https)
     return resp
 
 

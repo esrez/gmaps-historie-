@@ -36,6 +36,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/autoimport` | GET | log souborů zpracovaných ze složky `data/import/` |
 | `/api/quality` | GET | kontrola: nepřesné body (`accuracy_limit`), teleporty, vadné návštěvy, duplicitní cesty, dny bez dat |
 | `/api/cleanup` | POST | opravy; `dry_run=true` jen počítá; přepínače `remove_*`; po skutečném mazání VACUUM |
+| `/api/purge_range` | POST | smaže všechna polohová data v rozmezí (`from_ts`, `to_ts`); `dry_run=true` jen počítá; před ostrým během automatická záloha |
 | `/api/backup` | GET | stáhne čerstvou zálohu databáze (a založí ji do rotace) |
 | `/api/backups` | GET | seznam dostupných záloh (jméno, velikost, čas) |
 | `/api/restore` | POST | obnoví DB z vybrané zálohy (`name`); současný stav se předtím zazálohuje |
@@ -82,4 +83,6 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 
 Je-li nastaveno `AUTH_PASSWORD`, všechny cesty vyžadují HTTP Basic
 (uživatelské jméno libovolné). Bez něj je API otevřené – provozujte jen
-v důvěryhodné síti.
+v důvěryhodné síti. Session cookie dostává `Secure` flag, když požadavek
+přijde přes HTTPS (funguje i za reverse proxy díky `X-Forwarded-Proto`).
+Přihlášení i sync endpointy mají rate-limit proti zahlcení/hádání hesla.

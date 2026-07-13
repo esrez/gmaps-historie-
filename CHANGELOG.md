@@ -41,6 +41,15 @@
 - **ukázková data** na jedno kliknutí pro vyzkoušení bez vlastního exportu
 - připomínka, když jsou data starší 30 dní
 
+### Soukromí a provoz
+- **smazání období**: všechna polohová data ve zvoleném rozmezí jdou smazat
+  (dovolená apod.); před smazáním se automaticky vytvoří záloha
+- session cookie dostává **Secure** flag při provozu přes HTTPS (i za
+  reverse proxy); rate-limit na sync endpointy (OwnTracks/GPX)
+- mobil: **Wake Lock** (displej nezhasíná při přehrávání dne) a tlačítko
+  „Nainstalovat jako aplikaci" (PWA)
+- CI: build Windows .exe při tagu vydá **GitHub Release** s binárkami
+
 ### Aplikace
 - vlastní dialogy místo systémových, klávesové zkratky s nápovědou (?),
   stav aplikace v „O aplikaci" (velikost DB, poslední záloha, kontrola

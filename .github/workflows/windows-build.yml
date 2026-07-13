@@ -18,6 +18,9 @@ on:
       - "build-windows-*.bat"
       - ".github/workflows/windows-build.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -87,3 +90,27 @@ jobs:
           $(Get-ChildItem dist/GMapsHistorie.exe, dist/GMapsHistorie-update.zip, "dist/GMapsHistorie-Setup-$v.exe" | ForEach-Object { "| $($_.Name) | $([math]::Round($_.Length/1MB, 1)) MB |" })
           Stáhněte ZIP v sekci **Artifacts** tohoto běhu.
           "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Extract changelog section
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          # vytáhne první sekci "## x.y.z" z CHANGELOG.md jako popis Release
+          $lines = Get-Content CHANGELOG.md
+          $out = @(); $inside = $false
+          foreach ($l in $lines) {
+            if ($l -match '^## ') { if ($inside) { break }; $inside = $true; continue }
+            if ($inside) { $out += $l }
+          }
+          $out -join "`n" | Set-Content RELEASE_BODY.md
+
+      - name: Create GitHub Release (jen pro tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: GMaps Historie ${{ steps.ver.outputs.version }}
+          body_path: RELEASE_BODY.md
+          files: |
+            dist/GMapsHistorie.exe
+            dist/GMapsHistorie-update.zip
+            dist/GMapsHistorie-Setup-${{ steps.ver.outputs.version }}.exe
