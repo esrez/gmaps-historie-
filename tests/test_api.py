@@ -507,3 +507,16 @@ def test_insights(client, test_db, tmp_path):
     r = ins["routes_geo"][0]
     assert {r["from"], r["to"]} == {"Domov", "Práce"}
     assert abs(r["from_lat"] - HOME[0]) < 0.01 or abs(r["to_lat"] - HOME[0]) < 0.01
+
+
+def test_heatmap_modes_and_hours(client, test_db, tmp_path):
+    """Heatmapa: režim visits váží délkou pobytu; filtr hodin omezí body."""
+    seed(test_db, tmp_path)
+    vis = client.get("/api/heatmap?mode=visits").json()["cells"]
+    assert vis, "návštěvy z fixture se mají objevit"
+    assert vis[0][2] >= 3600 * 5          # 5 pobytů po ~7,3 h → velká váha
+    # body jsou 8:00–8:40 → ranní filtr je zachytí, noční ne
+    morning = client.get("/api/heatmap?hour_from=5&hour_to=9").json()["cells"]
+    night = client.get("/api/heatmap?hour_from=22&hour_to=5").json()["cells"]
+    assert sum(c[2] for c in morning) == 100
+    assert night == []

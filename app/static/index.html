@@ -104,6 +104,19 @@
         <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
         <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
         <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
+        <div class="row heatOpts" style="gap:6px">
+          <select id="heatMode" title="Co má heatmapa ukazovat">
+            <option value="points">pohyb (kudy jezdím)</option>
+            <option value="visits">strávený čas (kde pobývám)</option>
+          </select>
+          <select id="heatHours" title="Jen část dne – např. kde bývám večer">
+            <option value="">celý den</option>
+            <option value="5-9">ráno 5–9</option>
+            <option value="9-17">den 9–17</option>
+            <option value="17-22">večer 17–22</option>
+            <option value="22-5">noc 22–5</option>
+          </select>
+        </div>
         <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
         <label class="check"><input type="checkbox" id="layerMyPlaces" checked> Moje místa (názvy)</label>
         <label class="check" title="Zobrazit jen body z vybraného způsobu dopravy">

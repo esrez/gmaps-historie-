@@ -241,6 +241,7 @@ const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
   "geoOnline", "trackColorMode", "roadSnap", "statRadius", "statRoutes",
+  "heatMode", "heatHours",
 ];
 
 function loadMapSettings() {
@@ -480,6 +481,20 @@ function viewportParams() {
   };
 }
 
+/* Režim heatmapy: pohyb (body, volitelně jen část dne) × strávený čas. */
+function heatParams() {
+  const out = { mode: $("heatMode")?.value || "points" };
+  const hrs = $("heatHours")?.value;
+  if (out.mode === "points" && hrs) {
+    const [f, t] = hrs.split("-").map(Number);
+    out.hour_from = f;
+    out.hour_to = t;
+  }
+  return out;
+}
+["heatMode", "heatHours"].forEach((id) =>
+  $(id)?.addEventListener("change", () => loadMapData()));
+
 let mapAbort = null;
 
 async function loadMapData() {
@@ -492,7 +507,7 @@ async function loadMapData() {
   try {
     const [pts, heat] = await Promise.all([
       apiFetch("/api/points", { params: r, signal: ctrl.signal }),
-      apiFetch("/api/heatmap", { params: r, signal: ctrl.signal }),
+      apiFetch("/api/heatmap", { params: { ...r, ...heatParams() }, signal: ctrl.signal }),
     ]);
     state.points = pts.points;
     state.breaks = pts.breaks || [];
@@ -1606,6 +1621,44 @@ const CAL_REC = "#cfe3fb";   // záznam polohy bez rozpoznané jízdy
 const CAL_STEPS = ["#9ec5f4", "#6da7ec", "#3987e5", "#1c5cab", "#0d366b"];
 let calYear = new Date().getFullYear();
 
+/* Duchový náhled dne: po najetí na den v kalendáři se na mapě ukáže
+   jeho stopa (čárkovaně červeně) – bez klikání hned vidíte, kudy den vedl. */
+const dayPreviewLayer = L.layerGroup().addTo(map);
+const dayPreviewCache = new Map();
+let dayPreviewTimer = null;
+let dayPreviewGen = 0;
+
+function clearDayPreview() {
+  clearTimeout(dayPreviewTimer);
+  dayPreviewGen++;
+  dayPreviewLayer.clearLayers();
+}
+
+function showDayPreview(iso) {
+  clearTimeout(dayPreviewTimer);
+  const myGen = ++dayPreviewGen;
+  dayPreviewTimer = setTimeout(async () => {
+    let day = dayPreviewCache.get(iso);
+    if (!day) {
+      const from_ts = dateToTs(iso, false);
+      try {
+        day = await api("/api/day", { from_ts, to_ts: from_ts + 86400 });
+      } catch (e) { return; }
+      if (dayPreviewCache.size > 90) dayPreviewCache.clear();
+      dayPreviewCache.set(iso, day);
+    }
+    if (myGen !== dayPreviewGen) return;   // kurzor už je jinde
+    dayPreviewLayer.clearLayers();
+    for (const seg of splitSegments(day.points)) {
+      L.polyline(seg.map((p) => [p[1], p[2]]), {
+        color: css("--accent-red"), weight: 3, opacity: 0.75,
+        dashArray: "6 5", interactive: false,
+        lineJoin: "round", lineCap: "round",
+      }).addTo(dayPreviewLayer);
+    }
+  }, 200);   // krátká prodleva – přejezd přes kalendář nestřílí dotazy
+}
+
 async function renderCalendar() {
   $("calYear").textContent = calYear;
   const el = $("calendar");
@@ -1649,7 +1702,7 @@ async function renderCalendar() {
     }
     if (d.getDate() === 1) months.push([col, d.toLocaleDateString("cs", { month: "short" })]);
     const recAttr = hasRecord ? ` data-rec="${info.km > 0 ? "km" : "pos"}"` : "";
-    svg += `<rect x="${col * (cell + gap)}" y="${14 + row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="0.75" data-d="${iso}"${recAttr}><title>${d.toLocaleDateString("cs")} – ${tip}</title></rect>`;
+    svg += `<rect x="${col * (cell + gap)}" y="${14 + row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="0.75" data-d="${iso}"${recAttr} data-tip="${d.toLocaleDateString("cs")} – ${tip}"></rect>`;
   }
   const weeks = Math.ceil((365 + startCol) / 7) + 1;
   const width = weeks * (cell + gap);
@@ -1658,11 +1711,26 @@ async function renderCalendar() {
   el.innerHTML =
     `<svg viewBox="0 0 ${width} ${14 + 7 * (cell + gap)}" role="img" ` +
     `aria-label="Kalendář najetých km v roce ${calYear}">${monthLabels}${svg}</svg>`;
-  el.querySelectorAll("rect[data-d]").forEach((r) =>
+  dayPreviewCache.clear();   // po překreslení (novém roce/importu) čerstvá data
+  el.querySelectorAll("rect[data-d]").forEach((r) => {
     r.addEventListener("click", () => {
       $("playDate").value = r.dataset.d;
       playDay();
-    }));
+    });
+    // najetí: tooltip s detaily dne + duchový náhled stopy na mapě
+    r.addEventListener("mousemove", (ev) => {
+      tooltip.innerHTML = `<span class="t-label">${r.dataset.tip}</span>` +
+        (r.dataset.rec ? " <b>· kliknutím přehrajete</b>" : "");
+      tooltip.hidden = false;
+      tooltip.style.left = ev.clientX + 12 + "px";
+      tooltip.style.top = ev.clientY - 10 + "px";
+      if (r.dataset.rec) showDayPreview(r.dataset.d);
+    });
+    r.addEventListener("mouseleave", () => {
+      tooltip.hidden = true;
+      clearDayPreview();
+    });
+  });
 }
 
 initYearCard(() => calYear);   // karta souhrnu roku zobrazeného v kalendáři

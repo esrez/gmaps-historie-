@@ -15,6 +15,10 @@
   automaticky dotáhne detail výřezu a vrátí interaktivita
 
 ### Mapa
+- **heatmapa s režimy**: pohyb (kudy jezdím, volitelně jen ráno/den/
+  večer/noc) × strávený čas (kde pobývám, váha = délka pobytu)
+- **kalendář s náhledem**: najetí na den ukáže tooltip (km, body) a
+  čárkovanou stopu dne na mapě; klik den přehraje
 - **časosběr měsíců**: animace historie měsíc po měsíci (starší trasy
   blednou, aktuální zvýrazněný; posuvník, rychlost ½–4×)
 - **měření vzdálenosti** (M) a **export výřezu do PNG** s razítkem období

@@ -64,6 +64,10 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Období** – od/do nebo předvolby (7/30/90 dní, Rok, Letos, Loni, Vše).
 - **Vrstvy** – Trasy (klik = přehrát den), Jednotlivé body (čas po najetí),
   Heatmapa, Navštívená místa (velikost = strávený čas; při oddálení se shlukují).
+- **Heatmapa s režimy** – „pohyb" ukáže, kudy jezdíte (hustota GPS bodů,
+  volitelně jen ráno/den/večer/noc – např. kde býváte večer), „strávený čas"
+  ukáže, kde pobýváte (váha = délka pobytu). Heatmapa tak slouží i jako
+  další pohled na statistiky.
 - **Detail podle výřezu** – při zoomu se automaticky dotáhne plný detail
   viditelné oblasti. Vypnutím se vrátí jeden vzorek pro celé období.
 - **Podkladové mapy** – přepínač vpravo nahoře (OSM, světlá, tmavá, satelit).

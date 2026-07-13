@@ -48,9 +48,35 @@ def api_points(from_ts: int | None = Query(None), to_ts: int | None = Query(None
 def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(None),
                 precision: int = Query(4, ge=2, le=6),
                 min_lat: float | None = Query(None), max_lat: float | None = Query(None),
-                min_lon: float | None = Query(None), max_lon: float | None = Query(None)):
+                min_lon: float | None = Query(None), max_lon: float | None = Query(None),
+                mode: str = Query("points"),
+                hour_from: int | None = Query(None, ge=0, le=23),
+                hour_to: int | None = Query(None, ge=0, le=23)):
+    """Heatmapa ve dvou režimech: `points` = kudy se pohybuji (hustota GPS
+    bodů, volitelně jen v části dne), `visits` = kde trávím čas (váha =
+    délka pobytu). Umožňuje heatmapou zobrazit i další statistiky."""
     lo, hi = ts_range(from_ts, to_ts)
     bsql, bargs = bbox_sql(min_lat, max_lat, min_lon, max_lon)
+
+    if mode == "visits":
+        with closing(db.connect()) as conn:
+            rows = conn.execute(
+                f"SELECT ROUND(lat,?) la, ROUND(lon,?) lo, "
+                f"SUM(MAX(end_ts - start_ts, 60)) c FROM visits "
+                f"WHERE start_ts BETWEEN ? AND ?{bsql} "
+                f"GROUP BY la, lo ORDER BY c DESC LIMIT ?",
+                (precision, precision, lo, hi, *bargs, MAX_HEAT_CELLS)).fetchall()
+        return {"cells": [[r["la"], r["lo"], r["c"]] for r in rows]}
+
+    # filtr denní doby (rozsah smí překročit půlnoc, např. noc 22–5)
+    hsql, hargs = "", ()
+    if hour_from is not None and hour_to is not None:
+        col = "CAST(strftime('%H', ts, 'unixepoch', 'localtime') AS INT)"
+        if hour_from <= hour_to:
+            hsql, hargs = f" AND {col} BETWEEN ? AND ?", (hour_from, hour_to)
+        else:
+            hsql, hargs = f" AND ({col} >= ? OR {col} <= ?)", (hour_from, hour_to)
+
     with closing(db.connect()) as conn:
         # U milionů bodů se agreguje jen každý N-tý bod a počty se krokem
         # přenásobí – hustota (relativní intenzita) zůstává, dotaz je rychlý.
@@ -62,9 +88,10 @@ def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
         sargs = (step,) if step > 1 else ()
         rows = conn.execute(
             f"SELECT ROUND(lat,?) la, ROUND(lon,?) lo, COUNT(*) * ? c FROM points "
-            f"WHERE ts BETWEEN ? AND ?{bsql}{ssql} "
+            f"WHERE ts BETWEEN ? AND ?{bsql}{hsql}{ssql} "
             f"GROUP BY la, lo ORDER BY c DESC LIMIT ?",
-            (precision, precision, step, lo, hi, *bargs, *sargs, MAX_HEAT_CELLS)).fetchall()
+            (precision, precision, step, lo, hi, *bargs, *hargs, *sargs,
+             MAX_HEAT_CELLS)).fetchall()
     return {"cells": [[r["la"], r["lo"], r["c"]] for r in rows]}
 
 

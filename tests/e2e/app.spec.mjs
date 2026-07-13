@@ -266,6 +266,46 @@ test.describe("mapa", () => {
     expect(res.status()).toBe(409);
   });
 
+  test("kalendář: najetí ukáže tooltip s detaily a náhled dne na mapě", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.click('#tabs [data-tab="stat"]');
+    await page.locator("#calendar svg").waitFor();
+    const day = page.locator('#calendar rect[data-rec="km"]').first();
+    await day.hover();
+    // vlastní tooltip s km a nápovědou ke kliknutí
+    await expect(page.locator("#tooltip")).toBeVisible();
+    await expect(page.locator("#tooltip")).toContainText("km");
+    await expect(page.locator("#tooltip")).toContainText("kliknutím přehrajete");
+    // duchový náhled se dotáhne přes /api/day (debounce ~200 ms)
+    const reqDay = page.waitForRequest((r) => r.url().includes("/api/day"), { timeout: 5000 });
+    await day.hover({ position: { x: 2, y: 2 } });
+    await reqDay;
+    // den bez záznamu: tooltip říká „bez záznamu" a nic nenačítá
+    const empty = page.locator('#calendar rect[data-d]:not([data-rec])').first();
+    await empty.hover();
+    await expect(page.locator("#tooltip")).toContainText("bez záznamu");
+  });
+
+  test("heatmapa: režim strávený čas a denní doba fungují", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.check("#layerHeat");
+    // režim „strávený čas" pošle mode=visits
+    const reqVisits = page.waitForRequest((r) =>
+      r.url().includes("/api/heatmap") && r.url().includes("mode=visits"));
+    await page.selectOption("#heatMode", "visits");
+    await reqVisits;
+    // filtr denní doby pošle hour_from/hour_to (jen v režimu pohyb)
+    await page.selectOption("#heatMode", "points");
+    const reqHours = page.waitForRequest((r) =>
+      r.url().includes("hour_from=17") && r.url().includes("hour_to=22"));
+    await page.selectOption("#heatHours", "17-22");
+    await reqHours;
+  });
+
   test("časosběr měsíců: animace běží, posuvník i Esc fungují", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() =>

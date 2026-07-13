@@ -10,7 +10,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 |---|---|---|
 | `/api/range` | GET | rozsah dat a počty záznamů v databázi |
 | `/api/points` | GET | GPS body; `limit` (vzorkování), volitelný výřez `min_lat`/`max_lat`/`min_lon`/`max_lon`; `breaks` = indexy začátků souvislých úseků (klient podle nich kreslí čáry) |
-| `/api/heatmap` | GET | agregované buňky; `precision` = desetinná místa mřížky (2–6), volitelný výřez |
+| `/api/heatmap` | GET | agregované buňky; `precision` (2–6), volitelný výřez; `mode=points|visits` (pohyb × strávený čas), `hour_from`/`hour_to` filtr denní doby (smí přes půlnoc) |
 | `/api/visits` | GET | navštívená místa se jmény a časy |
 | `/api/day` | GET | body + návštěvy + cesty jednoho dne (`from_ts`, `to_ts` povinné) |
 | `/api/match_day` | GET | přichytí stopu dne k silniční síti (online OSRM; opt-in, cachováno; 502 bez internetu) |
