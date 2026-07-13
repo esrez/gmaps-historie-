@@ -8,6 +8,8 @@ import { typeLabel, tile, trend, sparkline, renderRecords,
 import { initEventStream } from "./sync-events.js";
 import { transportParam, renderNewPlaces } from "./map-filters.js";
 import { DayScrubber, initSpeedButtons, formatPlayClock, daySummaryText } from "./day-playback.js";
+import { initMapTools } from "./map-tools.js";
+import { initImportUi, startImport } from "./import-ui.js";
 
 initThemeToggle($("themeBtn"));
 mountIcons();
@@ -17,7 +19,7 @@ mountIcons();
 document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
   btn.addEventListener("click", () => {
     if (drawState.active) drawCleanup();   // přepnutím se nesmí zaseknout kreslení oblasti
-    if (measureState.active || measureState.layer) measureCleanup();
+    if (mapTools.measureBusy()) measureCleanup();
     document.querySelectorAll("#tabs .tab-btn").forEach((b) =>
       b.classList.toggle("active", b === btn));
     document.querySelectorAll(".tab-page").forEach((p) =>
@@ -1017,185 +1019,17 @@ function startPlaceEdit(card, p) {
 $("placeSearch").addEventListener("input", drawPlacesList);
 $("placeSort").addEventListener("change", drawPlacesList);
 
-// ------------------------------------------------- měření vzdálenosti
+// --------------------------- měření a export PNG (modul map-tools.js)
 
-const measureState = { active: false, pts: [], layer: null, readout: null };
-
-function fmtDist(m) {
-  return m < 1000 ? `${Math.round(m)} m`
-    : `${(m / 1000).toLocaleString("cs", { maximumFractionDigits: m < 10000 ? 2 : 1 })} km`;
-}
-
-function measureCleanup() {
-  measureState.active = false;
-  measureState.pts = [];
-  if (measureState.layer) { map.removeLayer(measureState.layer); measureState.layer = null; }
-  if (measureState.readout) { measureState.readout.remove(); measureState.readout = null; }
-  map.off("click", measureClick);
-  map.off("mousemove", measureMove);
-  map.off("dblclick", measureFinish);
-  map.getContainer().style.cursor = "";
-  map.doubleClickZoom.enable();
-  $("measureBtn").innerHTML = `${icon("ruler")} Měřit vzdálenost`;
-}
-
-function measureTotal(extra) {
-  let sum = 0;
-  const pts = extra ? [...measureState.pts, extra] : measureState.pts;
-  for (let i = 1; i < pts.length; i++) sum += map.distance(pts[i - 1], pts[i]);
-  return sum;
-}
-
-function redrawMeasure(hoverLatLng) {
-  if (measureState.layer) map.removeLayer(measureState.layer);
-  const g = L.layerGroup();
-  const line = measureState.pts.map((p) => [p.lat, p.lng]);
-  if (hoverLatLng && measureState.pts.length)
-    line.push([hoverLatLng.lat, hoverLatLng.lng]);
-  if (line.length >= 2) {
-    L.polyline(line, { color: css("--accent-red") || "#d64545", weight: 3,
-                       dashArray: hoverLatLng ? "5 6" : null, renderer: canvasRenderer }).addTo(g);
-  }
-  measureState.pts.forEach((p, i) => {
-    L.circleMarker([p.lat, p.lng], { radius: 4, color: css("--accent-red") || "#d64545",
-      weight: 2, fillColor: "#fff", fillOpacity: 1, renderer: canvasRenderer }).addTo(g);
-    if (i > 0) {
-      let cum = 0;
-      for (let k = 1; k <= i; k++) cum += map.distance(measureState.pts[k - 1], measureState.pts[k]);
-      L.marker([p.lat, p.lng], { interactive: false, opacity: 0,
-        icon: L.divIcon({ className: "measureLbl", html: fmtDist(cum),
-                          iconSize: [0, 0], iconAnchor: [-6, 8] }) }).addTo(g);
-    }
-  });
-  g.addTo(map);
-  measureState.layer = g;
-  const total = measureTotal(hoverLatLng && measureState.pts.length ? hoverLatLng : null);
-  updateMeasureReadout(total);
-}
-
-function updateMeasureReadout(total) {
-  if (!measureState.readout) {
-    const el = document.createElement("div");
-    el.id = "measureReadout";
-    el.className = "floating";
-    document.getElementById("app").appendChild(el);
-    measureState.readout = el;
-  }
-  const n = measureState.pts.length;
-  measureState.readout.innerHTML =
-    `${icon("ruler", 14)} <b>${fmtDist(total)}</b>` +
-    (n < 2 ? ' <span class="muted">– klikejte do mapy</span>'
-           : ` <span class="muted">· ${n} bodů · dvojklik/Esc ukončí</span>`);
-}
-
-function measureClick(e) { measureState.pts.push(e.latlng); redrawMeasure(); }
-function measureMove(e) { if (measureState.pts.length) redrawMeasure(e.latlng); }
-function measureFinish() {
-  if (measureState.pts.length >= 2) {
-    redrawMeasure();   // dvojklik nepřiblíží (doubleClickZoom je vypnutý)
-    toast(`Naměřeno ${fmtDist(measureTotal())}. Měření ukončeno.`, "success");
-  }
-  // ponechá čáru vykreslenou, jen ukončí režim přidávání
-  measureState.active = false;
-  map.off("click", measureClick);
-  map.off("mousemove", measureMove);
-  map.off("dblclick", measureFinish);
-  map.getContainer().style.cursor = "";
-  map.doubleClickZoom.enable();
-  $("measureBtn").innerHTML = `${icon("ruler")} Měřit znovu`;
-}
-
-function startMeasure() {
-  if (drawState.active) drawCleanup();
-  if (geomState.active) geomCleanup();
-  measureCleanup();
-  measureState.active = true;
-  map.doubleClickZoom.disable();
-  map.getContainer().style.cursor = "crosshair";
-  map.on("click", measureClick);
-  map.on("mousemove", measureMove);
-  map.on("dblclick", measureFinish);
-  $("measureBtn").innerHTML = `${icon("x")} Ukončit měření`;
-  updateMeasureReadout(0);
-  toast("Klikáním do mapy měřte vzdálenost trasy. Dvojklik nebo Esc ukončí.");
-}
-
-$("measureBtn").addEventListener("click", () => {
-  if (measureState.active) { measureCleanup(); return; }   // probíhá měření → ukončit a smazat
-  startMeasure();   // i s hotovou čarou: startMeasure ji uvnitř smaže a začne nové (Esc jen smaže)
+const mapTools = initMapTools({
+  map, canvasRenderer, css,
+  beforeMeasure: () => {   // zavřít konkurenční režimy kreslení
+    if (drawState.active) drawCleanup();
+    if (geomState.active) geomCleanup();
+  },
 });
+const measureCleanup = mapTools.measureCleanup;
 
-// ------------------------------------------------- export mapy do PNG
-
-async function exportMapPng() {
-  const btn = $("exportPngBtn");
-  btn.disabled = true;
-  const orig = btn.innerHTML;
-  btn.innerHTML = `${icon("image")} Připravuji…`;
-  try {
-    const size = map.getSize();
-    const canvas = document.createElement("canvas");
-    canvas.width = size.x;
-    canvas.height = size.y;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = css("--surface-1") || "#ffffff";
-    ctx.fillRect(0, 0, size.x, size.y);
-    const base = map.getContainer().getBoundingClientRect();
-
-    // 1) podkladové dlaždice (img) v pořadí, jak leží v DOM
-    const tiles = [...map.getContainer().querySelectorAll(".leaflet-tile-pane img.leaflet-tile")]
-      .filter((im) => im.complete && im.naturalWidth && (im.style.opacity === "" || Number(im.style.opacity) > 0.1));
-    for (const im of tiles) {
-      const r = im.getBoundingClientRect();
-      try { ctx.drawImage(im, r.left - base.left, r.top - base.top, r.width, r.height); }
-      catch (e) { /* ojedinělou dlaždici přeskoč */ }
-    }
-    // 2) vektorové/heat/webgl vrstvy – všechny <canvas> v mapě (canvas→canvas netaintuje)
-    for (const cv of map.getContainer().querySelectorAll("canvas")) {
-      if (!cv.width || !cv.height) continue;
-      const r = cv.getBoundingClientRect();
-      try { ctx.drawImage(cv, r.left - base.left, r.top - base.top, r.width, r.height); }
-      catch (e) { /* WebGL bez preserveDrawingBuffer se přeskočí */ }
-    }
-    // 3) razítko dole: období + atribuce
-    stampMap(ctx, size);
-
-    let url;
-    try { url = canvas.toDataURL("image/png"); }
-    catch (e) {
-      toast("Export se nezdařil kvůli ochraně dlaždic (CORS). Zkuste jiný podklad " +
-            "(OpenStreetMap) a načtěte mapu znovu.", "error");
-      return;
-    }
-    const tag = ($("dateFrom").value || "vse") + "_" + ($("dateTo").value || "vse");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `mapa-${tag}.png`;
-    a.click();
-    toast("Mapa uložena jako PNG.", "success");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-  }
-}
-
-function stampMap(ctx, size) {
-  const period = ($("dateFrom").value || $("dateTo").value)
-    ? `Období: ${$("dateFrom").value || "…"} – ${$("dateTo").value || "…"}`
-    : "Všechna data";
-  const attr = "© OpenStreetMap · GMaps Historie";
-  ctx.font = "12px system-ui, sans-serif";
-  const pad = 6, h = 20;
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, size.y - h, size.x, h);
-  ctx.fillStyle = "#fff";
-  ctx.textBaseline = "middle";
-  ctx.fillText(period, pad, size.y - h / 2);
-  const w = ctx.measureText(attr).width;
-  ctx.fillText(attr, size.x - w - pad, size.y - h / 2);
-}
-
-$("exportPngBtn").addEventListener("click", exportMapPng);
 
 // ------------------------------------------- kreslení oblasti (polygon)
 
@@ -1784,7 +1618,7 @@ document.addEventListener("keydown", (e) => {
     toast("Úprava tvaru zrušena.");
     return;
   }
-  if (e.key === "Escape" && (measureState.active || measureState.layer)) {
+  if (e.key === "Escape" && mapTools.measureBusy()) {
     measureCleanup();
     return;
   }
@@ -1840,7 +1674,7 @@ map.on("click", (e) => {
     addDrawVertex(e.latlng.lat, e.latlng.lng);
     return;
   }
-  if (geomState.active || measureState.active) return;   // při úpravě/měření klik nic neotvírá
+  if (geomState.active || mapTools.measureActive()) return;   // při úpravě/měření klik nic neotvírá
   const { lat, lng } = e.latlng;
   const div = document.createElement("div");
   const btn = document.createElement("button");
@@ -2167,158 +2001,14 @@ $("cleanupBtn").addEventListener("click", async () => {
   }
 });
 
-// ----------------------------------------------------------------- import
+// --------------------------------------- import dat (modul import-ui.js)
 
-// stav importu se ukazuje v Nástrojích i (běží-li) v okně průvodce
-function setImportStatus(msg) {
-  $("importStatus").textContent = msg;
-  const w = document.getElementById("wizImportStatus");
-  if (w) w.textContent = msg;
-}
+initImportUi({
+  onImported: () => { loadPlaceSuggest(); showAllData(); },
+  wizardOpen: () => !$("wizard").hidden,
+  closeWizardSoon: () => setTimeout(closeWizard, 1800),
+});
 
-async function startImport(file) {
-  if (!file) { toast("Nejdřív vyberte soubor k importu.", "error"); return; }
-  const fd = new FormData();
-  fd.append("file", file);
-  $("importBtn").disabled = true;
-  setImportStatus(`Nahrávám ${file.name} …`);
-  try {
-    const res = await fetch("/api/import", { method: "POST", body: fd });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.detail || res.status);
-    await watchImport(body.job_id);   // import běží na pozadí, sledujeme průběh
-  } catch (e) {
-    setImportStatus("Import selhal: " + e.message);
-    toast("Import selhal", "error");
-    $("importBtn").disabled = false;
-  }
-}
-
-$("importBtn").addEventListener("click", () => startImport($("importFile").files[0]));
-
-async function watchImport(jobId) {
-  const fmt = (v) => v.toLocaleString("cs");
-  while (true) {
-    let s;
-    try {
-      s = await api(`/api/import/status/${jobId}`);
-    } catch (e) {
-      setImportStatus("Nelze zjistit stav importu: " + e.message);
-      break;
-    }
-    if (s.status === "running") {
-      setImportStatus(
-        `Zpracovávám… +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, +${fmt(s.activities)} aktivit`);
-      await new Promise((r) => setTimeout(r, 1500));
-      continue;
-    }
-    if (s.status === "done") {
-      await renderImportSummary(s);
-      toast(s.points || s.visits || s.activities
-        ? "Import dokončen." : "Import proběhl, ale nenašla se žádná data.",
-        s.points || s.visits || s.activities ? "success" : "error");
-      if (!document.getElementById("wizard").hidden) {
-        setTimeout(closeWizard, 1800);   // po dokončení průvodce zavřít
-      }
-      loadPlaceSuggest();
-      showAllData();   // období = vše + skok na data, ať je hned vidět, co se přidalo
-    } else {
-      setImportStatus("Import selhal: " + s.error);
-      toast("Import selhal", "error");
-    }
-    break;
-  }
-  $("importBtn").disabled = false;
-}
-
-/* Přehledný souhrn importu: co přibylo, které soubory se přeskočily a proč,
-   a co je teď celkem v databázi (aby bylo jasné, co se stalo a proč). */
-async function renderImportSummary(s) {
-  const fmt = (v) => (v || 0).toLocaleString("cs");
-  const box = $("importStatus");
-  const nothing = !s.points && !s.visits && !s.activities;
-  const parts = [];
-
-  parts.push(
-    `<div class="impHead ${nothing ? "warn" : "ok"}">` +
-    `${icon(nothing ? "alert" : "check", 18)} ` +
-    (nothing ? "Import proběhl, ale nepřidala se žádná data"
-             : "Import dokončen") + "</div>");
-
-  parts.push(
-    `<ul class="impStats"><li>+<b>${fmt(s.points)}</b> GPS bodů</li>` +
-    `<li>+<b>${fmt(s.visits)}</b> návštěv míst</li>` +
-    `<li>+<b>${fmt(s.activities)}</b> cest/aktivit</li>` +
-    `<li>z <b>${fmt(s.files)}</b> souborů` +
-    (s.skipped ? `, <b>${fmt(s.skipped)}</b> přeskočeno` : "") + "</li></ul>");
-
-  if (nothing) {
-    parts.push('<p class="muted">Nejčastější příčina: vybraný soubor není ' +
-      'export historie polohy, nebo je to prázdný/jiný ZIP. Stáhněte z Googlu ' +
-      '„Location History (Timeline)" a vyberte <b>Timeline.json</b> nebo celý ' +
-      '<b>ZIP</b> z Takeoutu.</p>');
-  }
-
-  if (s.skipped_names && s.skipped_names.length) {
-    const items = s.skipped_names.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
-    const more = s.skipped > s.skipped_names.length
-      ? `<li class="muted">…a další (${fmt(s.skipped - s.skipped_names.length)})</li>` : "";
-    parts.push(
-      `<details class="impDetails"><summary>Přeskočené soubory (${fmt(s.skipped)})</summary>` +
-      `<ul class="impSkip">${items}${more}</ul>` +
-      '<p class="muted">Přeskočí se soubory, které nejsou data o poloze ' +
-      '(nastavení, jiné služby) – to je v pořádku.</p></details>');
-  }
-
-  // co je teď celkem v databázi + rozsah dat
-  try {
-    const r = await api("/api/range");
-    if (r.min_ts && r.max_ts) {
-      const fmtD = (ts) => new Date(ts * 1000).toLocaleDateString("cs");
-      parts.push(
-        `<p class="impTotal">Celkem v databázi: <b>${fmt(r.points)}</b> bodů, ` +
-        `<b>${fmt(r.visits)}</b> návštěv · data od <b>${fmtD(r.min_ts)}</b> ` +
-        `do <b>${fmtD(r.max_ts)}</b>.</p>`);
-    }
-  } catch (e) { /* nevadí */ }
-
-  box.innerHTML = parts.join("");
-  const w = document.getElementById("wizImportStatus");
-  if (w) w.innerHTML = box.innerHTML;
-  autoQualityCheck();   // autokontrola dat – dokreslí zjištění, až doběhne
-}
-
-/* Autokontrola kvality dat po importu: nepřesné body, teleporty, vadné
-   návštěvy, duplicitní cesty. Zjištění se ukáže pod souhrnem importu a na
-   záložce Nástroje se objeví tečka, dokud se problémy nevyřeší. */
-async function autoQualityCheck() {
-  let q;
-  try { q = await api("/api/quality"); } catch (e) { return; }
-  const problems = [
-    [q.low_accuracy, "nepřesných bodů"],
-    [q.outliers, "teleportů (skoků v datech)"],
-    [q.bad_visits, "vadných návštěv"],
-    [q.duplicate_activities, "duplicitních cest"],
-  ].filter(([n]) => n > 0);
-  const tab = document.querySelector('#tabs [data-tab="nastroje"]');
-  tab.classList.toggle("hasIssues", problems.length > 0);
-  const box = $("importStatus");
-  if (!problems.length) {
-    box.insertAdjacentHTML("beforeend",
-      `<p class="impTotal">${icon("check", 13)} Autokontrola: data vypadají v pořádku.</p>`);
-    return;
-  }
-  const list = problems.map(([n, label]) =>
-    `<b>${n.toLocaleString("cs")}</b> ${label}`).join(", ");
-  box.insertAdjacentHTML("beforeend",
-    `<p class="impTotal">${icon("alert", 13)} Autokontrola našla ${list}. ` +
-    "Nic se nemaže samo – projděte návrhy oprav. " +
-    '<button id="qcOpenBtn">Zkontrolovat a opravit</button></p>');
-  document.getElementById("qcOpenBtn")?.addEventListener("click", () => {
-    $("qualityBtn").click();
-    $("qualityBtn").scrollIntoView({ behavior: "smooth", block: "center" });
-  });
-}
 
 // ----------------------------------------------------- průvodce / nápověda
 
