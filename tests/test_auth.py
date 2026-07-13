@@ -44,3 +44,31 @@ def test_expired_sessions_pruned(tmp_path, monkeypatch):
     auth._sessions["stary"] = time.time() - 10   # už expirovaná
     auth._prune()
     assert "stary" not in auth._sessions
+
+
+def test_middleware_basic_and_login_cookie(tmp_path, monkeypatch):
+    """S nastaveným heslem: 401 bez přihlášení, Basic auth i session cookie."""
+    from fastapi.testclient import TestClient
+
+    from app import db
+    from app.core import auth
+    from app.main import app
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.db"))
+    monkeypatch.setattr(db, "_schema_done", False)
+    monkeypatch.setattr(auth, "AUTH_PASSWORD", "tajne-heslo")
+    monkeypatch.setattr("app.routers.pages.AUTH_PASSWORD", "tajne-heslo")
+    monkeypatch.setattr(auth, "_SESSION_FILE", str(tmp_path / "sessions.json"))
+    monkeypatch.setattr(auth, "_sessions", {})
+    monkeypatch.setattr(auth, "_login_fails", {})
+
+    with TestClient(app) as c:
+        assert c.get("/api/range").status_code == 401
+        # výjimky ze zámku: version a login samotný
+        assert c.get("/api/version").status_code == 200
+        # HTTP Basic (jméno je libovolné)
+        assert c.get("/api/range", auth=("kdokoli", "tajne-heslo")).status_code == 200
+        assert c.get("/api/range", auth=("x", "spatne")).status_code == 401
+        # login nastaví cookie a ta pak platí sama o sobě
+        r = c.post("/api/login", json={"password": "tajne-heslo"})
+        assert r.status_code == 200 and "gmaps_session" in r.cookies
+        assert c.get("/api/range").status_code == 200
