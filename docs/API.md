@@ -13,6 +13,7 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/heatmap` | GET | agregované buňky; `precision` = desetinná místa mřížky (2–6), volitelný výřez |
 | `/api/visits` | GET | navštívená místa se jmény a časy |
 | `/api/day` | GET | body + návštěvy + cesty jednoho dne (`from_ts`, `to_ts` povinné) |
+| `/api/match_day` | GET | přichytí stopu dne k silniční síti (online OSRM; opt-in, cachováno; 502 bez internetu) |
 | `/api/stats` | GET | souhrn: km, dny, návštěvy, po měsících, top místa, rekordy (`records`: nejdelší den/cesta/série); `min_stay_min` (výchozí 2) vyřadí průjezdy |
 | `/api/analysis` | GET | km podle dne v týdnu, aktivita po hodinách, km po letech, místa po měsících, `monthly_by_type` (km po měsících podle dopravy), `top_routes` (nejčastější pojmenované trasy) |
 | `/api/search_visits` | GET | fulltext ve vlastních místech (`q`) |

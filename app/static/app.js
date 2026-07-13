@@ -115,6 +115,33 @@ async function loadDayData(dateVal) {
   return day;
 }
 
+/* Přichycení přehrávaného dne k silniční síti (OSRM) – jen se souhlasem
+   v Soukromí. Vykreslí podkladovou "silniční" linku pod barevnou stopou. */
+let matchedWarned = false;
+
+async function drawMatchedRoad() {
+  if (!$("roadSnap")?.checked || !play.dayStart) return;
+  const wantDate = play.dateVal;
+  try {
+    const res = await api("/api/match_day",
+      { from_ts: play.dayStart, to_ts: play.dayStart + 86400 });
+    if (play.dateVal !== wantDate || !res.points.length) return;   // den se mezitím změnil
+    L.polyline(res.points, {
+      color: "#fff", weight: 7, opacity: 0.9, interactive: false,
+      lineJoin: "round", lineCap: "round",
+    }).addTo(playLayer);
+    L.polyline(res.points, {
+      color: css("--series-1"), weight: 4, opacity: 0.9,
+      lineJoin: "round", lineCap: "round", interactive: false,
+    }).bindTooltip("Trasa přichycená k silnici (OSRM)").addTo(playLayer);
+  } catch (e) {
+    if (!matchedWarned) {
+      matchedWarned = true;   // hlásit jen jednou, ať to neotravuje
+      toast("Přichycení k silnicím teď není dostupné: " + e.message, "error");
+    }
+  }
+}
+
 async function playDay(autoplay = true) {
   const dateVal = $("playDate").value;
   if (!dateVal) { toast("Vyberte den k přehrání.", "error"); return; }
@@ -207,7 +234,7 @@ map.on("baselayerchange", (e) => localStorage.setItem("map.baseLayer", e.name));
 const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
-  "geoOnline", "trackColorMode",
+  "geoOnline", "trackColorMode", "roadSnap",
 ];
 
 function loadMapSettings() {
@@ -233,6 +260,35 @@ loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
 // zapnutí online adres → překreslit místa, ať se adresy začnou dotahovat
 $("geoOnline")?.addEventListener("change", () => renderMyPlaces());
 $("trackColorMode")?.addEventListener("change", () => renderTracks());
+
+// ------------------------------------------------ ovládací sloupec mapy
+
+$("ctlFit").addEventListener("click", () => {
+  if (!state.points.length) { toast("Žádná data k přiblížení – zvolte jiné období.", "error"); return; }
+  state.fitted = false;
+  fitToData();
+});
+
+$("ctlLocate").addEventListener("click", () => {
+  if (!navigator.geolocation) { toast("Prohlížeč neumí zjistit polohu.", "error"); return; }
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    map.flyTo([lat, lon], 15, { duration: 0.8 });
+    const m = L.circleMarker([lat, lon], {
+      radius: 8, color: "#fff", weight: 2.5,
+      fillColor: css("--accent-red"), fillOpacity: 0.95,
+    }).addTo(map).bindTooltip("Jste tady");
+    setTimeout(() => map.removeLayer(m), 12000);
+  }, () => toast("Polohu se nepodařilo zjistit (zamítnuto nebo nedostupné).", "error"),
+  { timeout: 8000 });
+});
+
+$("ctlFull").addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch (e) { toast("Celá obrazovka není v tomto prohlížeči dostupná.", "error"); }
+});
 
 /* Offline mapa (PMTiles): pokud na serveru leží data/map.pmtiles, přidá se
    plně lokální podklad. Použije se automaticky jen když si uživatel podklad
@@ -522,8 +578,8 @@ function renderTracks() {
   // automaticky se zapne plné interaktivní kreslení s tooltipy a šipkami.
   if (segments.length > 400) {
     const lls = segments.map((seg) => seg.map((p) => [p[1], p[2]]));
-    L.polyline(lls, { color: casing, weight: 5, opacity: 1,
-                      interactive: false }).addTo(trackLayer);
+    L.polyline(lls, { color: casing, weight: 5, opacity: 1, lineJoin: "round",
+                      lineCap: "round", interactive: false }).addTo(trackLayer);
     // seskupit úseky podle výsledné barvy → jedna multi-čára na barvu
     const groups = new Map();
     segments.forEach((seg, i) => {
@@ -532,8 +588,8 @@ function renderTracks() {
       groups.get(c).push(lls[i]);
     });
     for (const [color, group] of groups) {
-      L.polyline(group, { color, weight: 2.2, opacity: 0.9,
-                          interactive: false }).addTo(trackLayer);
+      L.polyline(group, { color, weight: 2.2, opacity: 0.9, lineJoin: "round",
+                          lineCap: "round", interactive: false }).addTo(trackLayer);
     }
     return;
   }
@@ -541,6 +597,7 @@ function renderTracks() {
   for (const seg of segments) {
     L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: casing, weight: 6, opacity: 1, interactive: false,
+      lineJoin: "round", lineCap: "round",
     }).addTo(trackLayer);
   }
   let arrows = 0;
@@ -552,6 +609,8 @@ function renderTracks() {
       color: shade,
       weight: 2.5,
       opacity: 0.9,
+      lineJoin: "round",
+      lineCap: "round",
     }).bindTooltip(
       `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>` +
       "<i>kliknutím přehrajete den</i>", { sticky: true });
@@ -1406,11 +1465,11 @@ function renderPoints() {
     const p = pts[i];
     const m = L.circleMarker([p[1], p[2]], {
       renderer: canvasRenderer,
-      radius: 3.5,
-      color: css("--series-1"),
-      weight: 1,
+      radius: 4,
+      color: "#fff",           // bílý prstenec – bod je čitelný na každém podkladu
+      weight: 1.3,
       fillColor: css("--series-1"),
-      fillOpacity: 0.55,
+      fillOpacity: 0.85,
     }).on("click", () => whenIWasHere(p[1], p[2]));
     if (withTooltips) m.bindTooltip(new Date(p[0] * 1000).toLocaleString("cs"));
     m.addTo(pointLayer);
@@ -1430,10 +1489,10 @@ function visitMarker(v) {
   const hours = Math.max((v.end_ts - v.start_ts) / 3600, 0);
   return L.circleMarker([v.lat, v.lon], {
     radius: Math.min(12, 4 + Math.sqrt(hours) * 1.6),
-    color: css("--series-2"),
+    color: "#fff",             // bílý prstenec odděluje značku od podkladu
     fillColor: css("--series-2"),
-    fillOpacity: 0.55,
-    weight: 1,
+    fillOpacity: 0.8,
+    weight: 1.5,
   });
 }
 
@@ -1925,6 +1984,7 @@ function setupPlaybackMap(day) {
     fillColor: css("--accent-red"), fillOpacity: 1,
   }).addTo(playLayer);
   map.fitBounds(pts.map((p) => [p[1], p[2]]), { padding: [40, 40] });
+  drawMatchedRoad();   // volitelné přichycení stopy dne k silnicím (opt-in)
 
   for (const v of day.visits) {
     visitMarker(v).bindTooltip(v.name || v.semantic || "Místo").addTo(playLayer);
@@ -2225,6 +2285,39 @@ async function renderImportSummary(s) {
   box.innerHTML = parts.join("");
   const w = document.getElementById("wizImportStatus");
   if (w) w.innerHTML = box.innerHTML;
+  autoQualityCheck();   // autokontrola dat – dokreslí zjištění, až doběhne
+}
+
+/* Autokontrola kvality dat po importu: nepřesné body, teleporty, vadné
+   návštěvy, duplicitní cesty. Zjištění se ukáže pod souhrnem importu a na
+   záložce Nástroje se objeví tečka, dokud se problémy nevyřeší. */
+async function autoQualityCheck() {
+  let q;
+  try { q = await api("/api/quality"); } catch (e) { return; }
+  const problems = [
+    [q.low_accuracy, "nepřesných bodů"],
+    [q.outliers, "teleportů (skoků v datech)"],
+    [q.bad_visits, "vadných návštěv"],
+    [q.duplicate_activities, "duplicitních cest"],
+  ].filter(([n]) => n > 0);
+  const tab = document.querySelector('#tabs [data-tab="nastroje"]');
+  tab.classList.toggle("hasIssues", problems.length > 0);
+  const box = $("importStatus");
+  if (!problems.length) {
+    box.insertAdjacentHTML("beforeend",
+      `<p class="impTotal">${icon("check", 13)} Autokontrola: data vypadají v pořádku.</p>`);
+    return;
+  }
+  const list = problems.map(([n, label]) =>
+    `<b>${n.toLocaleString("cs")}</b> ${label}`).join(", ");
+  box.insertAdjacentHTML("beforeend",
+    `<p class="impTotal">${icon("alert", 13)} Autokontrola našla ${list}. ` +
+    "Nic se nemaže samo – projděte návrhy oprav. " +
+    '<button id="qcOpenBtn">Zkontrolovat a opravit</button></p>');
+  document.getElementById("qcOpenBtn")?.addEventListener("click", () => {
+    $("qualityBtn").click();
+    $("qualityBtn").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 // ----------------------------------------------------- průvodce / nápověda

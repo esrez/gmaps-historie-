@@ -135,6 +135,34 @@ def test_analysis_top_routes(client, test_db, tmp_path):
     assert r["count"] == 5 and r["km_avg"] == 4.2
 
 
+def test_match_day_snaps_to_road(client, test_db, tmp_path, monkeypatch):
+    """Přichycení dne k silnici: mockovaná OSRM odpověď → souřadnice z geometrie;
+    výpadek služby → srozumitelná 502, ne pád."""
+    seed(test_db, tmp_path)
+    from app.routers import map_data
+
+    def fake_fetch(url):
+        assert "router.project-osrm.org" in url and "geometries=geojson" in url
+        return {"matchings": [{"geometry": {"coordinates":
+                [[14.4378, 50.0755], [14.4000, 50.0900], [14.3900, 50.1000]]}}]}
+
+    monkeypatch.setattr(map_data, "_osrm_fetch", fake_fetch)
+    map_data._match_cache.clear()
+    day = {"from_ts": 1748836800, "to_ts": 1748836800 + 86400}
+    r = client.get("/api/match_day", params=day).json()
+    assert r["points"][0] == [50.0755, 14.4378]      # lat/lon prohozené z GeoJSON
+    assert len(r["points"]) == 3 and r["cached"] is False
+    assert client.get("/api/match_day", params=day).json()["cached"] is True
+
+    def broken(url):
+        raise OSError("síť nedostupná")
+    monkeypatch.setattr(map_data, "_osrm_fetch", broken)
+    map_data._match_cache.clear()
+    resp = client.get("/api/match_day", params=day)
+    assert resp.status_code == 502
+    assert "není dostupná" in resp.json()["detail"]
+
+
 def test_demo_data_only_on_empty_db(client, test_db, tmp_path):
     """Ukázková data: naplní prázdnou DB, nad neprázdnou odmítne (409)."""
     res = client.post("/api/demo")

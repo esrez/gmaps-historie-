@@ -1053,3 +1053,38 @@ button .ic { margin-right: 1px; }
   padding: 2px 7px; border: 1px solid var(--baseline); border-bottom-width: 2px;
   border-radius: 5px; background: var(--page); font-family: inherit; font-size: 12px;
 }
+
+/* ------ ovládací sloupec mapy (přiblížit na data / poloha / celá obrazovka) */
+#mapCtl {
+  position: absolute; top: 92px; right: 12px; z-index: 1000;
+  display: flex; flex-direction: column; gap: 6px;
+}
+#mapCtl button {
+  width: 36px; height: 36px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  color: var(--text-secondary); cursor: pointer;
+}
+#mapCtl button:hover { color: var(--series-1); border-color: var(--series-1); }
+
+/* tečka na záložce Nástroje, když autokontrola našla problémy v datech */
+.tab-btn.hasIssues { position: relative; }
+.tab-btn.hasIssues::after {
+  content: ""; position: absolute; top: 4px; right: 14px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent-red);
+  box-shadow: 0 0 0 2px var(--surface-1);
+}
+
+/* shluky navštívených míst v barvách aplikace (místo výchozí žlutozelené) */
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+  background: color-mix(in srgb, var(--series-2) 30%, transparent);
+}
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+  background: color-mix(in srgb, var(--series-2) 82%, #fff);
+  color: #fff; font-weight: 600;
+}
+.marker-cluster-medium div { background: var(--series-2); }
+.marker-cluster-large div { background: color-mix(in srgb, var(--series-2) 80%, #000); }

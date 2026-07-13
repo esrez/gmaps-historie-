@@ -216,6 +216,24 @@ test.describe("mapa", () => {
     expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   });
 
+  test("ovládací sloupec mapy: přiblížit na data funguje", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    for (const id of ["#ctlFit", "#ctlLocate", "#ctlFull"]) {
+      await expect(page.locator(id)).toBeVisible();
+    }
+    // odzoomovat pryč a vrátit se tlačítkem na data
+    await page.evaluate(() => { window.map.setView([40, -100], 4, { animate: false }); });
+    await page.click("#ctlFit");
+    await page.waitForTimeout(600);
+    const z = await page.evaluate(() => window.map.getZoom());
+    expect(z).toBeGreaterThan(8);   // seed data jsou v Praze – fit přiblíží
+    // Soukromí: přichytávání k silnicím je opt-in a výchozí vypnuté
+    await page.click('#tabs [data-tab="nastroje"]');
+    await expect(page.locator("#roadSnap")).not.toBeChecked();
+  });
+
   test("nápověda zkratek na ? a stav aplikace v Nástrojích", async ({ page }) => {
     await page.goto("/");
     await page.keyboard.press("?");

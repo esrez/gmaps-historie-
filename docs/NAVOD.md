@@ -42,7 +42,11 @@ bodů, návštěv a cest, z kolika souborů, a **kolik souborů se přeskočilo 
 to je v pořádku). Nakonec je vypsáno, co je teď **celkem v databázi** a **rozsah
 dat** (od–do). Když se nenašla žádná data, program to zřetelně oznámí a poradí,
 který soubor z Googlu vybrat. Hned po importu se mapa přepne na **Vše** a skočí
-na vaše data, takže je uvidíte bez dalšího klikání.
+na vaše data, takže je uvidíte bez dalšího klikání. Zároveň proběhne
+**autokontrola kvality**: nepřesné body, teleporty, vadné návštěvy a
+duplicitní cesty. Zjištění se vypíší pod souhrnem, na záložce Nástroje se
+objeví tečka a tlačítko „Zkontrolovat a opravit" vás zavede k návrhům oprav
+(nic se nemaže samo).
 
 ## 2. Mapa
 
@@ -63,6 +67,11 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Detail podle výřezu** – při zoomu se automaticky dotáhne plný detail
   viditelné oblasti. Vypnutím se vrátí jeden vzorek pro celé období.
 - **Podkladové mapy** – přepínač vpravo nahoře (OSM, světlá, tmavá, satelit).
+- **Ovládací sloupec** (vpravo pod vrstvami) – přiblížit na moje data,
+  ukázat moji aktuální polohu, celá obrazovka.
+- **Přichycení k silnicím** – v Soukromí lze zapnout srovnání přehrávaného
+  dne na silniční síť (online služba OSRM; výchozí vypnuto, souřadnice dne
+  se posílají jen s vaším souhlasem).
 - **Barvy tras** – „střídat odstíny" rozliší sousední jízdy, „**podle roku**"
   dá každému roku vlastní barvu (legenda vpravo dole) – u víceleté historie
   na první pohled vidíte, kudy jste kdy jezdili.

@@ -14,7 +14,13 @@
 </head>
 <body>
 <div id="app">
-  <main id="map"><div id="mapBar" hidden></div><div id="mapLoading" hidden>Načítám…</div></main>
+  <main id="map"><div id="mapBar" hidden></div><div id="mapLoading" hidden>Načítám…</div>
+  <div id="mapCtl">
+    <button id="ctlFit" title="Přiblížit na moje data"><span data-icon="target"></span></button>
+    <button id="ctlLocate" title="Moje aktuální poloha"><span data-icon="crosshair"></span></button>
+    <button id="ctlFull" title="Celá obrazovka"><span data-icon="expand"></span></button>
+  </div>
+</main>
 
   <!-- plovoucí hlavní panel nad mapou -->
   <aside id="panel" class="floating">
@@ -295,6 +301,11 @@
         <h2>Soukromí</h2>
         <label class="check"><input type="checkbox" id="geoOnline">
           Zjišťovat adresy míst online</label>
+        <label class="check"><input type="checkbox" id="roadSnap">
+          Přichytávat přehrávaný den k silnicím (online)</label>
+        <p class="muted">Při zapnutí se souřadnice právě přehrávaného dne pošlou
+           službě OSRM (router.project-osrm.org), která stopu srovná na silniční
+           síť – trasa pak neskáče mimo cesty. Výchozí je vypnuto.</p>
         <p class="muted">Když je zapnuto, souřadnice pojmenovaných míst se posílají
            do služby OpenStreetMap (Nominatim), aby se u nich zobrazila adresa.
            Ve výchozím stavu je to <b>vypnuté</b> – vaše souřadnice pak nikam

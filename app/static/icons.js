@@ -46,6 +46,9 @@ const ICONS = {
   image: P("M4 5h16v14H4z") + P("M4 16l5-5 4 4 3-3 4 4") + '<circle cx="9" cy="9" r="1.5"/>',
   unlock: P("M6 11h12v9H6z") + P("M8 11V8a4 4 0 0 1 7.5-2"),
   database: '<ellipse cx="12" cy="6" rx="8" ry="3"/>' + P("M4 6v12a8 3 0 0 0 16 0V6") + P("M4 12a8 3 0 0 0 16 0"),
+  target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/>',
+  crosshair: '<circle cx="12" cy="12" r="7"/>' + P("M12 2v4M12 18v4M2 12h4M18 12h4") + '<circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+  expand: P("M4 9V4h5") + P("M15 4h5v5") + P("M20 15v5h-5") + P("M9 20H4v-5"),
 };
 
 export function icon(name, size = 15) {
