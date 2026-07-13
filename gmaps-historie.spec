@@ -10,8 +10,9 @@ Python ani nic instalovat; data se ukládají do složky data/ vedle programu.
 """
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-# frontend (HTML/JS/CSS/ikony/vendor) je potřeba přibalit jako data
-datas = [("app/static", "app/static")]
+# frontend (HTML/JS/CSS/ikony/vendor) + soubor VERSION (číslo vydání pro
+# /api/version a aktualizátor – bez něj by exe hlásilo výchozí verzi)
+datas = [("app/static", "app/static"), ("VERSION", ".")]
 binaries = []
 hiddenimports = collect_submodules("uvicorn")
 hiddenimports += collect_submodules("app")
