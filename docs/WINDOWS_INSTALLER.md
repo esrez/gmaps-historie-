@@ -89,3 +89,17 @@ update_url=https://vas-server.cz/api/update
 ## Verze
 
 Číslo verze se bere ze souboru `VERSION` v kořeni projektu.
+
+## Vydání nové verze (GitHub Release)
+
+1. Zvyšte číslo v souboru `VERSION` a doplňte sekci v `CHANGELOG.md`
+   (v tomto vydání už hotovo).
+2. Vytvořte a pushněte tag:
+   ```
+   git tag v2.1.0
+   git push origin v2.1.0
+   ```
+3. GitHub Actions (workflow „Windows build") automaticky postaví
+   `GMapsHistorie.exe`, instalátor i update balíček a **vytvoří GitHub
+   Release** s popisem z první sekce CHANGELOG. Hotové soubory se objeví
+   na stránce Releases – uživatelé si je stáhnou přímo odtud.
