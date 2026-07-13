@@ -139,6 +139,46 @@ def api_calendar(year: int = Query(..., ge=2000, le=2100)):
                       "points": pts.get(d, 0)} for d in days]}
 
 
+# skupiny dopravy pro měsíční rozpad (stejné dělení jako filtr na mapě)
+_TYPE_GROUPS = {
+    "car": {"IN_PASSENGER_VEHICLE", "DRIVING", "MOTORCYCLING", "IN_VEHICLE"},
+    "walk": {"WALKING", "ON_FOOT", "RUNNING"},
+    "bike": {"CYCLING", "BICYCLING"},
+    "transit": {"IN_BUS", "IN_TRAM", "IN_SUBWAY", "IN_TRAIN", "IN_FERRY",
+                "IN_PUBLIC_TRANSPORT"},
+}
+
+_COORD_LABEL = ", "   # fallback jméno „49.1900, 16.6000" obsahuje čárku+mezeru
+
+
+def _top_routes(conn, lo: int, hi: int, limit: int = 8) -> list[dict]:
+    """Nejčastější trasy: dvojice pojmenovaných míst (obousměrně) z aktivit."""
+    acts = conn.execute(
+        "SELECT start_lat sla, start_lon slo, end_lat ela, end_lon elo, distance_m d "
+        "FROM activities WHERE start_ts BETWEEN ? AND ? "
+        "AND start_lat IS NOT NULL AND end_lat IS NOT NULL LIMIT 50000",
+        (lo, hi)).fetchall()
+    if not acts:
+        return []
+    namer = trips.PlaceNamer(conn)
+    agg: dict[tuple, dict] = {}
+    for a in acts:
+        na, nb = namer.name(a["sla"], a["slo"]), namer.name(a["ela"], a["elo"])
+        # souřadnicové fallbacky a smyčky (A→A) v přehledu tras jen šumí
+        if na == nb or _COORD_LABEL in na or _COORD_LABEL in nb:
+            continue
+        key = tuple(sorted((na, nb)))
+        g = agg.setdefault(key, {"count": 0, "km": 0.0, "km_n": 0})
+        g["count"] += 1
+        if a["d"]:
+            g["km"] += a["d"] / 1000
+            g["km_n"] += 1
+    top = sorted(agg.items(), key=lambda kv: -kv[1]["count"])[:limit]
+    return [{"from": k[0], "to": k[1], "count": g["count"],
+             "km_avg": round(g["km"] / g["km_n"], 1) if g["km_n"] else None}
+            for k, g in top]
+
+
 @router.get("/api/analysis")
 def api_analysis(from_ts: int | None = Query(None), to_ts: int | None = Query(None)):
     lo, hi = ts_range(from_ts, to_ts)
@@ -158,8 +198,27 @@ def api_analysis(from_ts: int | None = Query(None), to_ts: int | None = Query(No
             "SELECT strftime('%Y-%m', start_ts, 'unixepoch', 'localtime') m, "
             "COUNT(DISTINCT ROUND(lat,3) || ',' || ROUND(lon,3)) n FROM visits "
             "WHERE start_ts BETWEEN ? AND ? GROUP BY m ORDER BY m", (lo, hi)).fetchall()
+        by_month_type = conn.execute(
+            "SELECT strftime('%Y-%m', start_ts, 'unixepoch', 'localtime') m, "
+            "REPLACE(UPPER(type),' ','_') t, SUM(COALESCE(distance_m,0))/1000.0 km "
+            "FROM activities WHERE start_ts BETWEEN ? AND ? GROUP BY m, t",
+            (lo, hi)).fetchall()
+        top_routes = _top_routes(conn, lo, hi)
     wk = {r["w"]: round(r["km"], 1) for r in weekday}
     hr = {r["h"]: r["c"] for r in hours}
+
+    # měsíční km po skupinách dopravy (auto/pěšky/kolo/MHD/ostatní)
+    mt: dict[str, dict] = {}
+    for r in by_month_type:
+        row = mt.setdefault(r["m"], {"month": r["m"], "car": 0.0, "walk": 0.0,
+                                     "bike": 0.0, "transit": 0.0, "other": 0.0})
+        group = next((g for g, types in _TYPE_GROUPS.items() if r["t"] in types),
+                     "other")
+        row[group] += r["km"]
+    monthly_by_type = [
+        {k: (round(v, 1) if isinstance(v, float) else v) for k, v in row.items()}
+        for _, row in sorted(mt.items())]
+
     return {
         "weekday_km": [{"day": d, "km": wk.get(w, 0)}
                        for d, w in zip(["Po", "Út", "St", "Čt", "Pá", "So", "Ne"],
@@ -168,4 +227,6 @@ def api_analysis(from_ts: int | None = Query(None), to_ts: int | None = Query(No
         "yearly_km": [{"year": r["y"], "km": round(r["km"], 1), "trips": r["n"]}
                       for r in yearly],
         "places_monthly": [{"month": r["m"], "places": r["n"]} for r in places_monthly],
+        "monthly_by_type": monthly_by_type,
+        "top_routes": top_routes,
     }

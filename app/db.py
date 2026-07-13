@@ -22,10 +22,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_points_unique ON points(ts, lat, lon);
 CREATE INDEX IF NOT EXISTS idx_points_ts ON points(ts);
 CREATE INDEX IF NOT EXISTS idx_points_lat ON points(lat);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS points_rtree USING rtree(
-    id, min_lat, max_lat, min_lon, max_lon
-);
-
 CREATE TABLE IF NOT EXISTS visits (
     id       INTEGER PRIMARY KEY,
     start_ts INTEGER NOT NULL,
@@ -176,6 +172,10 @@ def active_profile() -> str:
 
 
 def _migrate(conn: sqlite3.Connection):
+    # R-tree index se už nepoužívá (B-tree indexy jsou na těchto dotazech
+    # rychlejší a import bez jeho synchronizace ušetří sekundy i místo)
+    conn.execute("DROP TABLE IF EXISTS points_rtree")
+
     cols = {r[1] for r in conn.execute("PRAGMA table_info(trips)")}
     if cols and "excluded" not in cols:
         conn.execute("ALTER TABLE trips ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0")
@@ -200,21 +200,6 @@ def _migrate(conn: sqlite3.Connection):
         """)
 
 
-def _sync_rtree(conn: sqlite3.Connection):
-    """Doplní R-tree index pro body, které v něm ještě nejsou."""
-    has = conn.execute(
-        "SELECT COUNT(*) c FROM sqlite_master WHERE type='table' AND name='points_rtree'"
-    ).fetchone()["c"]
-    if not has:
-        return
-    conn.execute("""
-        INSERT INTO points_rtree(id, min_lat, max_lat, min_lon, max_lon)
-        SELECT p.id, p.lat, p.lat, p.lon, p.lon FROM points p
-        WHERE p.id NOT IN (SELECT id FROM points_rtree)
-        LIMIT 500000
-    """)
-
-
 def _ensure_schema(conn: sqlite3.Connection):
     global _schema_done
     if _schema_done:
@@ -224,7 +209,6 @@ def _ensure_schema(conn: sqlite3.Connection):
             return
         _migrate(conn)
         conn.executescript(SCHEMA)
-        _sync_rtree(conn)
         conn.commit()
         _schema_done = True
 
@@ -243,13 +227,11 @@ def connect() -> sqlite3.Connection:
 
 
 def after_import(conn: sqlite3.Connection | None = None):
-    """Po importu: R-tree sync + agregace."""
+    """Po importu: přepočet agregací (kalendář, měsíční km…)."""
     own = conn is None
     if own:
         conn = connect()
     try:
-        _sync_rtree(conn)
-        conn.commit()
         from .services.aggregations import refresh_aggregations
         refresh_aggregations(conn)
     finally:

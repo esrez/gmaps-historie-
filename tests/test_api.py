@@ -18,7 +18,31 @@ def test_range_and_points(client, test_db, tmp_path):
     assert pts["total"] == 100
     assert pts["simplified"] is True
     assert 0 < len(pts["points"]) < 100
+    # hranice úseků: 5 denních cest → 5 úseků; indexy míří dovnitř pole bodů
+    assert len(pts["breaks"]) == 5
+    assert pts["breaks"][0] == 0
+    assert all(0 <= b < len(pts["points"]) for b in pts["breaks"])
     assert client.get("/api/points?limit=0").status_code == 422
+
+
+def test_transport_filter_with_thousands_of_activities(client, test_db, tmp_path):
+    """Regrese: filtr dopravy dřív skládal jeden OR výraz přes všechny aktivity
+    a u víceletých dat padal na limitu hloubky výrazu SQLite (chyba 500)."""
+    seed(test_db, tmp_path)
+    with closing(test_db.connect()) as conn:
+        day = 1748844000
+        conn.executemany(
+            "INSERT INTO activities(start_ts,end_ts,type) VALUES(?,?,'DRIVING')",
+            [(day + i * 4000, day + i * 4000 + 1800) for i in range(2500)])
+        conn.executemany(
+            "INSERT OR IGNORE INTO points(ts,lat,lon) VALUES(?,?,?)",
+            [(day + i * 4000 + 60, 49.2 + i * 1e-5, 16.6) for i in range(2500)])
+        conn.commit()
+    r = client.get("/api/points?transport=CAR")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] >= 2500          # body uvnitř intervalů aktivit
+    assert len(body["points"]) > 0
 
 
 def test_stats(client, test_db, tmp_path):
@@ -89,6 +113,75 @@ def test_analysis(client, test_db, tmp_path):
     a = client.get("/api/analysis").json()
     assert len(a["weekday_km"]) == 7 and len(a["hourly_points"]) == 24
     assert sum(d["km"] for d in a["weekday_km"]) == 21.0
+    # měsíční rozpad podle dopravy: 5 jízd autem po 4,2 km v červnu 2025
+    assert a["monthly_by_type"] == [{"month": "2025-06", "car": 21.0, "walk": 0,
+                                     "bike": 0, "transit": 0, "other": 0}]
+
+
+def test_analysis_top_routes(client, test_db, tmp_path):
+    """Nejčastější trasy: pojmenované dvojice míst z aktivit (obousměrně)."""
+    seed(test_db, tmp_path)
+    from tests.fixtures import HOME
+    with closing(test_db.connect()) as conn:
+        # domov zatím nemá návštěvu → doplnit, aby se konec trasy pojmenoval
+        conn.execute(
+            "INSERT INTO visits(start_ts, end_ts, lat, lon, semantic) "
+            "VALUES(1748848000, 1748851600, ?, ?, 'Home')", HOME)
+        conn.commit()
+    a = client.get("/api/analysis").json()
+    assert a["top_routes"], "trasy mezi pojmenovanými místy se mají objevit"
+    r = a["top_routes"][0]
+    assert {r["from"], r["to"]} == {"Domov", "Práce"}
+    assert r["count"] == 5 and r["km_avg"] == 4.2
+
+
+def test_match_day_snaps_to_road(client, test_db, tmp_path, monkeypatch):
+    """Přichycení dne k silnici: mockovaná OSRM odpověď → souřadnice z geometrie;
+    výpadek služby → srozumitelná 502, ne pád."""
+    seed(test_db, tmp_path)
+    from app.routers import map_data
+
+    def fake_fetch(url):
+        assert "router.project-osrm.org" in url and "geometries=geojson" in url
+        return {"matchings": [{"geometry": {"coordinates":
+                [[14.4378, 50.0755], [14.4000, 50.0900], [14.3900, 50.1000]]}}]}
+
+    monkeypatch.setattr(map_data, "_osrm_fetch", fake_fetch)
+    map_data._match_cache.clear()
+    day = {"from_ts": 1748836800, "to_ts": 1748836800 + 86400}
+    r = client.get("/api/match_day", params=day).json()
+    assert r["points"][0] == [50.0755, 14.4378]      # lat/lon prohozené z GeoJSON
+    assert len(r["points"]) == 3 and r["cached"] is False
+    assert client.get("/api/match_day", params=day).json()["cached"] is True
+
+    def broken(url):
+        raise OSError("síť nedostupná")
+    monkeypatch.setattr(map_data, "_osrm_fetch", broken)
+    map_data._match_cache.clear()
+    resp = client.get("/api/match_day", params=day)
+    assert resp.status_code == 502
+    assert "není dostupná" in resp.json()["detail"]
+
+
+def test_demo_data_only_on_empty_db(client, test_db, tmp_path):
+    """Ukázková data: naplní prázdnou DB, nad neprázdnou odmítne (409)."""
+    res = client.post("/api/demo")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["points"] > 1000 and body["visits"] > 50
+    r = client.get("/api/range").json()
+    assert r["points"] == body["points"]
+    # druhé volání: databáze už není prázdná → jasná chyba
+    assert client.post("/api/demo").status_code == 409
+
+
+def test_health_and_integrity(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    h = client.get("/api/health").json()
+    assert h["db_size"] > 0 and h["points"] == 100
+    assert "profile" in h and "trips" in h
+    chk = client.post("/api/health/check").json()
+    assert chk["ok"] is True and chk["detail"] == ["ok"]
 
 
 def test_exports(client, test_db, tmp_path):

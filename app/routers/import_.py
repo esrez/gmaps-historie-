@@ -72,6 +72,21 @@ def api_import_status(job_id: str):
             "filename": job["filename"], **job["counters"].as_dict()}
 
 
+@router.post("/api/demo")
+def api_demo():
+    """Naplní PRÁZDNOU databázi ukázkovými daty (vyzkoušení bez exportu)."""
+    with closing(db.connect()) as conn:
+        n = conn.execute("SELECT (SELECT COUNT(*) FROM points) + "
+                         "(SELECT COUNT(*) FROM visits) c").fetchone()["c"]
+    if n:
+        raise HTTPException(409, "Databáze není prázdná – ukázková data by se "
+                                 "smíchala s vašimi. Použijte nový profil.")
+    from ..services.demo import generate_demo
+    counts = generate_demo()
+    log.info("Ukázková data vygenerována: %s", counts)
+    return counts
+
+
 @router.get("/api/import/since")
 def api_import_since():
     """Čas posledního importu – pro inkrementální synchronizaci z telefonu."""

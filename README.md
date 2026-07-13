@@ -5,6 +5,17 @@ export z Googlu, a v prohlížeči pak máte interaktivní mapu tras, heatmapu,
 statistiky a přehrávání jednotlivých dní. Vše běží na vašem serveru, data
 neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
 
+| Mapa a přehrávání dne | Statistiky |
+|---|---|
+| ![Mapa](docs/screenshots/mapa.png) | ![Statistiky](docs/screenshots/statistiky.png) |
+
+| Analýza | Kniha jízd |
+|---|---|
+| ![Analýza](docs/screenshots/analyza.png) | ![Kniha jízd](docs/screenshots/kniha.png) |
+
+*Screenshoty jsou z ukázkových dat (průvodce → „Jen si to vyzkoušet");
+mapový podklad se stahuje z internetu, v ukázce proto chybí.*
+
 ## Funkce
 
 - **Mapa tras a bodů** – trasy, jednotlivé GPS body (s časem po najetí myší)

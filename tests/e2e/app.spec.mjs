@@ -216,6 +216,75 @@ test.describe("mapa", () => {
     expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   });
 
+  test("Rok v pohybu stáhne PNG kartu se souhrnem", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.click('#tabs [data-tab="stat"]');
+    const [dl] = await Promise.all([
+      page.waitForEvent("download"),
+      page.click("#yearCardBtn"),
+    ]);
+    expect(dl.suggestedFilename()).toMatch(/^rok-v-pohybu-\d{4}\.png$/);
+    const fs = await import("node:fs");
+    const buf = fs.readFileSync(await dl.path());
+    expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  });
+
+  test("ovládací sloupec mapy: přiblížit na data funguje", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    for (const id of ["#ctlFit", "#ctlLocate", "#ctlFull"]) {
+      await expect(page.locator(id)).toBeVisible();
+    }
+    // odzoomovat pryč a vrátit se tlačítkem na data
+    await page.evaluate(() => { window.map.setView([40, -100], 4, { animate: false }); });
+    await page.click("#ctlFit");
+    await page.waitForTimeout(600);
+    const z = await page.evaluate(() => window.map.getZoom());
+    expect(z).toBeGreaterThan(8);   // seed data jsou v Praze – fit přiblíží
+    // Soukromí: přichytávání k silnicím je opt-in a výchozí vypnuté
+    await page.click('#tabs [data-tab="nastroje"]');
+    await expect(page.locator("#roadSnap")).not.toBeChecked();
+  });
+
+  test("nápověda zkratek na ? a stav aplikace v Nástrojích", async ({ page }) => {
+    await page.goto("/");
+    await page.keyboard.press("?");
+    await expect(page.locator("#shortcutHelp")).toBeVisible();
+    await expect(page.locator("#shortcutHelp")).toContainText("mezerník");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#shortcutHelp")).toBeHidden();
+    // stav aplikace: velikost DB + kontrola integrity
+    await page.click('#tabs [data-tab="nastroje"]');
+    await expect(page.locator("#appHealth")).toContainText("MB");
+    await page.click("#dbCheckBtn");
+    await expect(page.locator("#dbCheckResult")).toContainText("v pořádku");
+    // demo data nejdou nahrát do neprázdné databáze (guard)
+    const res = await page.request.post("/api/demo");
+    expect(res.status()).toBe(409);
+  });
+
+  test("analýza: doprava po měsících, všední vs. víkend, trasy", async ({ page }) => {
+    await page.goto("/");
+    await page.click('#tabs [data-tab="analyza"]');
+    await expect(page.locator("#transportChart svg")).toBeVisible();
+    await expect(page.locator("#transportLegend")).toContainText("Autem");
+    await expect(page.locator("#workWeekend")).toContainText("Všední dny");
+    await expect(page.locator("#topRoutes")).not.toBeEmpty();
+  });
+
+  test("barvení tras podle roku ukáže legendu roků", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.selectOption("#trackColorMode", "year");
+    await expect(page.locator("#trackYearLegend")).toContainText("2025");
+    await page.selectOption("#trackColorMode", "alt");   // zpět – legenda zmizí
+    await expect(page.locator("#trackYearLegend")).toHaveCount(0);
+  });
+
   test("prázdné období nabídne dostupný rozsah a Zobrazit vše vrátí data", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => window.loadAll && document.querySelector("#dbInfo"));
@@ -279,8 +348,9 @@ test.describe("kniha jízd", () => {
     await expect(page.locator("#bulkDelBtn")).toBeHidden();
     await page.locator("#tripsBody tr.dayRow .selDay").first().check();
     await expect(page.locator("#bulkDelBtn")).toContainText("Smazat vybrané");
-    page.once("dialog", (d) => d.accept());   // potvrzení mazání
     await page.click("#bulkDelBtn");
+    // vlastní modální potvrzení (místo nativního confirm)
+    await page.locator("#appDialog .dlgOk").click();
     await expect(page.locator("#toast")).toContainText("Smazáno");
     await expect(page.locator("#tripsBody tr.dayRow")).toHaveCount(before - 1);
     // hromadné smazání je jeden krok zpět

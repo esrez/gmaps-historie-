@@ -11,6 +11,10 @@ Podrobný průvodce aplikací GMaps Historie. Rychlý přehled je v [README](../
    Takeout i export z telefonu) a jak je nahrát. Průvodce lze kdykoli znovu
    otevřít tlačítkem **?** v hlavičce (nebo „Kde vzít data z Googlu?" v sekci
    Import). Zaškrtnutím „Nezobrazovat po spuštění" se přestane otevírat sám.
+   Průvodce nabízí i tlačítko **„Jen si to vyzkoušet"** – nahraje ~3 měsíce
+   ukázkových dat (dojíždění, nákupy, výlety), abyste si aplikaci prohlédli
+   bez vlastního exportu. Funguje jen nad prázdnou databází, ukázku pak
+   smažete např. přepnutím na nový profil.
 3. Nahrajte export z Googlu (viz níže) – formát se pozná automaticky.
 
 ### Kde vzít data z Googlu
@@ -25,9 +29,11 @@ Podrobný průvodce aplikací GMaps Historie. Rychlý přehled je v [README](../
 
 Import je **idempotentní** – stejný soubor můžete nahrát vícekrát, duplicity se
 přeskočí. Velké soubory (i miliony bodů) se zpracovávají na pozadí, streamovaně
-a po dávkách; na mapě se pak body chytře vzorkují, takže aplikace zůstává
-svižná. Alternativy: nakopírovat soubor do `data/import/` (naimportuje se sám do
-minuty), nebo z příkazové řádky
+a po dávkách; na mapě se pak body chytře vzorkují a trasy zjednodušují
+(Douglas–Peucker), takže i **několik let historie najednou** se vykreslí během
+pár sekund a aplikace zůstává svižná. Po přiblížení se automaticky dotáhne plný
+detail viditelného výřezu. Alternativy: nakopírovat soubor do `data/import/`
+(naimportuje se sám do minuty), nebo z příkazové řádky
 `docker compose exec gmaps-historie python -m app.importer /data/soubor.json`.
 
 **Přehled importu.** Po dokončení uvidíte, co se přesně stalo: kolik přibylo GPS
@@ -36,7 +42,11 @@ bodů, návštěv a cest, z kolika souborů, a **kolik souborů se přeskočilo 
 to je v pořádku). Nakonec je vypsáno, co je teď **celkem v databázi** a **rozsah
 dat** (od–do). Když se nenašla žádná data, program to zřetelně oznámí a poradí,
 který soubor z Googlu vybrat. Hned po importu se mapa přepne na **Vše** a skočí
-na vaše data, takže je uvidíte bez dalšího klikání.
+na vaše data, takže je uvidíte bez dalšího klikání. Zároveň proběhne
+**autokontrola kvality**: nepřesné body, teleporty, vadné návštěvy a
+duplicitní cesty. Zjištění se vypíší pod souhrnem, na záložce Nástroje se
+objeví tečka a tlačítko „Zkontrolovat a opravit" vás zavede k návrhům oprav
+(nic se nemaže samo).
 
 ## 2. Mapa
 
@@ -57,6 +67,14 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Detail podle výřezu** – při zoomu se automaticky dotáhne plný detail
   viditelné oblasti. Vypnutím se vrátí jeden vzorek pro celé období.
 - **Podkladové mapy** – přepínač vpravo nahoře (OSM, světlá, tmavá, satelit).
+- **Ovládací sloupec** (vpravo pod vrstvami) – přiblížit na moje data,
+  ukázat moji aktuální polohu, celá obrazovka.
+- **Přichycení k silnicím** – v Soukromí lze zapnout srovnání přehrávaného
+  dne na silniční síť (online služba OSRM; výchozí vypnuto, souřadnice dne
+  se posílají jen s vaším souhlasem).
+- **Barvy tras** – „střídat odstíny" rozliší sousední jízdy, „**podle roku**"
+  dá každému roku vlastní barvu (legenda vpravo dole) – u víceleté historie
+  na první pohled vidíte, kudy jste kdy jezdili.
 - **Měřit vzdálenost** – klikáním do mapy měříte délku trasy; u každého bodu
   se ukáže průběžná vzdálenost a nahoře celkový součet. Dvojklik nebo Esc
   měření ukončí, dalším klikem na tlačítko ho smažete.
@@ -70,9 +88,11 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   pouhý průjezd místem se tak neoznačí jako návštěva; totéž platí pro
   statistiky návštěv a top místa.
 - **Statistiky / Analýza** (záložky) – km celkem a po měsících, rozpad podle
-  dopravy, top místa; km podle dne v týdnu, aktivita podle hodiny, km po
-  letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu stejně
-  dlouhému období) a miniaturní křivku km po měsících. Blok **Rekordy
+  dopravy, top místa; **nejčastější trasy** (odkud ⇄ kam, kolikrát a průměrné
+  km), **km po měsících podle dopravy** (skládaný graf auto/pěšky/MHD/kolo),
+  **všední dny vs. víkend**, km podle dne v týdnu, aktivita podle hodiny,
+  km po letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu
+  stejně dlouhému období) a miniaturní křivku km po měsících. Blok **Rekordy
   období** shrnuje nejvíc najetých km za den, nejdelší jednotlivou cestu
   a nejdelší sérii po sobě jdoucích dní s jízdou.
 - **Porovnání období** – lze zapnout druhé období, které se vykreslí
@@ -225,7 +245,12 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 - **Undo**: kniha jízd drží posledních 10 akcí (generování, propagace,
   pravidla, mazání jednotlivých jízd i hromadné mazání) – tlačítko
   „Vrátit" lze použít opakovaně.
-- **Verze**: aktuální verzi frontendu ukazuje záložka Nástroje („O aplikaci").
+- **Verze a stav**: záložka Nástroje → „O aplikaci" ukazuje verzi frontendu,
+  velikost databáze, počty záznamů, čas poslední automatické zálohy
+  (zálohuje se 1× denně) a tlačítko **Zkontrolovat databázi** (integrita
+  SQLite; při potížích obnovte poslední zálohu).
+- **Klávesové zkratky**: stiskem **?** se zobrazí přehled (← → den,
+  mezerník přehrávání, M měření vzdálenosti, Esc zrušit/zavřít).
   Po `git pull && docker compose up -d --build` se díky ní sama zneplatní
   cache PWA, takže nové UI naběhne bez ručního mazání mezipaměti prohlížeče.
 

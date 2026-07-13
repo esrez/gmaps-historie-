@@ -11,6 +11,11 @@
   --series-2: #1baf7a;
   --series-3: #e0810f;
   --accent-red: #e34948;
+  --cat-1: #2a78d6;
+  --cat-2: #1baf7a;
+  --cat-3: #e0810f;
+  --cat-4: #8a5cd6;
+  --cat-other: #9a978c;
 }
 /* tmavé hodnoty platí: (a) podle systému, pokud uživatel nevynutil světlý,
    (b) vždy při ručně zvoleném tmavém režimu (data-theme nastavuje common.js) */
@@ -28,6 +33,11 @@
     --series-2: #199e70;
     --series-3: #f0a020;
     --accent-red: #e66767;
+    --cat-1: #3987e5;
+    --cat-2: #199e70;
+    --cat-3: #c07a12;
+    --cat-4: #9a6ee0;
+    --cat-other: #6f6d65;
   }
 }
 :root[data-theme="dark"] {
@@ -43,6 +53,11 @@
   --series-2: #199e70;
   --series-3: #f0a020;
   --accent-red: #e66767;
+  --cat-1: #3987e5;
+  --cat-2: #199e70;
+  --cat-3: #c07a12;
+  --cat-4: #9a6ee0;
+  --cat-other: #6f6d65;
 }
 
 * { box-sizing: border-box; }
@@ -938,3 +953,146 @@ button .ic { margin-right: 1px; }
 .newPlaces ul { margin: 4px 0 0; padding-left: 16px; }
 .newPlaces a { color: var(--series-1); text-decoration: none; }
 .newPlaces a:hover { text-decoration: underline; }
+
+/* ------ Analýza: nové statistiky ------ */
+/* legenda pod grafem – barevný čtvereček + název kategorie */
+.chartLegend {
+  display: flex; flex-wrap: wrap; gap: 4px 14px;
+  margin: 4px 0 10px; font-size: 11px; color: var(--text-secondary);
+}
+.lg-chip { display: inline-flex; align-items: center; gap: 5px; }
+.lg-chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* dílky skládaného sloupce oddělí tenká mezera v barvě plochy */
+#transportChart .seg { stroke: var(--surface-1); stroke-width: 1.2; }
+
+/* nejčastější trasy: název · pruh četnosti · počet · průměrné km */
+.routeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(40px, 1fr) auto auto;
+  gap: 8px; align-items: center;
+  font-size: 12.5px; padding: 3px 0;
+}
+.routeRow .routeName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.routeRow .routeBar { background: var(--grid); border-radius: 3px; height: 8px; overflow: hidden; }
+.routeRow .routeBar i { display: block; height: 100%; background: var(--cat-1); border-radius: 3px; }
+.routeRow b { min-width: 30px; text-align: right; }
+
+/* všední dny vs. víkend */
+.wwBar {
+  display: flex; height: 10px; border-radius: 4px; overflow: hidden;
+  margin: 2px 0 4px;
+}
+.wwBar i { display: block; height: 100%; }
+.wwBar i + i { margin-left: 2px; }   /* 2px mezera mezi dílky */
+.ww-work { background: var(--cat-1); }
+.ww-end { background: var(--cat-2); }
+.wwLabels { display: flex; gap: 16px; font-size: 11.5px; flex-wrap: wrap; }
+.wwLabels .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+
+/* legenda roků na mapě (režim barvení tras podle roku) */
+#trackYearLegend { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-bottom: 3px; }
+.lg-year { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+
+/* ------ vlastní dialogy (potvrzení / dotaz na text) ------ */
+#appDialog {
+  position: fixed; inset: 0; z-index: 3000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}
+.dlgCard {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  padding: 18px 20px 16px;
+  width: min(92vw, 380px);
+  animation: dlgIn 0.16s ease;
+}
+@keyframes dlgIn { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.dlgTitle { margin: 0 0 6px; font-size: 15px; }
+.dlgMsg { margin: 0 0 12px; font-size: 13.5px; color: var(--text-secondary); white-space: pre-line; }
+.dlgInput { width: 100%; margin-bottom: 12px; font-size: 14px; padding: 8px 10px; }
+.dlgBtns { display: flex; justify-content: flex-end; gap: 8px; }
+.dlgBtns button { min-width: 84px; }
+.dlgOk.danger { background: var(--accent-red); border-color: var(--accent-red); color: #fff; }
+
+/* ------ mikropřechody: přepnutí záložky jemně naběhne ------ */
+@media (prefers-reduced-motion: no-preference) {
+  .tab-page.active { animation: pageIn 0.16s ease; }
+  @keyframes pageIn { from { opacity: 0; transform: translateY(4px); } }
+}
+
+/* ------ tenký ukazatel průběhu nahoře na mapě při načítání ------ */
+#mapBar {
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  z-index: 940; overflow: hidden; pointer-events: none;
+}
+#mapBar::before {
+  content: ""; display: block; height: 100%; width: 35%;
+  background: var(--series-1); border-radius: 2px;
+  animation: mapBarSlide 1.1s ease-in-out infinite;
+}
+@keyframes mapBarSlide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(390%); }
+}
+
+/* ------ nápověda klávesových zkratek (?) ------ */
+#shortcutHelp {
+  position: fixed; inset: 0; z-index: 3000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}
+.shortcutTable { border-collapse: collapse; margin: 4px 0 12px; font-size: 13px; }
+.shortcutTable td { padding: 4px 10px 4px 0; }
+.shortcutTable kbd {
+  display: inline-block; min-width: 26px; text-align: center;
+  padding: 2px 7px; border: 1px solid var(--baseline); border-bottom-width: 2px;
+  border-radius: 5px; background: var(--page); font-family: inherit; font-size: 12px;
+}
+
+/* ------ ovládací sloupec mapy (přiblížit na data / poloha / celá obrazovka) */
+#mapCtl {
+  position: absolute; top: 92px; right: 12px; z-index: 1000;
+  display: flex; flex-direction: column; gap: 6px;
+}
+#mapCtl button {
+  width: 36px; height: 36px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  color: var(--text-secondary); cursor: pointer;
+}
+#mapCtl button:hover { color: var(--series-1); border-color: var(--series-1); }
+
+/* tečka na záložce Nástroje, když autokontrola našla problémy v datech */
+.tab-btn.hasIssues { position: relative; }
+.tab-btn.hasIssues::after {
+  content: ""; position: absolute; top: 4px; right: 14px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent-red);
+  box-shadow: 0 0 0 2px var(--surface-1);
+}
+
+/* shluky navštívených míst v barvách aplikace (místo výchozí žlutozelené) */
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+  background: color-mix(in srgb, var(--series-2) 30%, transparent);
+}
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+  background: color-mix(in srgb, var(--series-2) 82%, #fff);
+  color: #fff; font-weight: 600;
+}
+.marker-cluster-medium div { background: var(--series-2); }
+.marker-cluster-large div { background: color-mix(in srgb, var(--series-2) 80%, #000); }
+
+/* připomínka starých dat – proužek nahoře uprostřed mapy */
+#staleNotice {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 980; padding: 8px 12px; font-size: 13px;
+  display: flex; align-items: center; gap: 8px; max-width: min(92vw, 620px);
+}
+#staleNotice button { flex: none; }

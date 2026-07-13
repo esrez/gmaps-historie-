@@ -1,13 +1,16 @@
 /* GMaps Historie – frontendová logika (ES modul, sdílené helpery v common.js) */
 import { $, toDateStr, toTimeStr, partsToTs, dateToTs, currentRange,
          buildUrl, apiFetch, escapeHtml, toast,
-         isDarkTheme, initThemeToggle } from "./common.js";
+         isDarkTheme, initThemeToggle, appConfirm, appPrompt } from "./common.js";
 import { icon, mountIcons } from "./icons.js";
 import { typeLabel, tile, trend, sparkline, renderRecords,
          renderMonthlyChart, renderAnalysis } from "./charts.js";
 import { initEventStream } from "./sync-events.js";
 import { transportParam, renderNewPlaces } from "./map-filters.js";
 import { DayScrubber, initSpeedButtons, formatPlayClock, daySummaryText } from "./day-playback.js";
+import { initMapTools } from "./map-tools.js";
+import { initImportUi, startImport } from "./import-ui.js";
+import { initYearCard } from "./year-card.js";
 
 initThemeToggle($("themeBtn"));
 mountIcons();
@@ -17,7 +20,7 @@ mountIcons();
 document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
   btn.addEventListener("click", () => {
     if (drawState.active) drawCleanup();   // přepnutím se nesmí zaseknout kreslení oblasti
-    if (measureState.active || measureState.layer) measureCleanup();
+    if (mapTools.measureBusy()) measureCleanup();
     document.querySelectorAll("#tabs .tab-btn").forEach((b) =>
       b.classList.toggle("active", b === btn));
     document.querySelectorAll(".tab-page").forEach((p) =>
@@ -115,6 +118,33 @@ async function loadDayData(dateVal) {
   return day;
 }
 
+/* Přichycení přehrávaného dne k silniční síti (OSRM) – jen se souhlasem
+   v Soukromí. Vykreslí podkladovou "silniční" linku pod barevnou stopou. */
+let matchedWarned = false;
+
+async function drawMatchedRoad() {
+  if (!$("roadSnap")?.checked || !play.dayStart) return;
+  const wantDate = play.dateVal;
+  try {
+    const res = await api("/api/match_day",
+      { from_ts: play.dayStart, to_ts: play.dayStart + 86400 });
+    if (play.dateVal !== wantDate || !res.points.length) return;   // den se mezitím změnil
+    L.polyline(res.points, {
+      color: "#fff", weight: 7, opacity: 0.9, interactive: false,
+      lineJoin: "round", lineCap: "round",
+    }).addTo(playLayer);
+    L.polyline(res.points, {
+      color: css("--series-1"), weight: 4, opacity: 0.9,
+      lineJoin: "round", lineCap: "round", interactive: false,
+    }).bindTooltip("Trasa přichycená k silnici (OSRM)").addTo(playLayer);
+  } catch (e) {
+    if (!matchedWarned) {
+      matchedWarned = true;   // hlásit jen jednou, ať to neotravuje
+      toast("Přichycení k silnicím teď není dostupné: " + e.message, "error");
+    }
+  }
+}
+
 async function playDay(autoplay = true) {
   const dateVal = $("playDate").value;
   if (!dateVal) { toast("Vyberte den k přehrání.", "error"); return; }
@@ -207,7 +237,7 @@ map.on("baselayerchange", (e) => localStorage.setItem("map.baseLayer", e.name));
 const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
-  "geoOnline",
+  "geoOnline", "trackColorMode", "roadSnap",
 ];
 
 function loadMapSettings() {
@@ -232,6 +262,36 @@ MAP_SETTINGS.forEach((id) => $(id)?.addEventListener("change", saveMapSettings))
 loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
 // zapnutí online adres → překreslit místa, ať se adresy začnou dotahovat
 $("geoOnline")?.addEventListener("change", () => renderMyPlaces());
+$("trackColorMode")?.addEventListener("change", () => renderTracks());
+
+// ------------------------------------------------ ovládací sloupec mapy
+
+$("ctlFit").addEventListener("click", () => {
+  if (!state.points.length) { toast("Žádná data k přiblížení – zvolte jiné období.", "error"); return; }
+  state.fitted = false;
+  fitToData();
+});
+
+$("ctlLocate").addEventListener("click", () => {
+  if (!navigator.geolocation) { toast("Prohlížeč neumí zjistit polohu.", "error"); return; }
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    map.flyTo([lat, lon], 15, { duration: 0.8 });
+    const m = L.circleMarker([lat, lon], {
+      radius: 8, color: "#fff", weight: 2.5,
+      fillColor: css("--accent-red"), fillOpacity: 0.95,
+    }).addTo(map).bindTooltip("Jste tady");
+    setTimeout(() => map.removeLayer(m), 12000);
+  }, () => toast("Polohu se nepodařilo zjistit (zamítnuto nebo nedostupné).", "error"),
+  { timeout: 8000 });
+});
+
+$("ctlFull").addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch (e) { toast("Celá obrazovka není v tomto prohlížeči dostupná.", "error"); }
+});
 
 /* Offline mapa (PMTiles): pokud na serveru leží data/map.pmtiles, přidá se
    plně lokální podklad. Použije se automaticky jen když si uživatel podklad
@@ -268,7 +328,8 @@ const locLayer = L.layerGroup().addTo(map);
 const canvasRenderer = L.canvas({ padding: 0.3 });
 let heatLayer = null;
 
-const state = { points: [], heatCells: [], visits: [], fitted: false, loadedOnce: false };
+const state = { points: [], breaks: [], heatCells: [], visits: [],
+                fitted: false, loadedOnce: false };
 
 const css = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -338,12 +399,14 @@ async function loadMapData() {
   mapAbort = ctrl;
   const r = { ...currentRange(), ...viewportParams(), ...transportParam() };
   $("mapLoading").hidden = false;
+  $("mapBar").hidden = false;
   try {
     const [pts, heat] = await Promise.all([
       apiFetch("/api/points", { params: r, signal: ctrl.signal }),
       apiFetch("/api/heatmap", { params: r, signal: ctrl.signal }),
     ]);
     state.points = pts.points;
+    state.breaks = pts.breaks || [];
     state.heatCells = heat.cells;
     renderTracks();
     renderPoints();
@@ -359,6 +422,7 @@ async function loadMapData() {
     if (mapAbort === ctrl) {
       mapAbort = null;
       $("mapLoading").hidden = true;
+      $("mapBar").hidden = true;
     }
   }
 }
@@ -431,18 +495,33 @@ function readHash() {
 function fitToData() {
   const pts = state.points;
   if (!pts.length) return;
-  const lats = pts.map((p) => p[1]), lons = pts.map((p) => p[2]);
-  map.fitBounds([
-    [Math.min(...lats), Math.min(...lons)],
-    [Math.max(...lats), Math.max(...lons)],
-  ], { padding: [30, 30] });
+  // smyčka místo Math.min(...pole): spread s 60k+ prvky přeteče zásobník volání
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  for (const p of pts) {
+    if (p[1] < minLat) minLat = p[1];
+    if (p[1] > maxLat) maxLat = p[1];
+    if (p[2] < minLon) minLon = p[2];
+    if (p[2] > maxLon) maxLon = p[2];
+  }
+  map.fitBounds([[minLat, minLon], [maxLat, maxLon]], { padding: [30, 30] });
   state.fitted = true;
 }
 
 // --------------------------------------------------------------- vrstvy
 
-function splitSegments(points) {
-  // rozdělí body na souvislé úseky: mezera > 30 min nebo skok > 50 km
+function splitSegments(points, breaks) {
+  // Hranice úseků poslal server (breaks = indexy začátků úseků) – po
+  // zjednodušení tras už časová heuristika neplatí (mezi ponechanými body
+  // vznikají dlouhé rozestupy) a rozbila by dlouhé rovné jízdy.
+  if (breaks && breaks.length) {
+    const out = [];
+    for (let b = 0; b < breaks.length; b++) {
+      const seg = points.slice(breaks[b], breaks[b + 1] ?? points.length);
+      if (seg.length > 1) out.push(seg);
+    }
+    return out;
+  }
+  // fallback: rozdělit podle mezery > 30 min nebo skoku > 50 km (surová data)
   const segs = [];
   let cur = [];
   for (let i = 0; i < points.length; i++) {
@@ -464,29 +543,77 @@ function splitSegments(points) {
   return segs;
 }
 
+/* Pevné barvy roků: rok má vždy stejnou barvu bez ohledu na zvolené období
+   (barva sleduje entitu). Identitu vždy doplňuje legenda + tooltipy. */
+const YEAR_COLORS = ["#2a78d6", "#1baf7a", "#e0810f", "#8a5cd6", "#d64583", "#0f9bb0"];
+const yearColor = (y) => YEAR_COLORS[((y % YEAR_COLORS.length) + YEAR_COLORS.length) % YEAR_COLORS.length];
+const segYear = (seg) => new Date(seg[0][0] * 1000).getFullYear();
+
+function renderYearLegend(years) {
+  let box = document.getElementById("trackYearLegend");
+  if (!years || !years.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "trackYearLegend";
+    $("mapLegend").prepend(box);
+  }
+  box.innerHTML = years.map((y) =>
+    `<span class="lg-year"><span class="lg-line" style="background:${yearColor(y)}"></span>${y}</span>`).join(" ");
+}
+
 function renderTracks() {
   trackLayer.clearLayers();
-  if (!$("layerTracks").checked) return;
+  if (!$("layerTracks").checked) { renderYearLegend(null); return; }
   // „casing": světlý/tmavý podklad pod čarou – trasa je čitelná na každém
   // podkladu (satelit, tmavá mapa) a čáry působí prokresleně
   const casing = isDarkTheme() ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)";
-  const segments = splitSegments(state.points);
+  const segments = splitSegments(state.points, state.breaks);
+  const byYear = $("trackColorMode")?.value === "year";
+  // dvě střídající se modré – sousední samostatné cesty jdou rozlišit
+  const shadePair = [css("--series-1"), isDarkTheme() ? "#6da7ec" : "#5598e7"];
+  const segColor = (seg, i) => (byYear ? yearColor(segYear(seg)) : shadePair[i % 2]);
+  renderYearLegend(byYear
+    ? [...new Set(segments.map(segYear))].sort() : null);
+
+  // Rychlá cesta pro roky dat najednou (tisíce cest v pohledu zdaleka):
+  // místo tisíců interaktivních vrstev pár multi-čar bez událostí.
+  // Po přiblížení („Detail podle výřezu") segmentů v záběru ubude a
+  // automaticky se zapne plné interaktivní kreslení s tooltipy a šipkami.
+  if (segments.length > 400) {
+    const lls = segments.map((seg) => seg.map((p) => [p[1], p[2]]));
+    L.polyline(lls, { color: casing, weight: 5, opacity: 1, lineJoin: "round",
+                      lineCap: "round", interactive: false }).addTo(trackLayer);
+    // seskupit úseky podle výsledné barvy → jedna multi-čára na barvu
+    const groups = new Map();
+    segments.forEach((seg, i) => {
+      const c = segColor(seg, i);
+      if (!groups.has(c)) groups.set(c, []);
+      groups.get(c).push(lls[i]);
+    });
+    for (const [color, group] of groups) {
+      L.polyline(group, { color, weight: 2.2, opacity: 0.9, lineJoin: "round",
+                          lineCap: "round", interactive: false }).addTo(trackLayer);
+    }
+    return;
+  }
+
   for (const seg of segments) {
     L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: casing, weight: 6, opacity: 1, interactive: false,
+      lineJoin: "round", lineCap: "round",
     }).addTo(trackLayer);
   }
-  // dvě střídající se modré – sousední samostatné cesty jdou rozlišit
-  const shades = [css("--series-1"), isDarkTheme() ? "#6da7ec" : "#5598e7"];
   let arrows = 0;
   segments.forEach((seg, si) => {
     const from = new Date(seg[0][0] * 1000);
     const to = new Date(seg[seg.length - 1][0] * 1000);
-    const shade = shades[si % 2];
+    const shade = segColor(seg, si);
     const line = L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: shade,
       weight: 2.5,
       opacity: 0.9,
+      lineJoin: "round",
+      lineCap: "round",
     }).bindTooltip(
       `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>` +
       "<i>kliknutím přehrajete den</i>", { sticky: true });
@@ -544,10 +671,11 @@ async function loadCompare() {
     const pts = await api("/api/points",
       { params: { ...r, limit: 60000 }, signal: ctrl.signal });
     const color = css("--series-3");
-    for (const seg of splitSegments(pts.points)) {
-      L.polyline(seg.map((p) => [p[1], p[2]]), {
-        color, weight: 2.5, opacity: 0.85, dashArray: "5 4", interactive: false,
-      }).addTo(compareLayer);
+    // jedna multi-čára pro všechny úseky – u dlouhých období řádově rychlejší
+    const lls = splitSegments(pts.points, pts.breaks).map((seg) => seg.map((p) => [p[1], p[2]]));
+    if (lls.length) {
+      L.polyline(lls, { color, weight: 2.5, opacity: 0.85,
+                        dashArray: "5 4", interactive: false }).addTo(compareLayer);
     }
   } catch (e) {
     if (e.name !== "AbortError") toast("Porovnání se nenačetlo: " + e.message, "error");
@@ -749,7 +877,8 @@ $("placesList").addEventListener("click", async (ev) => {
 
   if (ev.target.closest(".edit")) { startPlaceEdit(card, p); return; }
   if (ev.target.closest(".del")) {
-    if (!confirm(`Smazat pojmenování místa „${p.name}"?`)) return;
+    if (!await appConfirm(`Smazat pojmenování místa „${p.name}"?`,
+        { okLabel: "Smazat", danger: true })) return;
     await apiFetch(`/api/places/${id}`, { method: "DELETE" });
     toast("Místo smazáno.", "success");
     renderMyPlaces();
@@ -872,7 +1001,8 @@ function startPlaceEdit(card, p) {
   panel.querySelector(".peShape").addEventListener("click", () => { close(); startGeometryEdit(p); });
   panel.querySelector(".peArea").addEventListener("click", () => { close(); startAreaRedraw(p); });
   panel.querySelector(".peToCircle")?.addEventListener("click", async () => {
-    if (!confirm("Zrušit vymezenou oblast? Místo se vrátí na kruhový okruh.")) return;
+    if (!await appConfirm("Zrušit vymezenou oblast? Místo se vrátí na kruhový okruh.",
+        { okLabel: "Zrušit oblast", danger: true })) return;
     try {
       await apiFetch(`/api/places/${p.id}`, { method: "PATCH", body: { polygon: [] } });
       toast("Oblast zrušena, místo je nyní kruhové.", "success");
@@ -890,185 +1020,17 @@ function startPlaceEdit(card, p) {
 $("placeSearch").addEventListener("input", drawPlacesList);
 $("placeSort").addEventListener("change", drawPlacesList);
 
-// ------------------------------------------------- měření vzdálenosti
+// --------------------------- měření a export PNG (modul map-tools.js)
 
-const measureState = { active: false, pts: [], layer: null, readout: null };
-
-function fmtDist(m) {
-  return m < 1000 ? `${Math.round(m)} m`
-    : `${(m / 1000).toLocaleString("cs", { maximumFractionDigits: m < 10000 ? 2 : 1 })} km`;
-}
-
-function measureCleanup() {
-  measureState.active = false;
-  measureState.pts = [];
-  if (measureState.layer) { map.removeLayer(measureState.layer); measureState.layer = null; }
-  if (measureState.readout) { measureState.readout.remove(); measureState.readout = null; }
-  map.off("click", measureClick);
-  map.off("mousemove", measureMove);
-  map.off("dblclick", measureFinish);
-  map.getContainer().style.cursor = "";
-  map.doubleClickZoom.enable();
-  $("measureBtn").innerHTML = `${icon("ruler")} Měřit vzdálenost`;
-}
-
-function measureTotal(extra) {
-  let sum = 0;
-  const pts = extra ? [...measureState.pts, extra] : measureState.pts;
-  for (let i = 1; i < pts.length; i++) sum += map.distance(pts[i - 1], pts[i]);
-  return sum;
-}
-
-function redrawMeasure(hoverLatLng) {
-  if (measureState.layer) map.removeLayer(measureState.layer);
-  const g = L.layerGroup();
-  const line = measureState.pts.map((p) => [p.lat, p.lng]);
-  if (hoverLatLng && measureState.pts.length)
-    line.push([hoverLatLng.lat, hoverLatLng.lng]);
-  if (line.length >= 2) {
-    L.polyline(line, { color: css("--accent-red") || "#d64545", weight: 3,
-                       dashArray: hoverLatLng ? "5 6" : null, renderer: canvasRenderer }).addTo(g);
-  }
-  measureState.pts.forEach((p, i) => {
-    L.circleMarker([p.lat, p.lng], { radius: 4, color: css("--accent-red") || "#d64545",
-      weight: 2, fillColor: "#fff", fillOpacity: 1, renderer: canvasRenderer }).addTo(g);
-    if (i > 0) {
-      let cum = 0;
-      for (let k = 1; k <= i; k++) cum += map.distance(measureState.pts[k - 1], measureState.pts[k]);
-      L.marker([p.lat, p.lng], { interactive: false, opacity: 0,
-        icon: L.divIcon({ className: "measureLbl", html: fmtDist(cum),
-                          iconSize: [0, 0], iconAnchor: [-6, 8] }) }).addTo(g);
-    }
-  });
-  g.addTo(map);
-  measureState.layer = g;
-  const total = measureTotal(hoverLatLng && measureState.pts.length ? hoverLatLng : null);
-  updateMeasureReadout(total);
-}
-
-function updateMeasureReadout(total) {
-  if (!measureState.readout) {
-    const el = document.createElement("div");
-    el.id = "measureReadout";
-    el.className = "floating";
-    document.getElementById("app").appendChild(el);
-    measureState.readout = el;
-  }
-  const n = measureState.pts.length;
-  measureState.readout.innerHTML =
-    `${icon("ruler", 14)} <b>${fmtDist(total)}</b>` +
-    (n < 2 ? ' <span class="muted">– klikejte do mapy</span>'
-           : ` <span class="muted">· ${n} bodů · dvojklik/Esc ukončí</span>`);
-}
-
-function measureClick(e) { measureState.pts.push(e.latlng); redrawMeasure(); }
-function measureMove(e) { if (measureState.pts.length) redrawMeasure(e.latlng); }
-function measureFinish() {
-  if (measureState.pts.length >= 2) {
-    redrawMeasure();   // dvojklik nepřiblíží (doubleClickZoom je vypnutý)
-    toast(`Naměřeno ${fmtDist(measureTotal())}. Měření ukončeno.`, "success");
-  }
-  // ponechá čáru vykreslenou, jen ukončí režim přidávání
-  measureState.active = false;
-  map.off("click", measureClick);
-  map.off("mousemove", measureMove);
-  map.off("dblclick", measureFinish);
-  map.getContainer().style.cursor = "";
-  map.doubleClickZoom.enable();
-  $("measureBtn").innerHTML = `${icon("ruler")} Měřit znovu`;
-}
-
-function startMeasure() {
-  if (drawState.active) drawCleanup();
-  if (geomState.active) geomCleanup();
-  measureCleanup();
-  measureState.active = true;
-  map.doubleClickZoom.disable();
-  map.getContainer().style.cursor = "crosshair";
-  map.on("click", measureClick);
-  map.on("mousemove", measureMove);
-  map.on("dblclick", measureFinish);
-  $("measureBtn").innerHTML = `${icon("x")} Ukončit měření`;
-  updateMeasureReadout(0);
-  toast("Klikáním do mapy měřte vzdálenost trasy. Dvojklik nebo Esc ukončí.");
-}
-
-$("measureBtn").addEventListener("click", () => {
-  if (measureState.active) { measureCleanup(); return; }   // probíhá měření → ukončit a smazat
-  startMeasure();   // i s hotovou čarou: startMeasure ji uvnitř smaže a začne nové (Esc jen smaže)
+const mapTools = initMapTools({
+  map, canvasRenderer, css,
+  beforeMeasure: () => {   // zavřít konkurenční režimy kreslení
+    if (drawState.active) drawCleanup();
+    if (geomState.active) geomCleanup();
+  },
 });
+const measureCleanup = mapTools.measureCleanup;
 
-// ------------------------------------------------- export mapy do PNG
-
-async function exportMapPng() {
-  const btn = $("exportPngBtn");
-  btn.disabled = true;
-  const orig = btn.innerHTML;
-  btn.innerHTML = `${icon("image")} Připravuji…`;
-  try {
-    const size = map.getSize();
-    const canvas = document.createElement("canvas");
-    canvas.width = size.x;
-    canvas.height = size.y;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = css("--surface-1") || "#ffffff";
-    ctx.fillRect(0, 0, size.x, size.y);
-    const base = map.getContainer().getBoundingClientRect();
-
-    // 1) podkladové dlaždice (img) v pořadí, jak leží v DOM
-    const tiles = [...map.getContainer().querySelectorAll(".leaflet-tile-pane img.leaflet-tile")]
-      .filter((im) => im.complete && im.naturalWidth && (im.style.opacity === "" || Number(im.style.opacity) > 0.1));
-    for (const im of tiles) {
-      const r = im.getBoundingClientRect();
-      try { ctx.drawImage(im, r.left - base.left, r.top - base.top, r.width, r.height); }
-      catch (e) { /* ojedinělou dlaždici přeskoč */ }
-    }
-    // 2) vektorové/heat/webgl vrstvy – všechny <canvas> v mapě (canvas→canvas netaintuje)
-    for (const cv of map.getContainer().querySelectorAll("canvas")) {
-      if (!cv.width || !cv.height) continue;
-      const r = cv.getBoundingClientRect();
-      try { ctx.drawImage(cv, r.left - base.left, r.top - base.top, r.width, r.height); }
-      catch (e) { /* WebGL bez preserveDrawingBuffer se přeskočí */ }
-    }
-    // 3) razítko dole: období + atribuce
-    stampMap(ctx, size);
-
-    let url;
-    try { url = canvas.toDataURL("image/png"); }
-    catch (e) {
-      toast("Export se nezdařil kvůli ochraně dlaždic (CORS). Zkuste jiný podklad " +
-            "(OpenStreetMap) a načtěte mapu znovu.", "error");
-      return;
-    }
-    const tag = ($("dateFrom").value || "vse") + "_" + ($("dateTo").value || "vse");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `mapa-${tag}.png`;
-    a.click();
-    toast("Mapa uložena jako PNG.", "success");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-  }
-}
-
-function stampMap(ctx, size) {
-  const period = ($("dateFrom").value || $("dateTo").value)
-    ? `Období: ${$("dateFrom").value || "…"} – ${$("dateTo").value || "…"}`
-    : "Všechna data";
-  const attr = "© OpenStreetMap · GMaps Historie";
-  ctx.font = "12px system-ui, sans-serif";
-  const pad = 6, h = 20;
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, size.y - h, size.x, h);
-  ctx.fillStyle = "#fff";
-  ctx.textBaseline = "middle";
-  ctx.fillText(period, pad, size.y - h / 2);
-  const w = ctx.measureText(attr).width;
-  ctx.fillText(attr, size.x - w - pad, size.y - h / 2);
-}
-
-$("exportPngBtn").addEventListener("click", exportMapPng);
 
 // ------------------------------------------- kreslení oblasti (polygon)
 
@@ -1140,7 +1102,8 @@ async function finishPolygonDraw() {
       });
       toast(`Oblast upravena: ${drawState.editName}`, "success");
     } else {
-      const name = prompt("Název oblasti (zákazník, sklad, areál…):");
+      const name = await appPrompt("Název oblasti (zákazník, sklad, areál…):",
+        { title: "Pojmenovat oblast", placeholder: "Zákazník Novák" });
       if (name === null || !name.trim()) { drawCleanup(); return; }
       await apiFetch("/api/places", {
         method: "POST", body: { name: name.trim(), polygon: drawState.pts },
@@ -1337,11 +1300,11 @@ function renderPoints() {
     const p = pts[i];
     const m = L.circleMarker([p[1], p[2]], {
       renderer: canvasRenderer,
-      radius: 3.5,
-      color: css("--series-1"),
-      weight: 1,
+      radius: 4,
+      color: "#fff",           // bílý prstenec – bod je čitelný na každém podkladu
+      weight: 1.3,
       fillColor: css("--series-1"),
-      fillOpacity: 0.55,
+      fillOpacity: 0.85,
     }).on("click", () => whenIWasHere(p[1], p[2]));
     if (withTooltips) m.bindTooltip(new Date(p[0] * 1000).toLocaleString("cs"));
     m.addTo(pointLayer);
@@ -1361,10 +1324,10 @@ function visitMarker(v) {
   const hours = Math.max((v.end_ts - v.start_ts) / 3600, 0);
   return L.circleMarker([v.lat, v.lon], {
     radius: Math.min(12, 4 + Math.sqrt(hours) * 1.6),
-    color: css("--series-2"),
+    color: "#fff",             // bílý prstenec odděluje značku od podkladu
     fillColor: css("--series-2"),
-    fillOpacity: 0.55,
-    weight: 1,
+    fillOpacity: 0.8,
+    weight: 1.5,
   });
 }
 
@@ -1520,9 +1483,9 @@ function showAllData() {
    místo souřadnic a lze ho kdykoli změnit stejnou cestou. */
 async function renamePlace(lat, lon, currentLabel) {
   const suggestion = /\d+\.\d+/.test(currentLabel || "") ? "" : (currentLabel || "");
-  const name = prompt(
+  const name = await appPrompt(
     "Název místa (např. Zákazník Novák nebo adresa).\nPrázdný název = zrušit vlastní pojmenování.",
-    suggestion);
+    { title: "Pojmenovat místo", value: suggestion });
   if (name === null) return;
   if (name.trim() === "") {
     // smazat případný vlastní název v okolí
@@ -1609,12 +1572,44 @@ async function renderCalendar() {
     }));
 }
 
+initYearCard(() => calYear);   // karta souhrnu roku zobrazeného v kalendáři
 $("calPrev").addEventListener("click", () => { calYear--; renderCalendar(); });
 $("calNext").addEventListener("click", () => { calYear++; renderCalendar(); });
 
 // ------------------------------------------------------ klávesové zkratky
 
+const SHORTCUTS = [
+  ["← →", "předchozí / další den přehrávání"],
+  ["mezerník", "spustit / pozastavit přehrávání dne"],
+  ["M", "měření vzdálenosti (na mapě)"],
+  ["Esc", "zrušit kreslení, měření či zavřít okno"],
+  ["?", "tato nápověda"],
+];
+
+function toggleShortcutHelp(force) {
+  let el = document.getElementById("shortcutHelp");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "shortcutHelp";
+    el.hidden = true;
+    el.innerHTML =
+      `<div class="dlgCard"><h3 class="dlgTitle">Klávesové zkratky</h3>` +
+      `<table class="shortcutTable">${SHORTCUTS.map(([k, d]) =>
+        `<tr><td><kbd>${k}</kbd></td><td>${d}</td></tr>`).join("")}</table>` +
+      `<div class="dlgBtns"><button class="primary" type="button">Zavřít</button></div></div>`;
+    document.body.appendChild(el);
+    el.querySelector("button").addEventListener("click", () => { el.hidden = true; });
+    el.addEventListener("mousedown", (ev) => { if (ev.target === el) el.hidden = true; });
+  }
+  el.hidden = force !== undefined ? !force : !el.hidden;
+}
+
 document.addEventListener("keydown", (e) => {
+  const help = document.getElementById("shortcutHelp");
+  if (e.key === "Escape" && help && !help.hidden) {
+    help.hidden = true;
+    return;
+  }
   if (e.key === "Escape" && drawState.active) {
     drawCleanup();
     toast("Kreslení oblasti zrušeno.");
@@ -1625,12 +1620,14 @@ document.addEventListener("keydown", (e) => {
     toast("Úprava tvaru zrušena.");
     return;
   }
-  if (e.key === "Escape" && (measureState.active || measureState.layer)) {
+  if (e.key === "Escape" && mapTools.measureBusy()) {
     measureCleanup();
     return;
   }
   if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey) return;
-  if (e.key === "ArrowLeft") { shiftDay(-1); }
+  if (e.key === "?") { e.preventDefault(); toggleShortcutHelp(); }
+  else if (e.key === "m" || e.key === "M") { $("measureBtn").click(); }
+  else if (e.key === "ArrowLeft") { shiftDay(-1); }
   else if (e.key === "ArrowRight") { shiftDay(1); }
   else if (e.code === "Space") { e.preventDefault(); $("playBtn").click(); }
 });
@@ -1679,7 +1676,7 @@ map.on("click", (e) => {
     addDrawVertex(e.latlng.lat, e.latlng.lng);
     return;
   }
-  if (geomState.active || measureState.active) return;   // při úpravě/měření klik nic neotvírá
+  if (geomState.active || mapTools.measureActive()) return;   // při úpravě/měření klik nic neotvírá
   const { lat, lng } = e.latlng;
   const div = document.createElement("div");
   const btn = document.createElement("button");
@@ -1823,6 +1820,7 @@ function setupPlaybackMap(day) {
     fillColor: css("--accent-red"), fillOpacity: 1,
   }).addTo(playLayer);
   map.fitBounds(pts.map((p) => [p[1], p[2]]), { padding: [40, 40] });
+  drawMatchedRoad();   // volitelné přichycení stopy dne k silnicím (opt-in)
 
   for (const v of day.visits) {
     visitMarker(v).bindTooltip(v.name || v.semantic || "Místo").addTo(playLayer);
@@ -1987,7 +1985,7 @@ $("cleanupBtn").addEventListener("click", async () => {
   const dry = await apiFetch("/api/cleanup", { method: "POST", params: { ...qualityParams(), dry_run: true } });
   const total = dry.low_accuracy + dry.outliers + dry.bad_visits + dry.duplicate_activities;
   if (!total) { $("qualityReport").innerHTML = '<p class="muted">Není co opravovat.</p>'; return; }
-  if (!confirm(`Smazat ${dry.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
+  if (!await appConfirm(`Smazat ${dry.low_accuracy.toLocaleString("cs")} nepřesných bodů, `
     + `${dry.outliers.toLocaleString("cs")} teleportů, ${dry.bad_visits.toLocaleString("cs")} vadných návštěv `
     + `a ${dry.duplicate_activities.toLocaleString("cs")} duplicitních cest?\n`
     + "Doporučení: originální exporty od Googlu si nechte – kdykoli je lze naimportovat znovu.")) return;
@@ -2005,125 +2003,14 @@ $("cleanupBtn").addEventListener("click", async () => {
   }
 });
 
-// ----------------------------------------------------------------- import
+// --------------------------------------- import dat (modul import-ui.js)
 
-// stav importu se ukazuje v Nástrojích i (běží-li) v okně průvodce
-function setImportStatus(msg) {
-  $("importStatus").textContent = msg;
-  const w = document.getElementById("wizImportStatus");
-  if (w) w.textContent = msg;
-}
+initImportUi({
+  onImported: () => { loadPlaceSuggest(); showAllData(); },
+  wizardOpen: () => !$("wizard").hidden,
+  closeWizardSoon: () => setTimeout(closeWizard, 1800),
+});
 
-async function startImport(file) {
-  if (!file) { toast("Nejdřív vyberte soubor k importu.", "error"); return; }
-  const fd = new FormData();
-  fd.append("file", file);
-  $("importBtn").disabled = true;
-  setImportStatus(`Nahrávám ${file.name} …`);
-  try {
-    const res = await fetch("/api/import", { method: "POST", body: fd });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.detail || res.status);
-    await watchImport(body.job_id);   // import běží na pozadí, sledujeme průběh
-  } catch (e) {
-    setImportStatus("Import selhal: " + e.message);
-    toast("Import selhal", "error");
-    $("importBtn").disabled = false;
-  }
-}
-
-$("importBtn").addEventListener("click", () => startImport($("importFile").files[0]));
-
-async function watchImport(jobId) {
-  const fmt = (v) => v.toLocaleString("cs");
-  while (true) {
-    let s;
-    try {
-      s = await api(`/api/import/status/${jobId}`);
-    } catch (e) {
-      setImportStatus("Nelze zjistit stav importu: " + e.message);
-      break;
-    }
-    if (s.status === "running") {
-      setImportStatus(
-        `Zpracovávám… +${fmt(s.points)} bodů, +${fmt(s.visits)} návštěv, +${fmt(s.activities)} aktivit`);
-      await new Promise((r) => setTimeout(r, 1500));
-      continue;
-    }
-    if (s.status === "done") {
-      await renderImportSummary(s);
-      toast(s.points || s.visits || s.activities
-        ? "Import dokončen." : "Import proběhl, ale nenašla se žádná data.",
-        s.points || s.visits || s.activities ? "success" : "error");
-      if (!document.getElementById("wizard").hidden) {
-        setTimeout(closeWizard, 1800);   // po dokončení průvodce zavřít
-      }
-      loadPlaceSuggest();
-      showAllData();   // období = vše + skok na data, ať je hned vidět, co se přidalo
-    } else {
-      setImportStatus("Import selhal: " + s.error);
-      toast("Import selhal", "error");
-    }
-    break;
-  }
-  $("importBtn").disabled = false;
-}
-
-/* Přehledný souhrn importu: co přibylo, které soubory se přeskočily a proč,
-   a co je teď celkem v databázi (aby bylo jasné, co se stalo a proč). */
-async function renderImportSummary(s) {
-  const fmt = (v) => (v || 0).toLocaleString("cs");
-  const box = $("importStatus");
-  const nothing = !s.points && !s.visits && !s.activities;
-  const parts = [];
-
-  parts.push(
-    `<div class="impHead ${nothing ? "warn" : "ok"}">` +
-    `${icon(nothing ? "alert" : "check", 18)} ` +
-    (nothing ? "Import proběhl, ale nepřidala se žádná data"
-             : "Import dokončen") + "</div>");
-
-  parts.push(
-    `<ul class="impStats"><li>+<b>${fmt(s.points)}</b> GPS bodů</li>` +
-    `<li>+<b>${fmt(s.visits)}</b> návštěv míst</li>` +
-    `<li>+<b>${fmt(s.activities)}</b> cest/aktivit</li>` +
-    `<li>z <b>${fmt(s.files)}</b> souborů` +
-    (s.skipped ? `, <b>${fmt(s.skipped)}</b> přeskočeno` : "") + "</li></ul>");
-
-  if (nothing) {
-    parts.push('<p class="muted">Nejčastější příčina: vybraný soubor není ' +
-      'export historie polohy, nebo je to prázdný/jiný ZIP. Stáhněte z Googlu ' +
-      '„Location History (Timeline)" a vyberte <b>Timeline.json</b> nebo celý ' +
-      '<b>ZIP</b> z Takeoutu.</p>');
-  }
-
-  if (s.skipped_names && s.skipped_names.length) {
-    const items = s.skipped_names.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
-    const more = s.skipped > s.skipped_names.length
-      ? `<li class="muted">…a další (${fmt(s.skipped - s.skipped_names.length)})</li>` : "";
-    parts.push(
-      `<details class="impDetails"><summary>Přeskočené soubory (${fmt(s.skipped)})</summary>` +
-      `<ul class="impSkip">${items}${more}</ul>` +
-      '<p class="muted">Přeskočí se soubory, které nejsou data o poloze ' +
-      '(nastavení, jiné služby) – to je v pořádku.</p></details>');
-  }
-
-  // co je teď celkem v databázi + rozsah dat
-  try {
-    const r = await api("/api/range");
-    if (r.min_ts && r.max_ts) {
-      const fmtD = (ts) => new Date(ts * 1000).toLocaleDateString("cs");
-      parts.push(
-        `<p class="impTotal">Celkem v databázi: <b>${fmt(r.points)}</b> bodů, ` +
-        `<b>${fmt(r.visits)}</b> návštěv · data od <b>${fmtD(r.min_ts)}</b> ` +
-        `do <b>${fmtD(r.max_ts)}</b>.</p>`);
-    }
-  } catch (e) { /* nevadí */ }
-
-  box.innerHTML = parts.join("");
-  const w = document.getElementById("wizImportStatus");
-  if (w) w.innerHTML = box.innerHTML;
-}
 
 // ----------------------------------------------------- průvodce / nápověda
 
@@ -2166,6 +2053,27 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("wizard").hidden) closeWizard();
 });
 
+// tlačítko v průvodci: ukázková data pro vyzkoušení bez vlastního exportu
+$("wizDemoBtn")?.addEventListener("click", async () => {
+  $("wizDemoBtn").disabled = true;
+  const orig = $("wizDemoBtn").innerHTML;
+  $("wizDemoBtn").innerHTML = `${icon("wand")} Generuji ukázku…`;
+  try {
+    const res = await apiFetch("/api/demo", { method: "POST" });
+    toast(`Ukázka nahrána: ${res.points.toLocaleString("cs")} bodů, ` +
+      `${res.visits} návštěv. Rozhlédněte se!`, "success");
+    closeWizard();
+    loadPlaceSuggest();
+    renderCalendar();
+    showAllData();
+  } catch (e) {
+    toast("Ukázku nejde nahrát: " + e.message, "error");
+  } finally {
+    $("wizDemoBtn").disabled = false;
+    $("wizDemoBtn").innerHTML = orig;
+  }
+});
+
 // tlačítko v průvodci: vybrat soubor a rovnou importovat
 $("wizImportBtn").addEventListener("click", () => {
   const onPick = () => {
@@ -2192,10 +2100,12 @@ async function loadBackups() {
 $("restoreBtn").addEventListener("click", async () => {
   const name = $("restoreSelect").value;
   if (!name) { toast("Nejdřív vyberte zálohu.", "error"); return; }
-  if (!confirm("Obnovit databázi z této zálohy? Současná data se přepíšou " +
+  if (!await appConfirm("Obnovit databázi z této zálohy? Současná data se přepíšou " +
                "(předtím se ale sama zazálohují, obnovu lze vzít zpět).")) return;
   try {
-    const res = await api("/api/restore", { method: "POST", params: { name } });
+    // apiFetch, ne api(): wrapper api() bere 2. argument jen jako query
+    // parametry a metodu by zahodil (obnova by se volala jako GET → 405)
+    const res = await apiFetch("/api/restore", { method: "POST", params: { name } });
     toast(`Databáze obnovena ze zálohy. Předchozí stav uložen jako ${res.safety_backup}.`,
       "success");
     loadBackups();
@@ -2218,6 +2128,33 @@ async function showAutoImportLog() {
 
 // ------------------------------------------------------------------ start
 
+/* Nenápadná připomínka, když poslední data v databázi jsou starší 30 dní –
+   uživatel na nový export z Googlu snadno zapomene. Odkliknutí se pamatuje
+   měsíc (klíč obsahuje rok-měsíc), takže banner neotravuje. */
+function maybeShowStaleNotice(maxTs) {
+  const days = Math.floor((Date.now() / 1000 - maxTs) / 86400);
+  if (days < 30) return;
+  const key = "staleDismissed." + new Date().toISOString().slice(0, 7);
+  if (localStorage.getItem(key)) return;
+  const el = document.createElement("div");
+  el.id = "staleNotice";
+  el.className = "floating";
+  el.innerHTML =
+    `${icon("calendar", 15)} Poslední data jsou <b>${days} dní</b> stará. ` +
+    "Nahrajte nový export z Googlu, ať mapa nezaostává. " +
+    `<button id="staleImportBtn" class="primary">Import</button>` +
+    `<button id="staleCloseBtn" title="Skrýt do příštího měsíce">${icon("x", 13)}</button>`;
+  document.getElementById("app").appendChild(el);
+  $("staleImportBtn").addEventListener("click", () => {
+    document.querySelector('#tabs [data-tab="nastroje"]').click();
+    el.remove();
+  });
+  $("staleCloseBtn").addEventListener("click", () => {
+    localStorage.setItem(key, "1");
+    el.remove();
+  });
+}
+
 (async function init() {
   readHash();
   initEventStream();
@@ -2227,6 +2164,7 @@ async function showAutoImportLog() {
     if (r.max_ts) {
       $("playDate").value = toDateStr(new Date(r.max_ts * 1000));
       calYear = new Date(r.max_ts * 1000).getFullYear();
+      maybeShowStaleNotice(r.max_ts);
     }
     if (!r.points && !r.visits) {
       // prázdná databáze → laika provede průvodce (pokud si ho nevypnul)
@@ -2240,6 +2178,7 @@ async function showAutoImportLog() {
     }
   } catch (e) { /* server nedostupný – ukáže se při Načíst */ }
   showVersion();
+  showHealth();
   loadProfiles();
   loadBackups();
   loadPlaceSuggest();
@@ -2261,7 +2200,7 @@ async function loadProfiles() {
 }
 
 $("profileCreateBtn")?.addEventListener("click", async () => {
-  const name = prompt("Název nového profilu:");
+  const name = await appPrompt("Název nového profilu:", { title: "Nový profil" });
   if (!name || !name.trim()) return;
   try {
     await apiFetch("/api/profiles", { method: "POST", body: { name: name.trim() } });
@@ -2284,6 +2223,32 @@ $("profileSwitchBtn")?.addEventListener("click", async () => {
   }
 });
 
+async function showHealth() {
+  try {
+    const h = await api("/api/health");
+    const mb = (h.db_size / 1e6).toLocaleString("cs", { maximumFractionDigits: 1 });
+    $("appHealth").innerHTML =
+      `Databáze (profil ${escapeHtml(h.profile)}): <b>${mb} MB</b> · ` +
+      `${h.points.toLocaleString("cs")} bodů, ${h.visits.toLocaleString("cs")} návštěv, ` +
+      `${h.trips.toLocaleString("cs")} jízd v knize<br>` +
+      `Poslední záloha: <b>${h.last_backup || "zatím žádná"}</b> ` +
+      '<span class="muted">(zálohuje se automaticky 1× denně)</span>';
+  } catch (e) { $("appHealth").textContent = ""; }
+}
+
+$("dbCheckBtn")?.addEventListener("click", async () => {
+  $("dbCheckResult").textContent = "Kontroluji…";
+  try {
+    const r = await apiFetch("/api/health/check", { method: "POST" });
+    $("dbCheckResult").innerHTML = r.ok
+      ? `${icon("check", 13)} Databáze je v pořádku.`
+      : `${icon("alert", 13)} Nalezeny potíže: ${escapeHtml(r.detail.join("; "))} – ` +
+        "obnovte poslední zálohu.";
+  } catch (e) {
+    $("dbCheckResult").textContent = "Kontrola selhala: " + e.message;
+  }
+});
+
 async function showVersion() {
   try {
     const { version, release, desktop } = await api("/api/version");
@@ -2297,7 +2262,8 @@ async function showVersion() {
 }
 
 $("quitBtn").addEventListener("click", async () => {
-  if (!confirm("Opravdu ukončit aplikaci GMaps Historie?")) return;
+  if (!await appConfirm("Opravdu ukončit aplikaci GMaps Historie?",
+        { okLabel: "Ukončit", danger: true })) return;
   $("quitBtn").disabled = true;
   try {
     await apiFetch("/api/shutdown", { method: "POST" });

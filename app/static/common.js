@@ -125,3 +125,81 @@ export function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (m) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }
+
+/* ---------------------------------------------------------- dialogy
+   Vlastní modální potvrzení/dotaz místo syrových confirm()/prompt():
+   jednotný vzhled se zbytkem aplikace, Enter = potvrdit, Esc = zrušit,
+   „danger" varianta pro destruktivní akce. Vrací Promise. */
+
+let _dlg = null;
+
+function _dialogEl() {
+  if (_dlg) return _dlg;
+  _dlg = document.createElement("div");
+  _dlg.id = "appDialog";
+  _dlg.hidden = true;
+  _dlg.innerHTML = `
+    <div class="dlgCard" role="dialog" aria-modal="true">
+      <h3 class="dlgTitle"></h3>
+      <p class="dlgMsg"></p>
+      <input class="dlgInput" type="text">
+      <div class="dlgBtns">
+        <button class="dlgCancel" type="button">Zrušit</button>
+        <button class="dlgOk primary" type="button"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(_dlg);
+  return _dlg;
+}
+
+function _openDialog({ title, message, okLabel, danger, input, value, placeholder }) {
+  const el = _dialogEl();
+  el.querySelector(".dlgTitle").textContent = title || "";
+  el.querySelector(".dlgTitle").hidden = !title;
+  const msg = el.querySelector(".dlgMsg");
+  msg.textContent = message || "";
+  msg.hidden = !message;
+  const inp = el.querySelector(".dlgInput");
+  inp.hidden = !input;
+  inp.value = value || "";
+  inp.placeholder = placeholder || "";
+  const ok = el.querySelector(".dlgOk");
+  ok.textContent = okLabel;
+  ok.classList.toggle("danger", !!danger);
+  el.hidden = false;
+  const prevFocus = document.activeElement;
+  (input ? inp : ok).focus();
+  if (input) inp.select();
+
+  return new Promise((resolve) => {
+    const done = (result) => {
+      el.hidden = true;
+      el.removeEventListener("keydown", onKey);
+      el.removeEventListener("mousedown", onOutside);
+      ok.onclick = el.querySelector(".dlgCancel").onclick = null;
+      prevFocus?.focus?.();
+      resolve(result);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); done(null); }
+      if (e.key === "Enter") { e.preventDefault(); done(input ? inp.value : true); }
+    };
+    const onOutside = (e) => { if (e.target === el) done(null); };
+    el.addEventListener("keydown", onKey);
+    el.addEventListener("mousedown", onOutside);
+    ok.onclick = () => done(input ? inp.value : true);
+    el.querySelector(".dlgCancel").onclick = () => done(null);
+  });
+}
+
+/* Potvrzení: resolves true/false. Pro destruktivní akce danger: true. */
+export async function appConfirm(message, { title = "Potvrzení", okLabel = "Ano",
+                                            danger = false } = {}) {
+  return (await _openDialog({ title, message, okLabel, danger })) === true;
+}
+
+/* Dotaz na text: resolves zadaný řetězec, nebo null při zrušení. */
+export function appPrompt(message, { title = "", value = "", placeholder = "",
+                                     okLabel = "Uložit" } = {}) {
+  return _openDialog({ title, message, okLabel, input: true, value, placeholder });
+}

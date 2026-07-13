@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from contextlib import closing
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from .. import db, places
 from ..common import haversine_m, ts_range
@@ -52,10 +52,19 @@ def api_heatmap(from_ts: int | None = Query(None), to_ts: int | None = Query(Non
     lo, hi = ts_range(from_ts, to_ts)
     bsql, bargs = bbox_sql(min_lat, max_lat, min_lon, max_lon)
     with closing(db.connect()) as conn:
+        # U milionů bodů se agreguje jen každý N-tý bod a počty se krokem
+        # přenásobí – hustota (relativní intenzita) zůstává, dotaz je rychlý.
+        n = conn.execute(
+            f"SELECT COUNT(*) c FROM points WHERE ts BETWEEN ? AND ?{bsql}",
+            (lo, hi, *bargs)).fetchone()["c"]
+        step = max(1, n // 500_000)
+        ssql = " AND (id % ?) = 0" if step > 1 else ""
+        sargs = (step,) if step > 1 else ()
         rows = conn.execute(
-            f"SELECT ROUND(lat,?) la, ROUND(lon,?) lo, COUNT(*) c FROM points "
-            f"WHERE ts BETWEEN ? AND ?{bsql} GROUP BY la, lo ORDER BY c DESC LIMIT ?",
-            (precision, precision, lo, hi, *bargs, MAX_HEAT_CELLS)).fetchall()
+            f"SELECT ROUND(lat,?) la, ROUND(lon,?) lo, COUNT(*) * ? c FROM points "
+            f"WHERE ts BETWEEN ? AND ?{bsql}{ssql} "
+            f"GROUP BY la, lo ORDER BY c DESC LIMIT ?",
+            (precision, precision, step, lo, hi, *bargs, *sargs, MAX_HEAT_CELLS)).fetchall()
     return {"cells": [[r["la"], r["lo"], r["c"]] for r in rows]}
 
 
@@ -76,6 +85,70 @@ def api_visits(from_ts: int | None = Query(None), to_ts: int | None = Query(None
                                         r["name"], r["semantic"])
         out.append(d)
     return {"visits": out}
+
+
+# ------------------------------------------ přichycení dne k silnicím (OSRM)
+
+_OSRM_URL = "https://router.project-osrm.org/match/v1/driving/"
+_match_cache: dict[tuple, list] = {}
+
+
+def _osrm_fetch(url: str) -> dict:
+    """Samostatně kvůli testům (mock) – jediné místo, které jde ven."""
+    import json
+    import urllib.request
+    with urllib.request.urlopen(url, timeout=8) as resp:  # noqa: S310 – pevná doména
+        return json.load(resp)
+
+
+def _match_chunk(pts: list) -> list[list[float]]:
+    """Jeden OSRM match dotaz (max ~90 bodů) → souřadnice na silnici."""
+    coords = ";".join(f"{p['lon']:.6f},{p['lat']:.6f}" for p in pts)
+    stamps = ";".join(str(p["ts"]) for p in pts)
+    radiuses = ";".join("25" for _ in pts)
+    data = _osrm_fetch(
+        f"{_OSRM_URL}{coords}?geometries=geojson&overview=full"
+        f"&timestamps={stamps}&radiuses={radiuses}&gaps=ignore&tidy=true")
+    out: list[list[float]] = []
+    for m in data.get("matchings", []):
+        for lon, lat in m["geometry"]["coordinates"]:
+            out.append([round(lat, 6), round(lon, 6)])
+    return out
+
+
+@router.get("/api/match_day")
+def api_match_day(from_ts: int = Query(...), to_ts: int = Query(...)):
+    """Přichytí stopu dne k silniční síti (online služba OSRM).
+
+    Volá se jen na výslovné přání uživatele (opt-in v Soukromí) – souřadnice
+    dne se posílají na router.project-osrm.org. Výsledek se cachuje.
+    """
+    key = (db.DB_PATH, from_ts, to_ts)
+    if key in _match_cache:
+        return {"points": _match_cache[key], "cached": True}
+    with closing(db.connect()) as conn:
+        pts = conn.execute(
+            "SELECT ts, lat, lon FROM points WHERE ts BETWEEN ? AND ? "
+            "ORDER BY ts LIMIT 50000", (from_ts, to_ts)).fetchall()
+    if len(pts) < 2:
+        return {"points": [], "cached": False}
+    # rovnoměrně zředit na ~240 bodů a rozdělit po blocích pro OSRM
+    step = max(1, len(pts) // 240)
+    sampled = [dict(p) for p in pts[::step]]
+    matched: list[list[float]] = []
+    try:
+        for i in range(0, len(sampled), 90):
+            chunk = sampled[i:i + 90]
+            if len(chunk) >= 2:
+                matched.extend(_match_chunk(chunk))
+    except Exception as exc:
+        raise HTTPException(
+            502, "Služba přichytávání k silnicím není dostupná (vyžaduje "
+                 "internet). Zkuste to později.") from exc
+    if len(_match_cache) > 64:      # jednoduchá ochrana proti růstu
+        _match_cache.clear()
+    _match_cache[key] = matched
+    return {"points": matched, "cached": False}
 
 
 @router.get("/api/day")

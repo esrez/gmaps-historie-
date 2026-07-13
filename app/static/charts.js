@@ -80,7 +80,10 @@ export function renderBarChart(el, items, opts = {}) {
   }
   const unit = opts.unit || "";
   const dec = opts.decimals ?? 0;
-  const fmt = (v) => v.toLocaleString("cs", { maximumFractionDigits: dec });
+  // velká čísla na ose kompaktně („729 tis."), jinak by se ořezávala vlevo
+  const fmt = (v) => v >= 10000
+    ? v.toLocaleString("cs", { notation: "compact", maximumFractionDigits: 0 })
+    : v.toLocaleString("cs", { maximumFractionDigits: dec });
 
   const W = 308, H = 126, padL = 34, padB = 16, padT = 14;
   const plotW = W - padL - 4, plotH = H - padT - padB;
@@ -141,7 +144,124 @@ export function renderMonthlyChart(monthly) {
   $("monthlyTitle").hidden = !shown;
 }
 
+/* Skupiny dopravy pro skládaný graf – pevné pořadí i barvy (barva sleduje
+   kategorii, nikdy pořadí v datech; „Ostatní" je neutrální šedá). */
+const TRANSPORT_GROUPS = [
+  { key: "car", label: "Autem", color: "var(--cat-1)" },
+  { key: "walk", label: "Pěšky", color: "var(--cat-2)" },
+  { key: "transit", label: "MHD/vlak", color: "var(--cat-3)" },
+  { key: "bike", label: "Na kole", color: "var(--cat-4)" },
+  { key: "other", label: "Ostatní", color: "var(--cat-other)" },
+];
+
+/* Skládaný sloupcový graf km po měsících podle dopravy. Mezi dílky sloupce
+   jsou 2px mezery v barvě plochy, tooltip ukazuje rozpad celého měsíce. */
+export function renderTransportChart(rows) {
+  const el = $("transportChart");
+  const legend = $("transportLegend");
+  const used = TRANSPORT_GROUPS.filter((g) => (rows || []).some((r) => r[g.key] > 0));
+  const total = (r) => used.reduce((a, g) => a + (r[g.key] || 0), 0);
+  if (!rows || rows.length < 2 || !used.length) {
+    el.innerHTML = ""; legend.innerHTML = "";
+    return false;
+  }
+  const W = 308, H = 132, padL = 34, padB = 16, padT = 6;
+  const plotW = W - padL - 4, plotH = H - padT - padB;
+  const maxV = Math.max(...rows.map(total), 1e-9);
+  const n = rows.length;
+  const slot = plotW / n;
+  const barW = Math.max(2, Math.min(18, slot - 2));
+  const fmt = (v) => v >= 10000
+    ? v.toLocaleString("cs", { notation: "compact", maximumFractionDigits: 0 })
+    : v.toLocaleString("cs", { maximumFractionDigits: 0 });
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Kilometry po měsících podle druhu dopravy">`;
+  for (const f of [0.5, 1]) {
+    const gy = padT + plotH * (1 - f);
+    svg += `<line class="gridline" x1="${padL}" y1="${gy}" x2="${W - 4}" y2="${gy}"/>`;
+    svg += `<text x="${padL - 4}" y="${gy + 3}" text-anchor="end">${fmt(maxV * f)}</text>`;
+  }
+  rows.forEach((r, i) => {
+    const x = padL + i * slot + (slot - barW) / 2;
+    let yTop = padT + plotH;
+    used.forEach((g, gi) => {
+      const v = r[g.key] || 0;
+      if (v <= 0) return;
+      const h = plotH * (v / maxV);
+      yTop -= h;
+      const isTop = used.slice(gi + 1).every((g2) => !(r[g2.key] > 0));
+      const rr = isTop ? Math.min(3, barW / 2, h) : 0;   // zaoblený jen vršek sloupce
+      svg += `<path class="bar seg" data-i="${i}" fill="${g.color}" d="M${x},${yTop + h} v${-(h - rr)} q0,${-rr} ${rr},${-rr} h${barW - 2 * rr} q${rr},0 ${rr},${rr} v${h - rr} z"/>`;
+    });
+  });
+  svg += `<line class="baseline" x1="${padL}" y1="${padT + plotH}" x2="${W - 4}" y2="${padT + plotH}"/>`;
+  const every = Math.ceil(n / 6);
+  rows.forEach((r, i) => {
+    if (i % every !== 0) return;
+    const [yy, mm] = r.month.split("-");
+    svg += `<text x="${padL + i * slot + slot / 2}" y="${H - 4}" text-anchor="middle">${Number(mm)}/${yy.slice(2)}</text>`;
+  });
+  svg += "</svg>";
+  el.innerHTML = svg;
+
+  legend.innerHTML = used.map((g) =>
+    `<span class="lg-chip"><i style="background:${g.color}"></i>${g.label}</span>`).join("");
+
+  el.querySelectorAll(".seg").forEach((seg) => {
+    seg.addEventListener("mousemove", (ev) => {
+      const r = rows[Number(seg.dataset.i)];
+      const parts = used.filter((g) => r[g.key] > 0)
+        .map((g) => `${g.label} <b>${r[g.key].toLocaleString("cs")} km</b>`);
+      tooltip.innerHTML = `<span class="t-label">${r.month}</span> ` +
+        `${parts.join(" · ")} · celkem <b>${total(r).toLocaleString("cs", { maximumFractionDigits: 1 })} km</b>`;
+      tooltip.hidden = false;
+      tooltip.style.left = ev.clientX + 12 + "px";
+      tooltip.style.top = ev.clientY - 10 + "px";
+    });
+    seg.addEventListener("mouseleave", () => { tooltip.hidden = true; });
+  });
+  return true;
+}
+
+/* Nejčastější trasy (odkud ⇄ kam, kolikrát, průměrné km). */
+export function renderTopRoutes(routes) {
+  const el = $("topRoutes");
+  if (!routes || !routes.length) {
+    el.innerHTML = '<p class="muted">Zatím nejsou rozpoznané opakované trasy ' +
+      "mezi pojmenovanými místy (potřebují návštěvy míst z exportu telefonu).</p>";
+    return;
+  }
+  const max = routes[0].count;
+  el.innerHTML = routes.map((r) =>
+    `<div class="routeRow">` +
+    `<span class="routeName">${escapeHtml(r.from)} ⇄ ${escapeHtml(r.to)}</span>` +
+    `<span class="routeBar"><i style="width:${Math.max(6, (r.count / max) * 100)}%"></i></span>` +
+    `<b>${r.count}×</b>` +
+    `<span class="muted">${r.km_avg != null ? "Ø " + r.km_avg.toLocaleString("cs") + " km" : ""}</span>` +
+    `</div>`).join("");
+}
+
+/* Všední dny vs. víkend – souhrnný řádek nad grafem dnů v týdnu. */
+export function renderWorkWeekend(weekdayKm) {
+  const el = $("workWeekend");
+  const work = weekdayKm.slice(0, 5).reduce((a, d) => a + d.km, 0);
+  const wkend = weekdayKm.slice(5).reduce((a, d) => a + d.km, 0);
+  const sum = work + wkend;
+  if (!(sum > 0)) { el.innerHTML = ""; return; }
+  const pw = Math.round((work / sum) * 100);
+  el.innerHTML =
+    `<div class="wwBar"><i class="ww-work" style="width:${pw}%"></i>` +
+    `<i class="ww-end" style="width:${100 - pw}%"></i></div>` +
+    `<div class="wwLabels"><span><i class="dot ww-work"></i>Všední dny ` +
+    `<b>${work.toLocaleString("cs", { maximumFractionDigits: 0 })} km</b> (${pw} %)</span>` +
+    `<span><i class="dot ww-end"></i>Víkend ` +
+    `<b>${wkend.toLocaleString("cs", { maximumFractionDigits: 0 })} km</b> (${100 - pw} %)</span></div>`;
+}
+
 export function renderAnalysis(a) {
+  renderTopRoutes(a.top_routes);
+  renderTransportChart(a.monthly_by_type);
+  renderWorkWeekend(a.weekday_km);
   renderBarChart($("weekdayChart"),
     a.weekday_km.map((d) => ({ label: d.day, value: d.km })),
     { unit: "km", tickEvery: 1, aria: "Kilometry podle dne v týdnu" });
