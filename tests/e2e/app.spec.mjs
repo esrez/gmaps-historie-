@@ -216,6 +216,21 @@ test.describe("mapa", () => {
     expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   });
 
+  test("Rok v pohybu stáhne PNG kartu se souhrnem", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await page.click('#tabs [data-tab="stat"]');
+    const [dl] = await Promise.all([
+      page.waitForEvent("download"),
+      page.click("#yearCardBtn"),
+    ]);
+    expect(dl.suggestedFilename()).toMatch(/^rok-v-pohybu-\d{4}\.png$/);
+    const fs = await import("node:fs");
+    const buf = fs.readFileSync(await dl.path());
+    expect([...buf.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  });
+
   test("ovládací sloupec mapy: přiblížit na data funguje", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() =>

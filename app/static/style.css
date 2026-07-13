@@ -1088,3 +1088,11 @@ button .ic { margin-right: 1px; }
 }
 .marker-cluster-medium div { background: var(--series-2); }
 .marker-cluster-large div { background: color-mix(in srgb, var(--series-2) 80%, #000); }
+
+/* připomínka starých dat – proužek nahoře uprostřed mapy */
+#staleNotice {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 980; padding: 8px 12px; font-size: 13px;
+  display: flex; align-items: center; gap: 8px; max-width: min(92vw, 620px);
+}
+#staleNotice button { flex: none; }

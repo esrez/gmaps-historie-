@@ -10,6 +10,7 @@ import { transportParam, renderNewPlaces } from "./map-filters.js";
 import { DayScrubber, initSpeedButtons, formatPlayClock, daySummaryText } from "./day-playback.js";
 import { initMapTools } from "./map-tools.js";
 import { initImportUi, startImport } from "./import-ui.js";
+import { initYearCard } from "./year-card.js";
 
 initThemeToggle($("themeBtn"));
 mountIcons();
@@ -1571,6 +1572,7 @@ async function renderCalendar() {
     }));
 }
 
+initYearCard(() => calYear);   // karta souhrnu roku zobrazeného v kalendáři
 $("calPrev").addEventListener("click", () => { calYear--; renderCalendar(); });
 $("calNext").addEventListener("click", () => { calYear++; renderCalendar(); });
 
@@ -2126,6 +2128,33 @@ async function showAutoImportLog() {
 
 // ------------------------------------------------------------------ start
 
+/* Nenápadná připomínka, když poslední data v databázi jsou starší 30 dní –
+   uživatel na nový export z Googlu snadno zapomene. Odkliknutí se pamatuje
+   měsíc (klíč obsahuje rok-měsíc), takže banner neotravuje. */
+function maybeShowStaleNotice(maxTs) {
+  const days = Math.floor((Date.now() / 1000 - maxTs) / 86400);
+  if (days < 30) return;
+  const key = "staleDismissed." + new Date().toISOString().slice(0, 7);
+  if (localStorage.getItem(key)) return;
+  const el = document.createElement("div");
+  el.id = "staleNotice";
+  el.className = "floating";
+  el.innerHTML =
+    `${icon("calendar", 15)} Poslední data jsou <b>${days} dní</b> stará. ` +
+    "Nahrajte nový export z Googlu, ať mapa nezaostává. " +
+    `<button id="staleImportBtn" class="primary">Import</button>` +
+    `<button id="staleCloseBtn" title="Skrýt do příštího měsíce">${icon("x", 13)}</button>`;
+  document.getElementById("app").appendChild(el);
+  $("staleImportBtn").addEventListener("click", () => {
+    document.querySelector('#tabs [data-tab="nastroje"]').click();
+    el.remove();
+  });
+  $("staleCloseBtn").addEventListener("click", () => {
+    localStorage.setItem(key, "1");
+    el.remove();
+  });
+}
+
 (async function init() {
   readHash();
   initEventStream();
@@ -2135,6 +2164,7 @@ async function showAutoImportLog() {
     if (r.max_ts) {
       $("playDate").value = toDateStr(new Date(r.max_ts * 1000));
       calYear = new Date(r.max_ts * 1000).getFullYear();
+      maybeShowStaleNotice(r.max_ts);
     }
     if (!r.points && !r.visits) {
       // prázdná databáze → laika provede průvodce (pokud si ho nevypnul)
