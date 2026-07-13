@@ -301,9 +301,9 @@ zjišťování adres míst (Nástroje → Soukromí, výchozí vypnuto).
 |---|---|
 | Backend | Python 3.11+, FastAPI (routery v `app/routers/`, služby v `app/services/`), SQLite WAL |
 | Import | autodetekce formátu, streamované čtení přes `ijson`, běh na pozadí, SSE notifikace |
-| Frontend | ES moduly (`app.js`, `map-filters.js`, `sync-events.js`), Leaflet, PWA |
+| Frontend | ES moduly (`app.js` + `places-ui.js`, `map-tools.js`, `timelapse.js`…), Leaflet, PWA |
 | Zobrazování | data podle výřezu mapy s rušením rozpracovaných dotazů (AbortController), gzip API |
-| Kvalita | pytest (50 testů) + ruff + smoke test v GitHub Actions |
+| Kvalita | pytest (76 testů) + ruff + ESLint + 28 e2e testů (Playwright) v GitHub Actions |
 | Nasazení | Docker / docker-compose, PyInstaller `.exe`, Inno Setup installer, in-place updater |
 
 ## Vývoj

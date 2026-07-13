@@ -2,18 +2,30 @@
 from __future__ import annotations
 
 import os
+import secrets
+from contextlib import closing
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from .. import db
+from ..core import runtime
 from ..core.auth import (
     create_session,
     login_allowed,
     note_login_fail,
     note_login_ok,
 )
-from ..core.config import APP_RELEASE, APP_VERSION, AUTH_PASSWORD, DESKTOP_APP, STATIC_DIR
+from ..core.config import (
+    APP_RELEASE,
+    APP_VERSION,
+    AUTH_PASSWORD,
+    DESKTOP_APP,
+    STATIC_DIR,
+    data_dir,
+)
 
 router = APIRouter(tags=["stránky"])
 
@@ -29,7 +41,6 @@ def api_login(body: LoginBody, request: Request):
     ip = request.client.host if request.client else "?"
     if not login_allowed(ip):
         raise HTTPException(429, "Příliš mnoho pokusů. Zkuste to za pár minut.")
-    import secrets
     if not secrets.compare_digest(body.password, AUTH_PASSWORD):
         note_login_fail(ip)
         raise HTTPException(401, "Špatné heslo")
@@ -50,11 +61,6 @@ def api_version():
 @router.get("/api/health")
 def api_health():
     """Stav aplikace pro sekci „O aplikaci": databáze, poslední záloha."""
-    import os
-    from contextlib import closing
-
-    from .. import db
-    from ..core.config import data_dir
     db_size = os.path.getsize(db.DB_PATH) if os.path.exists(db.DB_PATH) else 0
     backup_dir = os.path.join(data_dir(), "backups")
     last_backup = None
@@ -63,7 +69,6 @@ def api_health():
                   for f in os.listdir(backup_dir)
                   if f.startswith("history-") and f.endswith(".db")]
         if stamps:
-            from datetime import datetime
             last_backup = datetime.fromtimestamp(max(stamps)) \
                 .strftime("%d.%m.%Y %H:%M")
     with closing(db.connect()) as conn:
@@ -76,9 +81,6 @@ def api_health():
 @router.post("/api/health/check")
 def api_health_check():
     """Kontrola integrity SQLite databáze (PRAGMA quick_check)."""
-    from contextlib import closing
-
-    from .. import db
     with closing(db.connect()) as conn:
         rows = [r[0] for r in conn.execute("PRAGMA quick_check")]
     ok = rows == ["ok"]
@@ -91,7 +93,6 @@ def api_shutdown():
     aby se nedal omylem vypnout server běžící pod Dockerem."""
     if not DESKTOP_APP:
         raise HTTPException(403, "Ukončení je dostupné jen v desktopové aplikaci")
-    from ..core import runtime
     runtime.request_shutdown()
     return {"ok": True, "message": "Aplikace se ukončuje…"}
 
@@ -109,7 +110,6 @@ def api_update():
 @router.get("/api/update/package")
 def api_update_package():
     """Vrátí update balík (ZIP), pokud je připraven na disku."""
-    from ..core.config import data_dir
     path = os.path.join(data_dir(), "update", "GMapsHistorie-update.zip")
     if not os.path.exists(path):
         raise HTTPException(404, "Balík aktualizace není připraven")
@@ -149,7 +149,6 @@ def pmtiles_path() -> str:
             return fn()
     except Exception:
         pass
-    from ..core.config import data_dir
     return os.path.join(data_dir(), "map.pmtiles")
 
 

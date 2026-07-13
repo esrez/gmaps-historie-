@@ -13,6 +13,7 @@ class RateLimiter:
 
     def allow(self, key: str) -> bool:
         now = time.time()
+        self._prune(now)
         hits = [t for t in self._hits[key] if now - t < self.window_s]
         if len(hits) >= self.max_calls:
             self._hits[key] = hits
@@ -20,3 +21,13 @@ class RateLimiter:
         hits.append(now)
         self._hits[key] = hits
         return True
+
+    def _prune(self, now: float):
+        """Zahodí klíče bez čerstvých záznamů, aby slovník nerostl donekonečna
+        (každá IP by v něm jinak zůstala navždy)."""
+        if len(self._hits) < 1000:
+            return
+        stale = [k for k, hits in self._hits.items()
+                 if not hits or now - hits[-1] >= self.window_s]
+        for k in stale:
+            del self._hits[k]

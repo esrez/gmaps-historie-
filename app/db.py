@@ -4,6 +4,9 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
+import time
+
+from .core.logging import log
 
 _DATA_ROOT = os.environ.get("DATA_DIR", "data")
 _PROFILE = os.environ.get("PROFILE", "default")
@@ -233,13 +236,11 @@ def after_import(conn: sqlite3.Connection | None = None):
     proto se přepočet opakuje a po vyčerpání pokusů se jen zaloguje
     (agregace se dopočítají při příští akci; hlavní operace už proběhla).
     """
-    import time as _time
-
-    from .core.logging import log
     own = conn is None
     if own:
         conn = connect()
     try:
+        # import až tady: services.aggregations sám importuje db (cyklus)
         from .services.aggregations import refresh_aggregations
         for attempt in range(4):
             try:
@@ -251,7 +252,7 @@ def after_import(conn: sqlite3.Connection | None = None):
                         log.warning("Přepočet agregací odložen (DB zamčená): %s", exc)
                         return
                     raise
-                _time.sleep(1.2 * (attempt + 1))
+                time.sleep(1.2 * (attempt + 1))
     finally:
         if own:
             conn.close()

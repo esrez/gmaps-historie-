@@ -98,6 +98,11 @@ _login_fails: dict[str, list[float]] = {}
 
 def login_allowed(ip: str) -> bool:
     now = time.time()
+    # promazání ostatních IP, ať slovník neroste donekonečna
+    if len(_login_fails) >= 1000:
+        for k in [k for k, v in _login_fails.items()
+                  if not v or now - v[-1] >= _LOGIN_WINDOW]:
+            _login_fails.pop(k, None)
     fails = [t for t in _login_fails.get(ip, []) if now - t < _LOGIN_WINDOW]
     _login_fails[ip] = fails
     return len(fails) < _LOGIN_MAX_FAILS
