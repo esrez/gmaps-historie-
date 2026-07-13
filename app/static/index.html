@@ -260,6 +260,15 @@
         </div>
         <div id="qualityReport"></div>
         <button id="cleanupBtn" hidden class="danger"><span data-icon="wand"></span> Opravit (smazat vadné záznamy)</button>
+        <h3>Smazat období (soukromí)</h3>
+        <p class="muted">Smaže všechna polohová data (body, návštěvy, cesty)
+           ve zvoleném rozmezí – např. dovolenou, kterou v historii nechcete.
+           Kniha jízd zůstává. Před smazáním se automaticky vytvoří záloha.</p>
+        <div class="row">
+          <label>Od <input type="date" id="purgeFrom"></label>
+          <label>Do <input type="date" id="purgeTo"></label>
+          <button id="purgeBtn" class="danger"><span data-icon="trash"></span> Smazat</button>
+        </div>
         <h3>Záloha a obnova</h3>
         <button id="backupBtn"><span data-icon="save"></span> Stáhnout zálohu (.db)</button>
         <p class="muted">Záloha se navíc vytváří automaticky každý den do
@@ -320,6 +329,7 @@
         <div id="appVersion" class="muted"></div>
         <div id="appHealth" class="muted"></div>
         <button id="dbCheckBtn"><span data-icon="check"></span> Zkontrolovat databázi</button>
+        <button id="installBtn" hidden><span data-icon="phone"></span> Nainstalovat jako aplikaci</button>
         <span id="dbCheckResult" class="muted"></span>
         <button id="quitBtn" class="danger" hidden><span data-icon="x"></span> Ukončit aplikaci</button>
         <p id="quitHint" class="muted" hidden>Ukončí program běžící na tomto počítači.

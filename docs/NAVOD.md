@@ -245,6 +245,9 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 - **Undo**: kniha jízd drží posledních 10 akcí (generování, propagace,
   pravidla, mazání jednotlivých jízd i hromadné mazání) – tlačítko
   „Vrátit" lze použít opakovaně.
+- **Smazat období (soukromí)**: Nástroje → Údržba dat umí smazat všechna
+  polohová data ve zvoleném rozmezí (např. dovolenou). Ukáže počty, před
+  smazáním automaticky vytvoří zálohu; kniha jízd zůstává.
 - **Verze a stav**: záložka Nástroje → „O aplikaci" ukazuje verzi frontendu,
   velikost databáze, počty záznamů, čas poslední automatické zálohy
   (zálohuje se 1× denně) a tlačítko **Zkontrolovat databázi** (integrita

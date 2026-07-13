@@ -1910,9 +1910,22 @@ function setPlayUi(playing) {
   $("playBtn").dataset.state = playing ? "playing" : "paused";
 }
 
+let wakeLock = null;   // displej nezhasíná během přehrávání (mobil)
+
+async function acquireWakeLock() {
+  try { wakeLock = await navigator.wakeLock?.request("screen"); }
+  catch (e) { /* nepodporováno / zamítnuto – nevadí */ }
+}
+
+function releaseWakeLock() {
+  wakeLock?.release().catch(() => {});
+  wakeLock = null;
+}
+
 function pausePlayback() {
   if (play.timer) cancelAnimationFrame(play.timer);
   play.timer = null;
+  releaseWakeLock();
   setPlayUi(false);
 }
 
@@ -1925,6 +1938,7 @@ function resumePlayback() {
     play.trail?.clearLayers();
   }
   setPlayUi(true);
+  acquireWakeLock();
   let last = performance.now();
   play.timer = requestAnimationFrame(function frame(now) {
     const speed = Number($("playSpeed").value);
@@ -1946,6 +1960,35 @@ function stopPlayback() {
 }
 
 window.play = play;
+
+// ------------------------------------------------- smazání období (soukromí)
+
+$("purgeBtn").addEventListener("click", async () => {
+  const f = $("purgeFrom").value, t = $("purgeTo").value;
+  if (!f || !t) { toast("Zadejte rozmezí od–do.", "error"); return; }
+  const range = { from_ts: dateToTs(f, false), to_ts: dateToTs(t, true) };
+  try {
+    const dry = await apiFetch("/api/purge_range",
+      { method: "POST", params: { ...range, dry_run: true } });
+    const total = dry.points + dry.visits + dry.activities;
+    if (!total) { toast("Ve zvoleném rozmezí nejsou žádná data.", "error"); return; }
+    const ok = await appConfirm(
+      `Smazat ${dry.points.toLocaleString("cs")} bodů, ${dry.visits.toLocaleString("cs")} návštěv `
+      + `a ${dry.activities.toLocaleString("cs")} cest z období ${f} až ${t}?\n`
+      + "Před smazáním se automaticky vytvoří záloha.",
+      { title: "Smazat období", okLabel: "Smazat", danger: true });
+    if (!ok) return;
+    const res = await apiFetch("/api/purge_range",
+      { method: "POST", params: { ...range, dry_run: false } });
+    toast(`Smazáno. Záloha uložena jako ${res.backup}.`, "success");
+    loadBackups();
+    showHealth();
+    renderCalendar();
+    showAllData();
+  } catch (e) {
+    toast("Smazání selhalo: " + e.message, "error");
+  }
+});
 
 // ------------------------------------------------------------ údržba dat
 
@@ -2247,6 +2290,23 @@ $("dbCheckBtn")?.addEventListener("click", async () => {
   } catch (e) {
     $("dbCheckResult").textContent = "Kontrola selhala: " + e.message;
   }
+});
+
+// „Přidat na plochu": prohlížeč nabídku ohlásí událostí – pak ukážeme tlačítko
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  const btn = $("installBtn");
+  if (btn) btn.hidden = false;
+});
+
+$("installBtn")?.addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $("installBtn").hidden = true;
 });
 
 async function showVersion() {
