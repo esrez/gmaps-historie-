@@ -635,3 +635,91 @@ def test_update_zip_rejects_traversal(tmp_path):
         zf.writestr("../evil.txt", "x")
     with pytest.raises(ValueError, match="podezřelou cestu"):
         apply_update_zip(zp, tmp_path / "app")
+
+
+def test_upload_import_background_job(client, test_db, tmp_path):
+    """Hlavní uživatelský tok: upload souboru → job na pozadí → hotovo."""
+    import time
+
+    from tests.fixtures import make_timeline_android
+    src = make_timeline_android(tmp_path / "up.json", days=2)
+    with open(src, "rb") as f:
+        r = client.post("/api/import",
+                        files={"file": ("up.json", f, "application/json")})
+    assert r.status_code == 200
+    job_id = r.json()["job_id"]
+    for _ in range(100):
+        st = client.get(f"/api/import/status/{job_id}").json()
+        if st["status"] != "running":
+            break
+        time.sleep(0.05)
+    assert st["status"] == "done", st
+    assert st["points"] == 40 and st["files"] == 1
+    assert client.get("/api/range").json()["points"] == 40
+    # neznámý job vrací 404
+    assert client.get("/api/import/status/neexistuje").status_code == 404
+
+
+def test_owntracks_webhook(client, test_db):
+    r = client.post("/api/sync/owntracks",
+                    json={"lat": 50.08, "lon": 14.43, "tst": 1750000000, "acc": 12})
+    assert r.status_code == 200 and r.json()["points"] == 1
+    # bez souřadnic → 400
+    assert client.post("/api/sync/owntracks", json={"tst": 1}).status_code == 400
+
+
+def test_compare_periods(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    import json as _json
+    lo = 1748800000
+    periods = _json.dumps([
+        {"from_ts": lo, "to_ts": lo + 10 * 86400, "label": "A"},
+        {"from_ts": 0, "to_ts": 1000, "label": "B"},
+    ])
+    r = client.get("/api/compare", params={"periods": periods}).json()
+    assert [p["label"] for p in r["periods"]] == ["A", "B"]
+    assert client.get("/api/compare", params={"periods": "x["}).status_code == 400
+
+
+def test_export_location_xlsx(client, test_db, tmp_path):
+    seed(test_db, tmp_path)
+    from tests.fixtures import HOME
+    r = client.get("/api/export_location.xlsx",
+                   params={"lat": HOME[0], "lon": HOME[1],
+                           "radius_m": 400, "label": "Domov"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument")
+
+
+def test_auto_backup_if_due(client, test_db, tmp_path):
+    """První běh zálohu vytvoří, druhý (čerstvá záloha) už ne."""
+    import os
+
+    from app.routers.backup import auto_backup_if_due
+    seed(test_db, tmp_path)
+    backup_dir = tmp_path / "backups"
+    auto_backup_if_due()
+    files = [f for f in os.listdir(backup_dir) if f.endswith(".db")]
+    assert len(files) == 1
+    auto_backup_if_due()
+    files2 = [f for f in os.listdir(backup_dir) if f.endswith(".db")]
+    assert files2 == files
+
+
+def test_profiles_create_switch(client, test_db, tmp_path, monkeypatch):
+    from app import db as _db
+    monkeypatch.setattr(_db, "_DATA_ROOT", str(tmp_path))
+    monkeypatch.setattr(_db, "_active_profile", "default")
+    monkeypatch.setattr(_db, "DB_PATH", str(tmp_path / "test.db"))
+
+    r = client.post("/api/profiles", json={"name": "Rodina 2!"}).json()
+    assert r["name"] == "Rodina2"        # jméno se očistí na bezpečné znaky
+    lst = client.get("/api/profiles").json()
+    assert lst["active"] == "Rodina2"
+    assert any(p["name"] == "Rodina2" for p in lst["profiles"])
+    # nový profil má prázdnou databázi
+    assert client.get("/api/range").json()["points"] == 0
+    # přepnutí na neexistující profil → 404
+    assert client.post("/api/profiles/switch",
+                       json={"name": "cizi"}).status_code == 404

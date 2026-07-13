@@ -2,6 +2,15 @@
 
 ## Nevydáno
 
+### Testy a vývojářské zázemí
+- pokrytí testy z 82 % na 88 %: nové testy pro upload import na pozadí
+  (hlavní uživatelský tok), OwnTracks webhook, porovnání období, export
+  pobytů místa, automatickou zálohu, profily (vytvoření/přepnutí/404),
+  auth middleware (401/Basic/session cookie) a celý tok aktualizace
+  (stažení → instalace → verze) – celkem 91 pytest testů
+- přidán projektový skill `.claude/skills/dev` – postup ověřování změn,
+  konvence a známé záludnosti pro práci na projektu
+
 ### Opravy z kontroly kódu
 - **GPX import zahazoval časy** u standardního (namespacovaného) GPX –
   přes `/api/sync/gpx` i auto-import se nenaimportoval ani bod; opraveno
