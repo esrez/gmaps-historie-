@@ -1,317 +1,228 @@
+<div align="center">
+
+<img src="app/static/icon.svg" alt="GMaps Historie" width="96">
+
 # GMaps Historie
 
-Self-hosted nástroj pro práci s historií polohy z Google Maps. Naimportujete
-export z Googlu, a v prohlížeči pak máte interaktivní mapu tras, heatmapu,
-statistiky a přehrávání jednotlivých dní. Vše běží na vašem serveru, data
-neopouští váš stroj (kromě stahování mapových dlaždic z OpenStreetMap).
+**Vaše historie polohy z Google Maps – zpátky na velké obrazovce, soukromě a bez cloudu.**
 
-| Mapa a přehrávání dne | Statistiky |
+[![CI](https://github.com/esrez/gmaps-historie-/actions/workflows/ci.yml/badge.svg)](https://github.com/esrez/gmaps-historie-/actions/workflows/ci.yml)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776ab.svg)](https://www.python.org)
+[![Windows | Docker | Linux](https://img.shields.io/badge/běží%20na-Windows%20%7C%20Docker%20%7C%20Linux-6c757d.svg)](#-rychlý-start)
+
+</div>
+
+Google zrušil webovou Časovou osu – historie polohy dnes žije jen ve vašem
+telefonu. **GMaps Historie** vám ji vrátí: naimportujete export z Googlu
+(Takeout i nový `Timeline.json`) a v prohlížeči máte interaktivní mapu všech
+svých cest, heatmapu, statistiky, přehrávání dní i automatickou knihu jízd.
+
+**Všechno běží u vás** – na domácím počítači, serveru nebo NASu. Poloha se
+nikam neposílá, databáze je jeden SQLite soubor, který máte pod kontrolou.
+
+> *English note: self-hosted viewer & analyzer for Google Maps location
+> history (Takeout / Timeline.json). Czech-only UI for now.*
+
+## ✨ Jak to vypadá
+
+| Mapa všech cest | Heatmapa (kde trávím čas) |
 |---|---|
-| ![Mapa](docs/screenshots/mapa.png) | ![Statistiky](docs/screenshots/statistiky.png) |
+| ![Mapa](docs/screenshots/mapa.png) | ![Heatmapa](docs/screenshots/heatmapa.png) |
 
-| Analýza | Kniha jízd |
+| Přehrávání dne + časová osa | Časosběr měsíců |
 |---|---|
-| ![Analýza](docs/screenshots/analyza.png) | ![Kniha jízd](docs/screenshots/kniha.png) |
+| ![Přehrávání dne](docs/screenshots/prehravani.png) | ![Časosběr](docs/screenshots/casosber.png) |
 
-*Screenshoty jsou z ukázkových dat (průvodce → „Jen si to vyzkoušet");
-mapový podklad se stahuje z internetu, v ukázce proto chybí.*
+| Statistiky s kalendářem roku | Analýza: rytmus týdne, top trasy |
+|---|---|
+| ![Statistiky](docs/screenshots/statistiky.png) | ![Analýza](docs/screenshots/analyza.png) |
 
-## Funkce
+| Kniha jízd | Tmavý režim |
+|---|---|
+| ![Kniha jízd](docs/screenshots/kniha.png) | ![Tmavý režim](docs/screenshots/tmavy.png) |
 
-- **Mapa tras a bodů** – trasy, jednotlivé GPS body (s časem po najetí myší)
-  i navštívená místa, filtrování podle období (vč. předvoleb Letos/Loni);
-  najetí na trasu ukáže čas, kliknutí na ni rovnou přehraje daný den
-- **Detail podle výřezu mapy** – při posunu či přiblížení se automaticky
-  dotáhne plný detail jen pro viditelnou oblast (žádné hrubé vzorkování
-  při zoomu) a heatmapa přepne na jemnější mřížku; s indikátorem načítání
-- **Stav v adrese** – zvolené období a pohled na mapu se drží v URL, takže
-  funguje záložkování, sdílení odkazu i obnovení stránky
-- **Přehrávání se stopou obarvenou rychlostí** – světlá = chůze, tmavá =
-  rychlá jízda, u ukazatele běží aktuální km/h; velikost značek míst
-  odpovídá času tam strávenému
-- **4 mapové podklady** – OpenStreetMap, světlý a tmavý (Carto), satelitní
-  (Esri); tmavý se předvolí podle vzhledu systému; měřítko na mapě
-- **Shlukování míst** – při oddálení se navštívená místa slučují do
-  přehledných clusterů s počtem
-- **Heatmapa** – kde trávíte nejvíc času / kudy nejčastěji jezdíte
-- **Hledání místa** – vyhledá vaše navštívená místa i libovolnou adresu/obec
-  (OpenStreetMap Nominatim)
-- **„Kdy jsem tu byl?"** – klikněte kamkoli do mapy (nebo na výsledek hledání)
-  a dostanete seznam všech svých pobytů v daném okruhu: datum, od–do, délka.
-  Kliknutím na pobyt se den rovnou přehraje; seznam jde exportovat do Excelu
-- **Statistiky** – celkové kilometry, rozpad podle dopravního prostředku,
-  kilometry po měsících (graf), nejnavštěvovanější místa, hodiny strávené na místech
-- **Přehrávání dne** – animace pohybu ve zvoleném dni s časovou osou, rychlostí
-  přehrávání a listováním po dnech (◀ ▶)
-- **Export do Excelu** – listy Návštěvy, Cesty, Km po měsících, Top místa
-  a GPS body za zvolené období; zvlášť i export pobytů na konkrétním místě
-- **Export do GPX** – trasy pro použití v jiných mapových aplikacích
-- **Analýza** – kilometry podle dne v týdnu, aktivita podle hodiny dne,
-  kilometry a počty cest po letech
-- **Údržba dat s automatickými opravami** – kontrola najde GPS „teleporty"
-  (osamocené nereálné skoky), body s nízkou přesností (volitelný limit
-  50/100/200 m), vadné návštěvy a dny bez dat; oprava je nejdřív ukáže
-  a smaže až po potvrzení
-- **Upozornění v knize jízd** – dny s jízdou autem, které v knize chybí
-  (s tlačítkem Doplnit nyní), neúplné jízdy a překročený roční tachometr
-- **Moderní rozhraní** – mapa přes celou obrazovku, plovoucí panel se
-  záložkami (Mapa / Statistiky / Analýza / Nástroje), plovoucí lišta
-  přehrávání, legenda vrstev, jednotné SVG ikony, dlaždice statistik
-  s trendem oproti minulému období a mini-grafem, prázdné stavy s navigací
-- **Průvodce pro začátečníky** – při prvním spuštění (prázdná databáze) se
-  otevře jednoduchý průvodce, který krok za krokem ukáže, **kde vzít data
-  z Google historie polohy** (odkazy na Google Takeout i export z telefonu)
-  a jak je nahrát; dostupný i kdykoli později tlačítkem **?** v hlavičce
-- **Intuitivní ovládání** – nenápadná oznámení místo vyskakovacích oken,
-  obrácené období se samo prohodí, potvrzení uložení přímo v řádku tabulky,
-  navádění k importu při prázdné databázi
-- **Zálohování** – automatická denní záloha databáze do `data/backups/`
-  (rotace 14 dní) + tlačítko pro okamžité stažení zálohy
-- **Volitelné heslo** – nastavením `AUTH_PASSWORD` v docker-compose se celá
-  aplikace schová za přihlášení (HTTP Basic)
-- **Import na pozadí** – i vícegigabajtový Records.json se zpracovává na
-  pozadí s průběžným ukazatelem; server zůstává použitelný
-- **Auto-import ze složky** – soubory nakopírované do `data/import/` se samy
-  naimportují do minuty (po zpracování dostanou příponu `.imported`)
-- **Ochrana proti duplicitám** – při kombinaci starého Takeoutu a nového
-  exportu se stejná cesta nezapočítá dvakrát (kontrola kvality je umí najít
-  a odstranit, generování knihy jízd je přeskakuje)
-- **Časová osa dne** – u přehrávání se zobrazí chronologický přehled
-  „odjezd → místo (hodiny) → přesun (km)" s prokliky na mapu
-- **Kniha jízd navíc**: více vozidel (filtr dle SPZ, tachometr pro každé
-  vozidlo zvlášť), **export do PDF** pro tisk (měsíční součty, česká
-  diakritika) a **vrácení poslední hromadné akce** (generování, propagace km,
-  použití pravidel i smazání období)
-- **Vlastní názvy míst** – místa lze pojmenovat (zákazník, adresa…) místo
-  souřadnic; názvy se použijí v top místech, na mapě, v hledání i v knize
-  jízd a jdou kdykoli upravit (Home/Work se překládá na Domov/Práce);
-  velké objekty lze obkreslit **polygonem** a vrstva „Moje místa" je ukazuje
-- **Přehled „Moje místa"** (samostatná záložka) – seznam všech pojmenovaných
-  míst s počtem návštěv a časem ve zvoleném období, filtrování a řazení;
-  klik na místo ho ukáže na mapě a rozbalí **jednotlivé pobyty** (kdy od–do
-  a jak dlouho jste tam byli); přímo v seznamu lze **upravit vyhrazený prostor**
-  – **interaktivně na mapě**: u kruhu tažením posunout střed a měnit velikost,
-  u polygonu **táhnout jednotlivé body**, přidávat je („+") a mazat (pravý
-  klik); dále okruh v metrech s živým náhledem, přejmenování s **našeptávačem**
-  a mazání. U souřadnic se dopočítá **adresa** (reverzní geokódování) –
-  v detailu i v bublině na mapě
-- **Kniha jízd po dnech** – řádek dne se součtem km a trasou, rozbalení na
-  editovatelné jízdy; mezisoučty měsíců, přilepená hlavička i celkový součet,
-  hromadný výběr a mazání jízd či celých dnů; pole s **našeptávačem** míst
-  a účelů; km bez údaje od Googlu se dopočítají ze skutečné GPS stopy,
-  takže kniha souhlasí s mapou
-- **Zápis po městech** – místní jízdy v rámci města se sloučí do řádku
-  „Brno" se sečtenými km, mezi městy „Brno → Praha" (vestavěný offline
-  číselník českých měst); na mapě mají cesty směrové šipky, střídavé
-  odstíny pro rozlišení a bubliny míst ukazují délku pobytu v období
-- **Kalendářový přehled roku** – mřížka všech dnů obarvená podle najetých km
-  (šedě dny se záznamem bez jízdy); kliknutí na den ho rovnou přehraje
-- **Rekordy období** – nejvíc km za den, nejdelší jednotlivá cesta a nejdelší
-  série po sobě jdoucích dní s jízdou, přímo ve statistikách
-- **Porovnání dvou období na mapě** – druhé období se vykreslí oranžově přes
-  hlavní modré trasy (předvolba „stejné období loni") pro srovnání letos/loni
-- **Widget tachometru v knize jízd** – proužek najeto/zbývá nad tabulkou,
-  červený při překročení ročního nájezdu
-- **Obnova zálohy přímo v aplikaci** – výběr z denních záloh a obnovení jedním
-  klikem; současný stav se předtím sám zazálohuje, takže obnovu lze vzít zpět
-- **Mobilní ovládání** – na telefonu se kniha jízd zobrazuje jako karty,
-  boční panel mapy jako vysouvací sheet, větší dotykové plochy
-- **PWA** – aplikaci lze nainstalovat na plochu telefonu/počítače; UI se
-  cachuje a naběhne i bez připojení
-- **Plně offline mapy** – volitelně vlastní mapový podklad ze souboru
-  `data/map.pmtiles` (Protomaps); žádná dlaždice pak neopouští vaši síť
-- **WebGL vykreslování** – nad 20 000 zobrazených bodů převezme kreslení
-  WebGL vrstva, plynulé i pro statisíce bodů
-- **Přepínač vzhledu** (auto/tmavý/světlý), **klávesové zkratky**
-  (◀ ▶ = listování dnů, mezerník = přehrát/zastavit), **vícekrokové undo**
-  v knize jízd (10 kroků zpět – vč. mazání jednotlivých i vybraných jízd),
-  plynulé načítání dlouhých tabulek
-- **Verzovaná PWA cache** – po aktualizaci serveru se mezipaměť sama
-  zneplatní, nové UI naběhne bez ručního mazání cache (verze v Nástrojích)
-- **Automatické testy** – pytest (50 testů: importér, API, kniha jízd, update)
-  + smoke test (`scripts/smoke_test.py`) a Playwright e2e testy UI v GitHub Actions
-- **Kniha jízd** (`/kniha`) – samostatná stránka pro firemní vozidlo:
-  - automatické generování jízd z rozpoznaných cest autem, volitelně jen
-    pracovní dny a pracovní doba (např. po–pá 6–18 h), s minimální délkou jízdy
-  - odkud/kam se doplní podle vašich navštívených míst (Domov, Práce, názvy míst)
-  - **pravidla kilometrů**: pevné km pro trasu či místo (např. Kancelář = 12 km);
-    po zadání km v tabulce se stejná hodnota automaticky doplní všem jízdám na
-    téže trase (obousměrně) a uloží se jako pravidlo; pravidla lze spravovat
-    a hromadně aplikovat na období
-  - **zaokrouhlování km nahoru** (volitelné)
-  - **tachometr**: zadáte roční nájezd a aplikace průběžně ukazuje, kolik km
-    je vykázáno v knize a kolik zbývá
-  - **jízdy vlastním autem**: zaškrtnutím „Vl. auto" se jízda vyřadí z knihy
-    (nezapočítává se a v exportu nebude), „Soukr." značí soukromou jízdu
-    firemním vozem (v knize zůstává)
-  - plně editovatelná tabulka (datum, časy, místa, km, účel),
-    ruční přidávání jízd; opakované generování nepřepíše ruční úpravy
-  - **export XLSX pro import do programu SPZ** (Milk Computers): sloupce SPZ,
-    Datum, Odjezd, Příjezd, Odkud, Kam, Účel jízdy, Km, Řidič, Soukromá.
-    Pozn.: vozidlo se stejnou SPZ musí být v programu SPZ založené, jinak
-    import odmítne; prázdného řidiče si SPZ doplní z karty vozidla
+*Screenshoty jsou z vestavěných ukázkových dat (průvodce → „Jen si to
+vyzkoušet") – vyzkoušíte celou aplikaci bez vlastního exportu. Mapový podklad
+se stahuje z internetu, v ukázce proto chybí.*
 
-Časy se všude převádějí podle proměnné `TZ` (výchozí Europe/Prague) se správným
-letním/zimním časem – nastavte ji v `docker-compose.yml`, pokud jste jinde.
-- **Import všech formátů Googlu** s automatickou detekcí:
-  - nový export z telefonu (`Timeline.json`, Android i iOS varianta)
-  - starý Google Takeout (`Records.json` – zvládá i vícegigabajtové soubory
-    díky streamovanému čtení, a měsíční soubory ze `Semantic Location History`)
-  - celý ZIP archiv z Takeoutu
-  - opakovaný import je bezpečný – duplicity se automaticky přeskočí
+## 🗺️ Co všechno umí
 
-## Jak získat data z Googlu
+### Mapa
 
-**Nový formát (od ~poloviny 2024):** historie polohy („Časová osa") žije jen
-v telefonu. Export: *Nastavení → Poloha → Služby určování polohy → Časová osa
-→ Exportovat data časové osy* (Android), příp. v aplikaci Google Maps
-*profil → Vaše časová osa → ⋯ → Nastavení polohy → Exportovat*. Získáte
-`Timeline.json`.
+- **Trasy, body i navštívená místa** s filtrem období (Letos / Loni / Vše…),
+  4 mapové podklady (OSM, světlý/tmavý Carto, satelit) a tmavým režimem
+- **Detail podle výřezu** – při přiblížení se automaticky dotáhne plný detail
+  viditelné oblasti; **WebGL** zvládne plynule i statisíce bodů a **několik
+  let historie najednou** (miliony bodů) se vykreslí během pár sekund
+- **Heatmapa ve dvou režimech** – kudy jezdím × kde trávím čas, volitelně
+  jen ráno / den / večer / noc
+- **Přehrávání dne** – animace pohybu se stopou obarvenou rychlostí, časovou
+  osou dne („odjezd → místo → přesun") a listováním po dnech; volitelné
+  **přichycení stopy k silnicím** (OSRM, opt-in)
+- **Časosběr měsíců** – celá historie jako animace měsíc po měsíci
+- **Barvení tras podle roku**, porovnání dvou období přes sebe, akční rádius
+  a „pavouk" nejčastějších tras přímo na mapě
+- **„Kdy jsem tu byl?"** – klik kamkoli do mapy vypíše všechny vaše pobyty
+  v okolí; hledání navštívených míst i libovolné adresy
+- **Vlastní místa** – pojmenujte si zákazníky a areály (kruh či obkreslený
+  polygon, interaktivní úprava tvaru), s adresami a našeptávačem
+- **Měření vzdálenosti** a **export výřezu mapy do PNG**
 
-**Starý formát:** pokud máte starší export z [takeout.google.com](https://takeout.google.com)
-(Historie polohy), použijte `Records.json` a/nebo složku
-`Semantic Location History` – nebo rovnou celý stažený ZIP.
+### Statistiky a analýza
 
-## Spuštění (Docker – doporučeno)
+- Dlaždice s **trendem oproti minulému období**: km, dny, návštěvy, hodiny
+  na cestách i na místech, počty cest a míst
+- **Kalendář roku** obarvený podle najetých km – najetí ukáže detail dne,
+  klik ho přehraje; sdílitelná PNG karta **„Rok v pohybu"**
+- **Rekordy** (nejvíc km za den, nejdelší cesta, série dní), nová místa,
+  top místa s možností přejmenování
+- **Zajímavosti**: akční rádius (50/90/99 % záznamů), nejdál od domova,
+  noci mimo domov, typický začátek/konec dne, **rytmus týdne** (punchcard)
+- Kilometry podle dopravy, dne v týdnu, hodiny dne a let
+
+### Kniha jízd
+
+- **Automatické generování** z rozpoznaných cest autem (volitelně jen
+  pracovní dny/doba), odkud/kam podle vašich míst, zápis po městech
+- Plně editovatelná tabulka po dnech, **pravidla kilometrů** (Kancelář =
+  12 km se doplní všem jízdám na trase), tachometr, více vozidel dle SPZ
+- **Exporty**: XLSX (vč. formátu pro program SPZ), CSV, **PDF pro tisk**;
+  roční souhrn a uzávěrka měsíce; vícekrokové zpět
+
+### Data pod kontrolou
+
+- **Import všech formátů Googlu** s autodetekcí: nový `Timeline.json`
+  (Android i iPhone), starý Takeout (`Records.json` i vícegigabajtový,
+  `Semantic Location History`), nebo rovnou celý ZIP – s přehledem, co se
+  naimportovalo a co přeskočilo a proč; duplicity se přeskakují
+- **Kontrola kvality** s návrhy oprav (GPS teleporty, nepřesné body, vadné
+  návštěvy) – nic se nemaže bez potvrzení
+- **Automatické denní zálohy** s obnovou jedním klikem, profily (více
+  uživatelů/období vedle sebe), smazání zvoleného období (soukromí)
+- **Exporty ven**: XLSX, **GPX** (po cestách) a **GeoJSON** (trasy jako
+  LineString, volitelná anonymizace souřadnic)
+- **Průběžná synchronizace** (volitelná): OwnTracks / GPX upload endpointy
+
+### Soukromí především
+
+- Poloha **neopouští váš stroj**; jediné výjimky jsou mapové dlaždice
+  (lze nahradit **plně offline** podkladem PMTiles) a volitelné, výchozím
+  stavem vypnuté zjišťování adres a přichycení k silnicím
+- Volitelné heslo (`AUTH_PASSWORD`) s brzdou proti hádání, secure cookies
+  za HTTPS proxy, žádná telemetrie
+
+## 🚀 Rychlý start
+
+### Windows (bez instalace čehokoli)
+
+Stáhněte **instalátor z [Releases](https://github.com/esrez/gmaps-historie-/releases)**
+(`GMapsHistorie-Setup-*.exe`) – český průvodce, ikona v systémové liště,
+volitelný autostart a přístup z domácí sítě, vestavěné aktualizace. Data
+zůstávají v `%LOCALAPPDATA%\GMapsHistorie`. Tipy pro Windows 11 jsou
+v [návodu](docs/NAVOD.md#8-windows-11-tipy).
+
+<details>
+<summary>Alternativa: spuštění ze zdrojáků (Python 3.11+)</summary>
+
+1. Nainstalujte [Python 3.11+](https://www.python.org/downloads/)
+   (zaškrtněte *Add python.exe to PATH*).
+2. Stáhněte projekt (*Code → Download ZIP*) a rozbalte.
+3. Dvojklik na **`start-windows.bat`** – závislosti se nainstalují samy
+   a otevře se prohlížeč.
+</details>
+
+### Docker (domácí server / NAS)
 
 ```bash
-git clone <tento-repozitář>
+git clone https://github.com/esrez/gmaps-historie-.git
 cd gmaps-historie-
 docker compose up -d --build
 ```
 
-Aplikace poběží na `http://server:8000`. Databáze (SQLite) se ukládá do
-`./data/history.db` na hostiteli.
+Aplikace poběží na `http://server:8000`, databáze v `./data/history.db`.
 
-### Import dat
-
-Buď přes webové rozhraní (sekce **Import dat** v levém panelu – nahrajete
-JSON nebo ZIP), nebo z příkazové řádky (vhodnější pro obří `Records.json`):
-
-```bash
-cp Timeline.json data/
-docker compose exec gmaps-historie python -m app.importer /data/Timeline.json
-```
-
-## Spuštění bez Dockeru (Windows / Linux / macOS)
-
-Aplikace je čistě Python + SQLite, takže běží i jako běžná aplikace bez
-Dockeru. Vyžaduje jen **Python 3.11+**.
-
-### Windows (dvojklik)
-
-1. Nainstalujte [Python 3.11+](https://www.python.org/downloads/) a při
-   instalaci zaškrtněte **„Add python.exe to PATH"**.
-2. Stáhněte projekt (tlačítko *Code → Download ZIP* a rozbalte, nebo
-   `git clone`).
-3. Dvojklik na **`start-windows.bat`**. Při prvním spuštění se jednorázově
-   vytvoří prostředí a nainstalují závislosti; pak se aplikace spustí a sama
-   otevře prohlížeč na `http://127.0.0.1:8000`.
-
-Databáze i zálohy zůstávají ve složce `data\` vedle programu. Pro příště stačí
-`start-windows.bat` spustit znovu.
-
-**Ukončení aplikace:** v záložce **Nástroje → O aplikaci** je tlačítko
-**Ukončit aplikaci**, které program korektně zastaví (pak lze zavřít okno
-prohlížeče). Fungují i **Ctrl+C** v okně konzole a **zavření okna** konzole.
-Aplikace je **jednoinstanční** – když ji spustíte, zatímco už běží, jen se
-otevře v prohlížeči a druhá kopie se nespustí.
-
-### Linux / macOS (a Windows z příkazové řádky)
+### Linux / macOS (Python)
 
 ```bash
 pip install -r requirements.txt
-python run.py            # nastartuje server a otevře prohlížeč
-# nebo přímo:
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-# import z CLI:
-python -m app.importer cesta/k/Timeline.json
+python run.py     # nastartuje server a otevře prohlížeč
 ```
 
-### Nastavení (proměnné prostředí)
+**První kroky:** při prázdné databázi se otevře průvodce – ukáže, kde vzít
+data z Googlu, a tlačítkem **„Jen si to vyzkoušet"** nahraje ukázková data,
+ať vidíte všechno hned. Pak stačí nahrát vlastní export (JSON či celý ZIP).
+
+## 📦 Jak získat data z Googlu
+
+| Zdroj | Soubor | Kde |
+|---|---|---|
+| Telefon (Android) | `Timeline.json` | Nastavení → Poloha → Časová osa → Exportovat |
+| Telefon (iPhone) | `Timeline.json` | Google Maps → profil → Vaše časová osa → ⋯ → Nastavení |
+| Starý Takeout | `Records.json`, `Semantic Location History/…` nebo celý `.zip` | [takeout.google.com](https://takeout.google.com) |
+
+Import je idempotentní (opakované nahrání nic nezdvojí) a i vícegigabajtové
+soubory se zpracují na pozadí se streamovaným čtením.
+
+## ⚙️ Nastavení
 
 | Proměnná | Význam | Výchozí |
 |---|---|---|
-| `HOST` | adresa naslouchání; `0.0.0.0` = dostupné v domácí síti | `127.0.0.1` |
+| `HOST` | `0.0.0.0` = dostupné v domácí síti | `127.0.0.1` |
 | `PORT` | port | `8000` |
 | `DB_PATH` | umístění databáze | `data/history.db` |
 | `TZ` | časové pásmo (řeší letní čas) | `Europe/Prague` |
-| `AUTH_PASSWORD` | když je nastaveno, vyžaduje heslo (HTTP Basic) | – |
-| `OPEN_BROWSER` | `0` = neotvírat prohlížeč při startu | `1` |
+| `AUTH_PASSWORD` | zapne přihlášení heslem | – |
+| `UPDATE_CHECK_URL` | prázdné = vypnout kontrolu nových verzí | GitHub releases |
+| `OPEN_BROWSER` | `0` = neotvírat prohlížeč (run.py) | `1` |
 
-Na Windows se proměnná nastaví např. `set HOST=0.0.0.0` před spuštěním
-(nebo odkomentováním řádku v `start-windows.bat`). Zálohy, auto-import ze
-složky `data\import\` i offline PMTiles fungují stejně jako v Dockeru.
+Vystavujete-li aplikaci do internetu, dejte před ni reverse proxy s HTTPS
+(Caddy, nginx, Tailscale…) a nastavte `AUTH_PASSWORD` – jde o citlivá data.
 
-> **Automatický start s Windows (volitelné):** zástupce na `start-windows.bat`
-> vložte do složky po spuštění `shell:startup` (Win+R). Pro běh na pozadí bez
-> okna lze použít Správce úloh → naplánovaná úloha spouštějící
-> `.venv\Scripts\python.exe run.py`.
+## 📚 Dokumentace
 
-### Vytvoření jednoho `.exe` (uživatel nepotřebuje Python)
+- **[Uživatelský návod](docs/NAVOD.md)** – všechny funkce krok za krokem,
+  Windows 11 tipy, řešení potíží
+- **[API reference](docs/API.md)** – všechny endpointy; interaktivně na
+  `http://server:8000/api/docs` (Swagger UI)
+- **[Windows instalátor a aktualizace](docs/WINDOWS_INSTALLER.md)** – build
+  `.exe`, Inno Setup, vydávání přes GitHub Releases
+- **[CHANGELOG](CHANGELOG.md)** – co je nového
 
-Pro rozdání ostatním lze aplikaci zabalit do **jediného spustitelného souboru**
-pomocí [PyInstaller](https://pyinstaller.org) – uživatel pak nemá žádné
-závislosti a jen soubor spustí.
-
-Na Windows spusťte **`build-windows-exe.bat`** (nebo ručně
-`pip install pyinstaller` a `pyinstaller gmaps-historie.spec`). Výsledek je
-`dist\GMapsHistorie.exe` a automaticky i `dist\GMapsHistorie-update.zip`.
-Ten stačí zkopírovat kamkoli a spustit – nastartuje
-server, otevře prohlížeč a **data ukládá do složky `data\` vedle sebe**.
-Do balíčku je zahrnutý Python, všechny knihovny i webové rozhraní; PDF export
-s českou diakritikou i časová pásma fungují bez doinstalování.
-
-**Instalační program (Windows 11):** `build-windows-installer.bat` (vyžaduje [Inno Setup 6](https://jrsoftware.org/isinfo.php))
-vytvoří `dist\GMapsHistorie-Setup-2.0.0.exe` – český průvodce, data v AppData, vestavěná aktualizace.
-Podrobnosti v
-[docs/WINDOWS_INSTALLER.md](docs/WINDOWS_INSTALLER.md).
-
-**Kontrola po buildu:** `python scripts\smoke_test.py --package dist\GMapsHistorie-update.zip`
-
-Pozn.: `.exe` sestavíte na Windows, na Linuxu/macOS vznikne obdobná binárka
-pro daný systém (PyInstaller nekřížově-nekompiluje). Antivirus někdy hlásí
-neznámý spustitelný soubor – jde o běžný falešný poplach u PyInstaller balíčků.
-
-## Bezpečnost
-
-Ve výchozím stavu aplikace nemá přihlašování – počítá s během v důvěryhodné
-domácí síti. Doporučujeme v `docker-compose.yml` odkomentovat
-`AUTH_PASSWORD=...` – aplikace pak vyžaduje heslo (jméno je libovolné).
-Přihlášení je chráněné **brzdou proti hádání hesla** (po několika chybných
-pokusech dočasně zablokuje danou IP) a **přihlášení přežije restart**
-i aktualizaci (sessions se ukládají do `data/auth_sessions.json`).
-Pokud ji vystavujete do internetu, přidejte navíc reverse proxy s HTTPS
-(např. nginx, Caddy, Tailscale…). Jde o citlivá osobní data.
-
-**Soukromí:** vaše poloha se nikam neposílá. Výjimkou jsou mapové dlaždice
-(OpenStreetMap/Carto/Esri – lze nahradit offline PMTiles) a **volitelné**
-zjišťování adres míst (Nástroje → Soukromí, výchozí vypnuto).
-
-## Dokumentace
-
-- **[Uživatelský návod](docs/NAVOD.md)** – průvodce všemi funkcemi krok za
-  krokem, provoz, řešení potíží
-- **[API reference](docs/API.md)** – přehled všech endpointů; interaktivně
-  na `http://server:8000/api/docs` (Swagger UI)
-
-## Architektura
+## 🏗️ Architektura
 
 | Vrstva | Technologie |
 |---|---|
 | Backend | Python 3.11+, FastAPI (routery v `app/routers/`, služby v `app/services/`), SQLite WAL |
 | Import | autodetekce formátu, streamované čtení přes `ijson`, běh na pozadí, SSE notifikace |
-| Frontend | ES moduly (`app.js` + `places-ui.js`, `map-tools.js`, `timelapse.js`…), Leaflet, PWA |
-| Zobrazování | data podle výřezu mapy s rušením rozpracovaných dotazů (AbortController), gzip API |
-| Kvalita | pytest (76 testů) + ruff + ESLint + 28 e2e testů (Playwright) v GitHub Actions |
+| Frontend | vanilla ES moduly (`app.js` + `places-ui.js`, `map-tools.js`, `timelapse.js`…), Leaflet, PWA |
+| Zobrazování | data podle výřezu mapy s rušením rozpracovaných dotazů, Douglas–Peucker simplifikace, gzip |
+| Kvalita | pytest (78 testů) + ruff + ESLint + 28 e2e testů (Playwright) v GitHub Actions |
 | Nasazení | Docker / docker-compose, PyInstaller `.exe`, Inno Setup installer, in-place updater |
 
-## Vývoj
+Žádný build frontendu, žádný framework – repozitář naklonujete a ono to běží.
+
+## 🛠️ Vývoj
 
 ```bash
 pip install -r requirements.txt pytest httpx ruff
-ruff check app/ tests/   # lint
-pytest -q                # testy
-python scripts/smoke_test.py
+ruff check app/ tests/    # lint backendu
+pytest -q                 # testy backendu
+npm ci && npm run lint    # ESLint frontendu
+npx playwright test       # e2e testy (celé UI proti demo datům)
 uvicorn app.main:app --reload
 ```
+
+Screenshoty do README se generují skriptem `scripts/make_screenshots.mjs`
+(nejlépe na stroji s internetem, ať mají mapový podklad).
+
+Náměty a chyby vítány v [Issues](https://github.com/esrez/gmaps-historie-/issues).
+Před pull requestem prosím spusťte testy a linty (CI je kontroluje také).
+
+## 📄 Licence
+
+[MIT](LICENSE) – používejte, upravujte a šiřte svobodně.
+Mapové podklady © přispěvatelé [OpenStreetMap](https://www.openstreetmap.org/copyright),
+[CARTO](https://carto.com/attributions), Esri; geokódování
+[Nominatim](https://nominatim.org), trasy [OSRM](https://project-osrm.org),
+offline mapy [Protomaps](https://protomaps.com).
