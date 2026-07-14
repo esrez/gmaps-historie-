@@ -76,8 +76,9 @@ DB_PATH=/tmp/demo.db DISABLE_BACKGROUND=1 UPDATE_CHECK_URL= uvicorn app.main:app
   musí mezi kroky navigovat na čistou adresu, jinak stav prosakuje.
 - `[hidden]` atribut přebíjí `display:flex` jen díky globálnímu pravidlu
   ve `style.css` – neodstraňovat.
-- Checkboxy vrstev žijí v záložce Mapa – Playwright na ně nedosáhne
-  z jiné záložky (nejdřív `#tabs [data-tab="mapa"]`).
+- Checkboxy vrstev žijí v **popoveru na mapě** (`#layersPop`) – v e2e ho
+  otevři přes `#ctlLayers` (helper `openLayers`/`closeLayers` v app.spec).
+  Klik mimo popover (jiný prvek, záložka) ho zavře.
 - OSRM a mapové dlaždice nejsou ze sandboxu dostupné – síťové věci mockuj
   (`map_data._osrm_fetch`, `pages._fetch_latest_release`).
 - PyInstaller: verze se čte ze souboru `VERSION` bundlovaného ve specu;

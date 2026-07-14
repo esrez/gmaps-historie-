@@ -1,6 +1,17 @@
 # Změny
 
-## Nevydáno
+## 2.3.0 (2026-07)
+
+### Ovládání mapy jako v moderních mapách
+- **hledání v plovoucím poli přímo na mapě** (nahoře uprostřed, vzor
+  Google Maps); výsledky se rozbalí pod polem, Esc nebo klik jinam je
+  zavře, výběr výsledku pole zavře také
+- **sjednocené tlačítko „Vrstvy"** v liště mapy otevře jeden popover
+  s podkladovými mapami (přepínače) i všemi datovými vrstvami – nahradil
+  samostatný ovladač podkladů i dlouhou sekci v panelu
+- nástroje mapy (měření, PNG, časosběr, polygon) mají v panelu vlastní
+  sekci **Nástroje mapy**; sekce Hledání se změnila na **Historie místa**
+- během časosběru se hledací pole i popover schovají, ať nepřekáží liště
 
 ### Jedno-kliková aktualizace (Windows)
 - v Nástroje → O aplikaci je při dostupné nové verzi tlačítko **„Stáhnout

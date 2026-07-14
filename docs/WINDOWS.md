@@ -93,8 +93,8 @@ PyInstaller nekompiluje křížově – použijte **GitHub Actions**:
 1. Zvyšte číslo v souboru `VERSION` a doplňte sekci v `CHANGELOG.md`.
 2. Vytvořte a pushněte tag (číslo = obsah souboru `VERSION`):
    ```
-   git tag v2.2.0
-   git push origin v2.2.0
+   git tag v2.3.0
+   git push origin v2.3.0
    ```
 3. GitHub Actions (workflow „Windows build") automaticky postaví portable
    `GMapsHistorie.exe` a **vytvoří GitHub Release** s popisem z první sekce

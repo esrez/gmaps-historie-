@@ -1,5 +1,14 @@
 import { test, expect } from "@playwright/test";
 
+
+// vrstvy jsou v popoveru na mapě – před manipulací ho otevřít / zavřít
+async function openLayers(page) {
+  if (await page.locator("#layersPop").isHidden()) await page.click("#ctlLayers");
+}
+async function closeLayers(page) {
+  if (!await page.locator("#layersPop").isHidden()) await page.click("#ctlLayers");
+}
+
 test.describe("mapa", () => {
   test("průvodce s odkazy na stažení dat z Googlu", async ({ page }) => {
     await page.goto("/");
@@ -87,9 +96,11 @@ test.describe("mapa", () => {
 
   test("nastavení mapy se pamatují po znovunačtení", async ({ page }) => {
     await page.goto("/");
+    await openLayers(page);
     await page.check("#layerHeat");
     await page.uncheck("#layerTracks");
     await page.selectOption("#transportFilter", "CAR");
+    await closeLayers(page);
     await page.click('#playSpeedBtns .pb-speed-btn[data-speed="3600"]');
     await page.waitForTimeout(200);
     await page.reload();
@@ -317,6 +328,7 @@ test.describe("mapa", () => {
     await page.goto("/");
     await page.waitForFunction(() =>
       document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await openLayers(page);
     await page.check("#layerHeat");
     // režim „strávený čas" pošle mode=visits
     const reqVisits = page.waitForRequest((r) =>
@@ -356,6 +368,7 @@ test.describe("mapa", () => {
     await page.waitForFunction(() =>
       document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
     // vrstvy statistik: kružnice akčního rádia mají DOM popisky
+    await openLayers(page);
     await page.check("#statRadius");
     await page.check("#statRoutes");
     // divIcon má 0×0 box (obsah přetéká transformem) → testujeme počet, ne viditelnost
@@ -366,10 +379,12 @@ test.describe("mapa", () => {
     await expect(page.locator("#insightFacts")).toContainText("Typický všední den");
     await expect(page.locator("#punchcard svg")).toBeVisible();
     expect(await page.locator("#punchcard .pc").count()).toBeGreaterThan(5);
-    // vypnutí vrstvy popisky odstraní
+    // vypnutí vrstvy popisky odstraní (klik na záložku popover zavřel)
     await page.click('#tabs [data-tab="mapa"]');
+    await openLayers(page);
     await page.uncheck("#statRadius");
     await page.uncheck("#statRoutes");
+    await closeLayers(page);
     await page.waitForTimeout(400);
     await expect(page.locator(".radiusLbl")).toHaveCount(0);
   });
@@ -387,9 +402,11 @@ test.describe("mapa", () => {
     await page.goto("/");
     await page.waitForFunction(() =>
       document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await openLayers(page);
     await page.selectOption("#trackColorMode", "year");
     await expect(page.locator("#trackYearLegend")).toContainText("2025");
     await page.selectOption("#trackColorMode", "alt");   // zpět – legenda zmizí
+    await closeLayers(page);
     await expect(page.locator("#trackYearLegend")).toHaveCount(0);
   });
 
@@ -537,15 +554,19 @@ test.describe("ovládání oken a návštěvy", () => {
     await page.goto("/");
     await loaded(page);
     // nechat jen vrstvu návštěv, ať klik trefí jejich značku
+    await openLayers(page);
     await page.uncheck("#layerTracks");
     await page.uncheck("#layerMyPlaces");
     await page.check("#visitNames");
+    await closeLayers(page);
     await page.click("#panelCollapse");   // panel nesmí překrývat značky
     // návštěvy jsou ve shluku – klik na shluk mapu přiblíží a značky rozbalí
     const cluster = page.locator(".marker-cluster").first();
     if (await cluster.count()) await cluster.click();
     const tip = page.locator(".leaflet-tooltip.visitName").first();
     await expect(tip).toBeVisible({ timeout: 10000 });
+    // klik na shluk mohl otevřít obecný popup mapy – zavřít, ať nepřekáží
+    await page.evaluate(() => { window.map?.closePopup(); });
 
     const before = (await page.request.get("/api/visits").then((r) => r.json()))
       .visits.length;
@@ -553,7 +574,7 @@ test.describe("ovládání oken a návštěvy", () => {
     // pod popisek, kde leží střed značky
     const tb = await tip.boundingBox();
     await page.mouse.click(tb.x + tb.width / 2, tb.y + tb.height + 10);
-    const popup = page.locator(".leaflet-popup");
+    const popup = page.locator(".leaflet-popup").last();
     await expect(popup).toContainText("Přehrát den");
     await expect(popup).toContainText("Kdy jsem tu byl?");
     await expect(popup).toContainText("Smazat návštěvu");
@@ -570,7 +591,7 @@ test.describe("ovládání oken a návštěvy", () => {
       .visits.length;
     expect(restored).toBe(before);
     // filtr min. délky pobytu je uložené nastavení
-    await page.click("#panelCollapse");   // panel zpět, ať je select vidět
+    await openLayers(page);
     await page.selectOption("#visitMinStay", "60");
     await page.reload();
     await loaded(page);
@@ -637,16 +658,16 @@ test.describe("intuitivní ovládání", () => {
   test("sekce panelu jdou sbalit a stav přežije reload", async ({ page }) => {
     await page.goto("/");
     await loaded(page);
-    await expect(page.locator("#layerTracks")).toBeVisible();
+    await expect(page.locator("#layerCompare")).toBeVisible();
     await page.locator(".tab-page[data-page='mapa'] section")
-      .filter({ hasText: "Vrstvy" }).locator("h2").first().click();
-    await expect(page.locator("#layerTracks")).toBeHidden();
+      .filter({ hasText: "Porovnání období" }).locator("h2").first().click();
+    await expect(page.locator("#layerCompare")).toBeHidden();
     await page.reload();
     await loaded(page);
-    await expect(page.locator("#layerTracks")).toBeHidden();
+    await expect(page.locator("#layerCompare")).toBeHidden();
     await page.locator(".tab-page[data-page='mapa'] section")
-      .filter({ hasText: "Vrstvy" }).locator("h2").first().click();
-    await expect(page.locator("#layerTracks")).toBeVisible();
+      .filter({ hasText: "Porovnání období" }).locator("h2").first().click();
+    await expect(page.locator("#layerCompare")).toBeVisible();
   });
 
   test("pravý klik na mapě otevře nabídku akcí", async ({ page }) => {
@@ -675,5 +696,51 @@ test.describe("intuitivní ovládání", () => {
     await page.click("#ctlTimelapse");
     await expect(page.locator("#timelapseBar")).toBeVisible();
     await page.keyboard.press("Escape");
+  });
+});
+
+test.describe("hledání a vrstvy na mapě", () => {
+  const loaded = (page) => page.waitForFunction(() =>
+    document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+
+  test("popover Vrstvy přepíná podklad i datové vrstvy", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await expect(page.locator("#layersPop")).toBeHidden();
+    await page.click("#ctlLayers");
+    const pop = page.locator("#layersPop");
+    await expect(pop).toBeVisible();
+    // podkladové mapy jsou přepínače, výběr se pamatuje
+    await expect(pop.locator('input[name="baseMap"]')).toHaveCount(4);
+    await pop.locator('input[name="baseMap"]').nth(3).check();   // Satelit
+    // datová vrstva funguje odsud stejně jako dřív z panelu
+    await page.uncheck("#layerTracks");
+    await page.keyboard.press("Escape");
+    await expect(pop).toBeHidden();
+    await page.reload();
+    await loaded(page);
+    expect(await page.evaluate(() => localStorage.getItem("map.baseLayer")))
+      .toContain("Esri");
+    await page.click("#ctlLayers");
+    await expect(page.locator("#layerTracks")).not.toBeChecked();
+  });
+
+  test("hledání na mapě rozbalí a zavře výsledky", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await expect(page.locator("#mapSearch")).toBeVisible();
+    await expect(page.locator("#searchResults")).toBeHidden();
+    await page.fill("#searchInput", "Práce");
+    await page.click("#searchBtn");
+    await expect(page.locator("#searchResults")).toBeVisible();
+    // vlastní navštívené místo se najde a klik na něj výsledky zavře
+    const mine = page.locator('#searchResults a[data-kind="mine"]').first();
+    if (await mine.count()) {
+      await mine.click();
+      await expect(page.locator("#searchResults")).toBeHidden();
+    } else {
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#searchResults")).toBeHidden();
+    }
   });
 });

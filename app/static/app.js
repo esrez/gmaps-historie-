@@ -295,11 +295,48 @@ const baseLayers = {
 // zvolený podklad se pamatuje; jinak výchozí podle světlého/tmavého vzhledu
 const savedBase = localStorage.getItem("map.baseLayer");
 const defaultBase = isDarkTheme() ? "Tmavá (Carto)" : "OpenStreetMap";
-baseLayers[(savedBase && baseLayers[savedBase]) ? savedBase : defaultBase].addTo(map);
-const layersControl = L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
+let currentBase = (savedBase && baseLayers[savedBase]) ? savedBase : defaultBase;
+baseLayers[currentBase].addTo(map);
 L.control.scale({ imperial: false }).addTo(map);
-map.on("baselayerchange", (e) => localStorage.setItem("map.baseLayer", e.name));
 
+// Sjednocený popover Vrstvy (tlačítko v liště mapy): podkladové mapy jako
+// přepínače + všechny datové vrstvy na jednom místě.
+function setBaseLayer(name) {
+  if (!baseLayers[name] || name === currentBase) return;
+  map.removeLayer(baseLayers[currentBase]);
+  baseLayers[name].addTo(map);
+  currentBase = name;
+  localStorage.setItem("map.baseLayer", name);
+}
+
+function addBaseOption(name) {
+  const l = document.createElement("label");
+  l.className = "check";
+  const i = document.createElement("input");
+  i.type = "radio";
+  i.name = "baseMap";
+  i.checked = name === currentBase;
+  i.addEventListener("change", () => setBaseLayer(name));
+  l.append(i, " " + name);
+  $("baseMapList").appendChild(l);
+}
+Object.keys(baseLayers).forEach(addBaseOption);
+
+function closeLayersPop() {
+  $("layersPop").hidden = true;
+  $("ctlLayers").setAttribute("aria-expanded", "false");
+}
+
+$("ctlLayers").addEventListener("click", () => {
+  const pop = $("layersPop");
+  pop.hidden = !pop.hidden;
+  $("ctlLayers").setAttribute("aria-expanded", pop.hidden ? "false" : "true");
+});
+document.addEventListener("click", (e) => {
+  if (!$("layersPop").hidden && !e.target.closest("#layersPop, #ctlLayers")) {
+    closeLayersPop();
+  }
+});
 /* Zapamatování nastavení mapy (vrstvy, filtry, rychlost přehrávání…).
    Uloží se při každé změně a obnoví při dalším otevření – uživatel si tak
    nemusí vrstvy a filtry pokaždé přenastavovat. */
@@ -342,8 +379,11 @@ initTimelapse({
   onEnter: () => {          // běžné trasy by se s časosběrem tloukly
     stopPlayback();
     map.removeLayer(trackLayer);
+    $("mapSearch").hidden = true;    // lišta časosběru je na místě hledání
+    closeLayersPop();
   },
   onExit: () => {
+    $("mapSearch").hidden = false;
     if ($("layerTracks").checked) map.addLayer(trackLayer);
   },
 });
@@ -538,10 +578,14 @@ document.addEventListener("click", (e) => {
       attribution: '<a href="https://protomaps.com">Protomaps</a> © OpenStreetMap',
     });
     baseLayers["Offline (PMTiles)"] = offline;
-    layersControl.addBaseLayer(offline, "Offline (PMTiles)");
+    addBaseOption("Offline (PMTiles)");
     if (!savedBase || savedBase === "Offline (PMTiles)") {
       Object.values(baseLayers).forEach((l) => { if (map.hasLayer(l) && l !== offline) map.removeLayer(l); });
       offline.addTo(map);
+      currentBase = "Offline (PMTiles)";
+      $("baseMapList").querySelectorAll("input").forEach((i) => {
+        i.checked = i.parentElement.textContent.trim() === "Offline (PMTiles)";
+      });
     }
   } catch (e) { /* offline mapa není k dispozici */ }
 })();
@@ -1557,6 +1601,14 @@ document.addEventListener("keydown", (e) => {
     closeMapMenu();
     return;
   }
+  if (e.key === "Escape" && !$("layersPop").hidden) {
+    closeLayersPop();
+    return;
+  }
+  if (e.key === "Escape" && !$("searchResults").hidden) {
+    closeSearchResults();
+    return;
+  }
   if (e.key === "Escape" && !$("statPicker").hidden) {
     $("statPicker").hidden = true;
     $("statCustomize").setAttribute("aria-expanded", "false");
@@ -1591,9 +1643,23 @@ const loc = { lat: null, lon: null, label: "" };
 $("searchBtn").addEventListener("click", doSearch);
 $("searchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
 
+// výsledky hledání jsou dropdown pod plovoucím polem na mapě
+function closeSearchResults() {
+  $("searchResults").hidden = true;
+}
+$("searchResults").addEventListener("click", (e) => {
+  if (e.target.closest("a")) closeSearchResults();   // výběr výsledek zavře
+});
+document.addEventListener("click", (e) => {
+  if (!$("searchResults").hidden && !e.target.closest("#mapSearch")) {
+    closeSearchResults();
+  }
+});
+
 async function doSearch() {
   const q = $("searchInput").value.trim();
   if (q.length < 2) return;
+  $("searchResults").hidden = false;
   $("searchResults").innerHTML = '<p class="muted">Hledám…</p>';
   const [mine, world] = await Promise.all([
     api("/api/search_visits", { q }).catch(() => ({ results: [] })),

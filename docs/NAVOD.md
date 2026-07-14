@@ -73,8 +73,14 @@ kliknout „Zobrazit všechna data" a mapa skočí přesně na ně (a zruší i 
 omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou na import.
 
 - **Období** – od/do nebo předvolby (7/30/90 dní, Rok, Letos, Loni, Vše).
-- **Vrstvy** – Trasy (klik = přehrát den), Jednotlivé body (čas po najetí),
-  Heatmapa, Navštívená místa (velikost = strávený čas; při oddálení se shlukují).
+- **Hledání** – v plovoucím poli **nahoře na mapě** (vzor Google Maps)
+  najdete vaše místa i libovolnou adresu; výsledky se rozbalí pod polem.
+- **Vrstvy** – tlačítko s ikonou vrstev **v pravé liště mapy** otevře
+  popover, kde na jednom místě přepnete **podkladovou mapu** (OSM, světlá,
+  tmavá, satelit) i všechny **datové vrstvy**: Trasy (klik = přehrát den),
+  Jednotlivé body (čas po najetí), Heatmapa, Navštívená místa (velikost =
+  strávený čas; při oddálení se shlukují), Moje místa, filtr dopravy,
+  akční rádius, nejčastější trasy, barvy tras.
 - **Navštívená místa: filtr a popisky** – volič „pobyty ≥ 15 min / 1 h / 3 h"
   skryje krátká zastavení (mapa míst je přehlednější), zaškrtnutí **popisky**
   vypíše jména nejdelších pobytů přímo do mapy.
@@ -88,7 +94,6 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   další pohled na statistiky.
 - **Detail podle výřezu** – při zoomu se automaticky dotáhne plný detail
   viditelné oblasti. Vypnutím se vrátí jeden vzorek pro celé období.
-- **Podkladové mapy** – přepínač vpravo nahoře (OSM, světlá, tmavá, satelit).
 - **Ovládací sloupec** (vpravo pod vrstvami) – přiblížit na moje data,
   ukázat moji aktuální polohu, celá obrazovka.
 - **Přichycení k silnicím** – v Soukromí lze zapnout srovnání přehrávaného
