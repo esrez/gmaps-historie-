@@ -117,10 +117,13 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   (den × hodina – kdy se hýbete), **nejčastější trasy** (odkud ⇄ kam,
   kolikrát a průměrné km), **km po měsících podle dopravy** (skládaný graf auto/pěšky/MHD/kolo),
   **všední dny vs. víkend**, km podle dne v týdnu, aktivita podle hodiny,
-  km po letech. Dlaždice ukazují **šipku trendu** (± % oproti předchozímu
-  stejně dlouhému období) a miniaturní křivku km po měsících. Blok **Rekordy
-  období** shrnuje nejvíc najetých km za den, nejdelší jednotlivou cestu
-  a nejdelší sérii po sobě jdoucích dní s jízdou.
+  km po letech. K dispozici je **11 dlaždic** (km, dny, návštěvy, hodiny na
+  místech i cestách, počty cest a míst, Ø km na den i na cestu, Ø rychlost,
+  Ø návštěv na den) – **ozubeným kolečkem u nadpisu si vyberete, které
+  chcete vidět** (výběr se pamatuje). Dlaždice ukazují **šipku trendu**
+  (± % oproti předchozímu stejně dlouhému období) a miniaturní křivku km po
+  měsících. Blok **Rekordy období** shrnuje nejvíc najetých km za den,
+  nejdelší jednotlivou cestu a nejdelší sérii po sobě jdoucích dní s jízdou.
 - **Porovnání období** – lze zapnout druhé období, které se vykreslí
   oranžově přes hlavní modré trasy (tlačítko „Stejné období loni" nastaví
   posun o rok) – pohodlné srovnání letos vs. loni.

@@ -22,7 +22,7 @@ test.describe("mapa", () => {
   test("načte statistiky, grafy a kalendář", async ({ page }) => {
     await page.goto("/");
     await page.click('#tabs [data-tab="stat"]');
-    await expect(page.locator("#statTiles .tile")).toHaveCount(8);
+    await expect(page.locator("#statTiles .tile")).toHaveCount(11);
     await expect(page.locator("#statTiles")).toContainText("km celkem");
     await expect(page.locator("#monthlyChart svg")).toBeVisible();
     await expect(page.locator("#calendar svg")).toBeVisible();
@@ -286,7 +286,7 @@ test.describe("mapa", () => {
       document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
     expect(await width()).toBeGreaterThan(before + 150);
     await page.click('#tabs [data-tab="stat"]');
-    await expect(page.locator("#statTiles .tile")).toHaveCount(8);
+    await expect(page.locator("#statTiles .tile")).toHaveCount(11);
     await expect(page.locator("#statTiles")).toContainText("hodin na cestách");
     await expect(page.locator("#statTiles")).toContainText("různých míst");
   });
@@ -570,5 +570,57 @@ test.describe("ovládání oken a návštěvy", () => {
     await page.reload();
     await loaded(page);
     expect(await page.locator("#visitMinStay").inputValue()).toBe("60");
+  });
+});
+
+test.describe("statistiky a panel", () => {
+  const loaded = (page) => page.waitForFunction(() =>
+    document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+
+  test("výběr dlaždic statistik se pamatuje", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await page.click('#tabs [data-tab="stat"]');
+    await expect(page.locator("#statTiles .tile")).toHaveCount(11);
+    await page.click("#statCustomize");
+    await page.uncheck('#statPicker input[data-tile="speed"]');
+    await page.uncheck('#statPicker input[data-tile="visitsPerDay"]');
+    await expect(page.locator("#statTiles .tile")).toHaveCount(9);
+    await page.reload();
+    await loaded(page);
+    await page.click('#tabs [data-tab="stat"]');
+    await expect(page.locator("#statTiles .tile")).toHaveCount(9);
+    // vrátit zpět, ať neovlivníme ostatní testy s počtem 11
+    await page.click("#statCustomize");
+    await page.check('#statPicker input[data-tile="speed"]');
+    await page.check('#statPicker input[data-tile="visitsPerDay"]');
+    await expect(page.locator("#statTiles .tile")).toHaveCount(11);
+  });
+
+  test("obnovení stránky nespouští přehrávání samo", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await page.click('#tabs [data-tab="stat"]');
+    await page.locator("#calendar svg").waitFor();
+    await page.locator('#calendar rect[data-rec="km"]').first().click();
+    await expect(page.locator("#playBtn")).toHaveAttribute("data-state", "playing");
+    await page.reload();
+    await loaded(page);
+    // den je připravený (datum vyplněné), ale nepřehrává se
+    await expect(page.locator("#playDate")).not.toHaveValue("");
+    await expect(page.locator("#playBtn")).not.toHaveAttribute("data-state", "playing");
+  });
+
+  test("sbalení panelu funguje i s nastavenou výškou", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await page.evaluate(() => {
+      document.getElementById("panel").style.height = "700px";
+    });
+    await page.click("#panelCollapse");
+    const box = await page.locator("#panel").boundingBox();
+    expect(box.height).toBeLessThan(120);
+    await page.click("#panelCollapse");
+    await expect(page.locator("#tabs")).toBeVisible();
   });
 });

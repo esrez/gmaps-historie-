@@ -12,6 +12,13 @@
   fungují jen v desktopové aplikaci na Windows
 - `GMapsHistorie.exe --version` vypíše verzi (používá se k ověření)
 
+### Statistiky
+- **11 dlaždic** (nově Ø km na cestu, Ø km/h na cestách, Ø návštěv na den)
+- **výběr zobrazených statistik**: ozubené kolečko u nadpisu otevře
+  zaškrtávací seznam; výběr se pamatuje
+- jemné vylepšení UI: dlaždice reagují na najetí, tenké posuvníky panelu,
+  viditelné ohnisko při ovládání klávesnicí
+
 ### Ovládání oken
 - **lišta přehrávání dne jde schovat** (křížek) – místo ní zůstane malé
   kulaté tlačítko dole uprostřed; stav se pamatuje a spuštění přehrávání
@@ -19,8 +26,10 @@
 - **hlavní panel si pamatuje pozici i velikost**: tažením za hlavičku ho
   přesunete (pozice se uloží), tažením za pravý dolní roh měníte šířku
   i výšku; **dvojklik na hlavičku** vše vrátí na výchozí
-- oprava: obnovení stránky už samo nespouští přehrávání dne (parametr
-  `play` je v adrese jen při skutečně načteném přehrávání)
+- oprava: obnovení stránky už samo nespouští přehrávání dne – den se jen
+  připraví (posuvník, stopa) a přehrání je vždy až na kliknutí; parametr
+  `play` je v adrese jen při skutečně načteném přehrávání
+- oprava: sbalení panelu (▾) funguje i po ručním nastavení výšky
 
 ### Navštívená místa
 - **akce přímo v bublině návštěvy**: Přehrát den, Kdy jsem tu byl?,

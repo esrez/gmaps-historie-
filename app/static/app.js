@@ -1097,26 +1097,81 @@ $("layerViewport").addEventListener("change", () => {
 
 // ------------------------------------------------------------ statistiky
 
+// Dlaždice statistik jsou definované datově – uživatel si ozubeným kolečkem
+// vybere, které chce vidět (výběr se pamatuje v localStorage).
+const num = (v, digits = 1) =>
+  (v || 0).toLocaleString("cs", { maximumFractionDigits: digits });
+const ratio = (a, b) => (b > 0 ? a / b : 0);
+
+const STAT_TILES = [
+  { id: "km", label: "km celkem",
+    value: (s) => num(s.total_km),
+    extra: (s, p) => trend(s.total_km, p.total_km) + sparkline(s.monthly_km) },
+  { id: "days", label: "dní se záznamem",
+    value: (s) => num(s.days_with_data, 0),
+    extra: (s, p) => trend(s.days_with_data, p.days_with_data) },
+  { id: "visits", label: "návštěv míst",
+    value: (s) => num(s.visits, 0),
+    extra: (s, p) => trend(s.visits, p.visits) },
+  { id: "visitHours", label: "hodin na místech",
+    value: (s) => num(s.visit_hours),
+    extra: (s, p) => trend(s.visit_hours, p.visit_hours) },
+  { id: "kmPerDay", label: "Ø km na den se záznamem",
+    value: (s) => num(ratio(s.total_km, s.days_with_data)) },
+  { id: "trips", label: "cest celkem",
+    value: (s) => num(s.trips_count, 0),
+    extra: (s, p) => trend(s.trips_count, p.trips_count) },
+  { id: "travelHours", label: "hodin na cestách",
+    value: (s) => num(s.travel_hours),
+    extra: (s, p) => trend(s.travel_hours, p.travel_hours) },
+  { id: "places", label: "různých míst",
+    value: (s) => num(s.unique_places, 0),
+    extra: (s, p) => trend(s.unique_places, p.unique_places) },
+  { id: "kmPerTrip", label: "Ø km na cestu",
+    value: (s) => num(ratio(s.total_km, s.trips_count)),
+    extra: (s, p) => trend(ratio(s.total_km, s.trips_count),
+                           ratio(p.total_km, p.trips_count) || null) },
+  { id: "speed", label: "Ø km/h na cestách",
+    value: (s) => num(ratio(s.total_km, s.travel_hours)),
+    extra: (s, p) => trend(ratio(s.total_km, s.travel_hours),
+                           ratio(p.total_km, p.travel_hours) || null) },
+  { id: "visitsPerDay", label: "Ø návštěv na den",
+    value: (s) => num(ratio(s.visits, s.days_with_data)) },
+];
+
+function hiddenTiles() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem("stats.hiddenTiles") || "[]"));
+  } catch (e) { return new Set(); }
+}
+
+let lastStatsArgs = null;   // pro překreslení po změně výběru dlaždic
+
+// Ozubené kolečko u nadpisu: zaškrtávací výběr zobrazených dlaždic.
+$("statCustomize").addEventListener("click", () => {
+  const box = $("statPicker");
+  if (!box.hidden) { box.hidden = true; return; }
+  const hidden = hiddenTiles();
+  box.innerHTML = STAT_TILES.map((t) =>
+    `<label class="check"><input type="checkbox" data-tile="${t.id}"` +
+    `${hidden.has(t.id) ? "" : " checked"}> ${t.label}</label>`).join("");
+  box.hidden = false;
+  box.querySelectorAll("input").forEach((i) => i.addEventListener("change", () => {
+    const off = [...box.querySelectorAll("input:not(:checked)")]
+      .map((x) => x.dataset.tile);
+    localStorage.setItem("stats.hiddenTiles", JSON.stringify(off));
+    if (lastStatsArgs) renderStats(...lastStatsArgs);
+  }));
+});
+
 function renderStats(s, prev) {
   const p = prev || {};
-  $("statTiles").innerHTML =
-    tile(s.total_km.toLocaleString("cs"), "km celkem",
-      trend(s.total_km, p.total_km) + sparkline(s.monthly_km)) +
-    tile(s.days_with_data.toLocaleString("cs"), "dní se záznamem",
-      trend(s.days_with_data, p.days_with_data)) +
-    tile(s.visits.toLocaleString("cs"), "návštěv míst",
-      trend(s.visits, p.visits)) +
-    tile(s.visit_hours.toLocaleString("cs"), "hodin na místech",
-      trend(s.visit_hours, p.visit_hours)) +
-    tile(s.days_with_data
-        ? (s.total_km / s.days_with_data).toLocaleString("cs", { maximumFractionDigits: 1 })
-        : "0", "Ø km na den se záznamem") +
-    tile((s.trips_count || 0).toLocaleString("cs"), "cest celkem",
-      trend(s.trips_count, p.trips_count)) +
-    tile((s.travel_hours || 0).toLocaleString("cs"), "hodin na cestách",
-      trend(s.travel_hours, p.travel_hours)) +
-    tile((s.unique_places || 0).toLocaleString("cs"), "různých míst",
-      trend(s.unique_places, p.unique_places));
+  lastStatsArgs = [s, prev];
+  const hidden = hiddenTiles();
+  $("statTiles").innerHTML = STAT_TILES
+    .filter((t) => !hidden.has(t.id))
+    .map((t) => tile(t.value(s), t.label, t.extra ? t.extra(s, p) : ""))
+    .join("");
 
   renderMonthlyChart(s.monthly_km);
   $("monthlyNote").textContent =
@@ -2012,7 +2067,9 @@ function maybeShowStaleNotice(maxTs) {
   renderCalendar();
   loadAll();
   maybeCheckUpdate();
-  if (new URLSearchParams(location.hash.slice(1)).get("play")) playDay();
+  // obnovení stránky den jen připraví (posuvník, stopa) – přehrávání se
+  // samo nespouští, to je vždy až na kliknutí uživatele
+  if (new URLSearchParams(location.hash.slice(1)).get("play")) playDay(false);
 })();
 
 // Nenápadné upozornění na novou verzi – nejvýš 1× denně, každou verzi
