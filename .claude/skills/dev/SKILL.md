@@ -89,4 +89,5 @@ DB_PATH=/tmp/demo.db DISABLE_BACKGROUND=1 UPDATE_CHECK_URL= uvicorn app.main:app
 2. Testy + merge do `main` + push.
 3. Tag `vX.Y.Z` pushne **uživatel** (sandbox nemá právo na tagy):
    `git tag vX.Y.Z && git push origin vX.Y.Z` → GitHub Actions
-   (`windows-build.yml`) sestaví exe + instalátor a vytvoří Release.
+   (`windows-build.yml`) sestaví **portable** `GMapsHistorie.exe`
+   a vytvoří Release (jen exe – instalátor se nevydává).

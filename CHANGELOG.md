@@ -38,16 +38,18 @@
   (`scripts/make_screenshots.mjs`)
 
 ### Windows 11
+- distribuce je nově **jen portable `GMapsHistorie.exe`** – žádný
+  instalátor: stáhnout z Releases, spustit, hotovo; aktualizace = nahradit
+  exe (data žijí odděleně v `%LOCALAPPDATA%\GMapsHistorie\data`)
 - **ikona v systémové liště** místo černého konzolového okna: klik otevře
   aplikaci, pravý klik nabídne Knihu jízd a Ukončit; výpisy jdou do
   `data/logs/app.log`
-- **vlastní ikona aplikace** (exe, zástupci i instalátor – dosud generická)
-- instalátor: volitelné **pravidlo brány firewall** pro přístup z domácí
-  sítě (při odinstalaci se odstraní)
+- **vlastní ikona aplikace** (dosud generická PyInstaller)
 - **upozornění na novou verzi**: nenápadná kontrola vydání max. 1× denně
   (vypnutí `UPDATE_CHECK_URL=`), odkaz ke stažení v Nástroje → O aplikaci
-- nová sekce **„Windows 11: tipy"** v návodu (výjimka Defenderu pro rychlý
-  import, autostart, jiný port, umístění dat)
+- přepsaná dokumentace: **docs/WINDOWS.md** (portable použití, autostart
+  přes `shell:startup`, firewall, build) a sekce **„Windows 11: tipy"**
+  v návodu (výjimka Defenderu pro rychlý import, jiný port, umístění dat)
 
 ### Exporty
 - **GPX** se dělí na `<trkseg>` po jednotlivých cestách – jiné aplikace už
