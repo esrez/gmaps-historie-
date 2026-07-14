@@ -4,17 +4,19 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import sys
 import time
 import urllib.request
 from contextlib import closing
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .. import db
-from ..core import runtime
+from ..core import runtime, updater
 from ..core.auth import (
     create_session,
     login_allowed,
@@ -141,6 +143,7 @@ def api_update_check():
             _update_cache["data"] = {
                 "latest": tag.lstrip("vV") or None,
                 "url": rel.get("html_url"),
+                "asset": updater.find_exe_asset(rel),   # pro samoaktualizaci
             }
         except Exception:
             _update_cache["data"] = None    # offline / GitHub nedostupný
@@ -151,6 +154,55 @@ def api_update_check():
     available = _ver_tuple(data["latest"]) > _ver_tuple(APP_RELEASE)
     return {"current": APP_RELEASE, "latest": data["latest"],
             "available": available, "url": data["url"]}
+
+
+def _self_update_dir() -> Path | None:
+    """Složka s exe, pokud běžíme jako zabalená desktopová aplikace na
+    Windows – jen tam dává samoaktualizace smysl (jinde je git pull/Docker)."""
+    if os.name != "nt" or not DESKTOP_APP or not getattr(sys, "frozen", False):
+        return None
+    return Path(os.environ.get("APP_DIR") or os.path.dirname(sys.executable))
+
+
+@router.post("/api/update/download")
+def api_update_download():
+    """Stáhne nový GMapsHistorie.exe z GitHub Release vedle aplikace
+    a ověří ho (velikost dle vydání, MZ hlavička, spuštění s --version)."""
+    app_dir = _self_update_dir()
+    if app_dir is None:
+        raise HTTPException(403, "Samoaktualizace funguje jen v desktopové "
+                                 "aplikaci na Windows")
+    info = api_update_check()
+    if not info["available"]:
+        raise HTTPException(400, "Není k dispozici novější verze")
+    asset = (_update_cache["data"] or {}).get("asset")
+    if not asset:
+        raise HTTPException(502, "Vydání na GitHubu neobsahuje GMapsHistorie.exe")
+    dest = app_dir / updater.NEW_EXE_NAME
+    try:
+        updater.download_exe(asset["url"], dest, asset.get("size") or None)
+    except Exception as exc:
+        raise HTTPException(502, f"Stažení selhalo: {exc}") from exc
+    if not updater.verify_exe_version(dest, info["latest"]):
+        dest.unlink(missing_ok=True)
+        raise HTTPException(502, "Ověření staženého programu selhalo "
+                                 "(nespustil se nebo hlásí jinou verzi)")
+    return {"ok": True, "version": info["latest"], "file": dest.name}
+
+
+@router.post("/api/update/apply")
+def api_update_apply():
+    """Dokončí připravenou aktualizaci: pomocný skript po ukončení aplikace
+    prohodí exe a novou verzi spustí. Aplikace se hned poté sama ukončí."""
+    app_dir = _self_update_dir()
+    if app_dir is None:
+        raise HTTPException(403, "Samoaktualizace funguje jen v desktopové "
+                                 "aplikaci na Windows")
+    if not (app_dir / updater.NEW_EXE_NAME).exists():
+        raise HTTPException(400, "Aktualizace není připravena – nejdřív ji stáhněte")
+    updater.spawn_swap_helper(app_dir, os.getpid())
+    runtime.request_shutdown()
+    return {"ok": True, "message": "Aplikace se ukončí a spustí v nové verzi…"}
 
 
 @router.get("/api/update")

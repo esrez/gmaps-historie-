@@ -310,7 +310,7 @@ Podrobnosti: [docs/WINDOWS.md](WINDOWS.md).
 | Přístup z telefonu | spuštění s `HOST=0.0.0.0`; dotaz brány firewall při prvním startu povolte pro privátní sítě; pak `http://IP-počítače:8000` (+ nastavte `AUTH_PASSWORD`) |
 | Umístění dat | `%LOCALAPPDATA%\GMapsHistorie\data` (databáze, zálohy, logy) – při aktualizaci i přesunu exe zůstává |
 | Jiný port | spustit s proměnnou `PORT=8080` (např. v zástupci: `cmd /c "set PORT=8080 && GMapsHistorie.exe"`) |
-| Aktualizace | aplikace 1× denně nenápadně zkontroluje nová vydání (vypnutí: `UPDATE_CHECK_URL=`); odkaz je v Nástroje → O aplikaci – stačí stáhnout nový exe a nahradit starý |
+| Aktualizace | aplikace 1× denně nenápadně zkontroluje nová vydání (vypnutí: `UPDATE_CHECK_URL=`); v Nástroje → O aplikaci je pak tlačítko **Stáhnout a aktualizovat** – stáhne, ověří a po potvrzení se aplikace sama vymění a restartuje |
 
 **Rychlejší import velkých Takeout ZIPů:** Windows Defender skenuje každý
 zápis do databáze. Pokud import několika GB trvá dlouho, přidejte složku

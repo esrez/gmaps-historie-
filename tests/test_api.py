@@ -736,3 +736,54 @@ def test_visit_delete(client, test_db, tmp_path):
     assert len(client.get("/api/visits").json()["visits"]) == len(vis) - 1
     assert client.get("/api/range").json()["points"] == points_before
     assert client.delete(f"/api/visits/{vis[0]['id']}").status_code == 404
+
+
+def test_self_update_download_and_apply(client, test_db, tmp_path, monkeypatch):
+    """Jedno-kliková aktualizace: stažení+ověření, apply spustí výměnu."""
+    from app.core import runtime, updater
+    from app.routers import pages
+
+    # mimo Windows desktop je samoaktualizace zakázaná
+    assert client.post("/api/update/download").status_code == 403
+    assert client.post("/api/update/apply").status_code == 403
+
+    monkeypatch.setattr(pages, "_self_update_dir", lambda: tmp_path)
+    monkeypatch.setattr(pages, "APP_RELEASE", "1.0.0")
+    monkeypatch.setattr(pages, "_fetch_latest_release", lambda: {
+        "tag_name": "v9.9.9", "html_url": "http://x/rel",
+        "assets": [{"name": "GMapsHistorie.exe",
+                    "browser_download_url": "http://x/exe", "size": 7}],
+    })
+    monkeypatch.setitem(pages._update_cache, "ts", 0.0)
+
+    downloaded = {}
+    def fake_download(url, dest, size=None):
+        downloaded["url"] = url
+        dest.write_bytes(b"MZ-fake")
+    monkeypatch.setattr(updater, "download_exe", fake_download)
+    monkeypatch.setattr(updater, "verify_exe_version", lambda exe, ver: True)
+
+    r = client.post("/api/update/download")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "version": "9.9.9",
+                        "file": "GMapsHistorie-new.exe"}
+    assert downloaded["url"] == "http://x/exe"
+    assert (tmp_path / "GMapsHistorie-new.exe").exists()
+
+    # neúspěšné ověření stažený soubor smaže a vrátí 502
+    monkeypatch.setattr(updater, "verify_exe_version", lambda exe, ver: False)
+    monkeypatch.setitem(pages._update_cache, "ts", 0.0)
+    assert client.post("/api/update/download").status_code == 502
+    assert not (tmp_path / "GMapsHistorie-new.exe").exists()
+
+    # apply bez připraveného souboru → 400; s ním spustí výměnu a shutdown
+    assert client.post("/api/update/apply").status_code == 400
+    (tmp_path / "GMapsHistorie-new.exe").write_bytes(b"MZ-fake")
+    called = {}
+    monkeypatch.setattr(updater, "spawn_swap_helper",
+                        lambda d, pid: called.update(dir=d, pid=pid))
+    monkeypatch.setattr(runtime, "request_shutdown",
+                        lambda: called.update(shutdown=True))
+    r = client.post("/api/update/apply")
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert called["dir"] == tmp_path and called["shutdown"] is True

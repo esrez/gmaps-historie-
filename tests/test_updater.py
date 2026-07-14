@@ -78,3 +78,72 @@ def test_run_update_downloads_and_applies(tmp_path, monkeypatch):
     assert updater.read_install_config(app_dir)["version"] == "9.9.9"
     # druhé spuštění: už aktuální → 2
     assert updater.run_update(app_dir, quiet=True) == 2
+
+
+def test_download_exe_checks(tmp_path, monkeypatch):
+    """Stažení exe: kontrola velikosti dle vydání a MZ hlavičky."""
+    import io
+    from contextlib import contextmanager
+
+    from app.core import updater
+
+    payload = b"MZ" + b"\0" * updater.MIN_EXE_SIZE
+
+    @contextmanager
+    def fake_urlopen(req, timeout=0):
+        yield io.BytesIO(payload)
+
+    monkeypatch.setattr(updater.urllib.request, "urlopen", fake_urlopen)
+    dest = tmp_path / "GMapsHistorie-new.exe"
+    updater.download_exe("http://x/exe", dest, len(payload))
+    assert dest.stat().st_size == len(payload)
+
+    # nesouhlasí velikost udávaná vydáním → chyba a nic nezůstane
+    import pytest
+    with pytest.raises(ValueError, match="vydání udává"):
+        updater.download_exe("http://x/exe", dest.with_name("b.exe"), 123)
+    assert not dest.with_name("b.exe").exists()
+
+    # není to PE soubor (chybí MZ)
+    payload_bad = b"#!" + b"\0" * updater.MIN_EXE_SIZE
+    monkeypatch.setattr(updater.urllib.request, "urlopen",
+                        lambda req, timeout=0: _ctx(io.BytesIO(payload_bad)))
+    with pytest.raises(ValueError, match="spustitelný"):
+        updater.download_exe("http://x/exe", dest.with_name("c.exe"), None)
+
+
+def _ctx(obj):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def cm():
+        yield obj
+    return cm()
+
+
+def test_spawn_swap_helper_writes_bat(tmp_path, monkeypatch):
+    """Pomocný skript: čeká na PID, prohodí exe a novou verzi spustí."""
+    import subprocess
+
+    from app.core import updater
+    calls = {}
+    monkeypatch.setattr(subprocess, "Popen",
+                        lambda *a, **kw: calls.update(args=a, kw=kw))
+    updater.spawn_swap_helper(tmp_path, 4242)
+    bat = tmp_path / "gmaps-aktualizace.bat"
+    assert bat.exists()
+    text = bat.read_text(encoding="ascii")
+    assert "PID eq 4242" in text
+    assert 'move /y "GMapsHistorie-new.exe" "GMapsHistorie.exe"' in text
+    assert 'start "" "GMapsHistorie.exe"' in text
+    assert calls["args"][0][:2] == ["cmd", "/c"]
+
+
+def test_find_exe_asset():
+    from app.core import updater
+    rel = {"assets": [
+        {"name": "update.zip", "browser_download_url": "http://x/z", "size": 5},
+        {"name": "GMapsHistorie.exe", "browser_download_url": "http://x/e", "size": 42},
+    ]}
+    assert updater.find_exe_asset(rel) == {"url": "http://x/e", "size": 42}
+    assert updater.find_exe_asset({"assets": []}) is None
