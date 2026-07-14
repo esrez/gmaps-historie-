@@ -114,13 +114,15 @@ se stahuje z internetu, v ukázce proto chybí.*
 
 ## 🚀 Rychlý start
 
-### Windows (bez instalace čehokoli)
+### Windows (portable, bez instalace)
 
-Stáhněte **instalátor z [Releases](https://github.com/esrez/gmaps-historie-/releases)**
-(`GMapsHistorie-Setup-*.exe`) – český průvodce, ikona v systémové liště,
-volitelný autostart a přístup z domácí sítě, vestavěné aktualizace. Data
-zůstávají v `%LOCALAPPDATA%\GMapsHistorie`. Tipy pro Windows 11 jsou
-v [návodu](docs/NAVOD.md#8-windows-11-tipy).
+Stáhněte **`GMapsHistorie.exe` z [Releases](https://github.com/esrez/gmaps-historie-/releases)**
+a spusťte – žádná instalace, žádná admin práva. Aplikace běží jako ikona
+v systémové liště a sama otevře prohlížeč. Data zůstávají
+v `%LOCALAPPDATA%\GMapsHistorie`, takže aktualizace = prosté nahrazení exe
+novějším (aplikace na nové vydání sama nenápadně upozorní). Autostart,
+přístup z telefonu a další tipy: [docs/WINDOWS.md](docs/WINDOWS.md)
+a [návod](docs/NAVOD.md#8-windows-11-tipy).
 
 <details>
 <summary>Alternativa: spuštění ze zdrojáků (Python 3.11+)</summary>
@@ -185,8 +187,8 @@ Vystavujete-li aplikaci do internetu, dejte před ni reverse proxy s HTTPS
   Windows 11 tipy, řešení potíží
 - **[API reference](docs/API.md)** – všechny endpointy; interaktivně na
   `http://server:8000/api/docs` (Swagger UI)
-- **[Windows instalátor a aktualizace](docs/WINDOWS_INSTALLER.md)** – build
-  `.exe`, Inno Setup, vydávání přes GitHub Releases
+- **[Windows portable aplikace](docs/WINDOWS.md)** – použití, autostart,
+  build `.exe`, vydávání přes GitHub Releases
 - **[CHANGELOG](CHANGELOG.md)** – co je nového
 
 ## 🏗️ Architektura
@@ -197,8 +199,8 @@ Vystavujete-li aplikaci do internetu, dejte před ni reverse proxy s HTTPS
 | Import | autodetekce formátu, streamované čtení přes `ijson`, běh na pozadí, SSE notifikace |
 | Frontend | vanilla ES moduly (`app.js` + `places-ui.js`, `map-tools.js`, `timelapse.js`…), Leaflet, PWA |
 | Zobrazování | data podle výřezu mapy s rušením rozpracovaných dotazů, Douglas–Peucker simplifikace, gzip |
-| Kvalita | pytest (78 testů) + ruff + ESLint + 28 e2e testů (Playwright) v GitHub Actions |
-| Nasazení | Docker / docker-compose, PyInstaller `.exe`, Inno Setup installer, in-place updater |
+| Kvalita | pytest (91 testů) + ruff + ESLint + 28 e2e testů (Playwright) v GitHub Actions |
+| Nasazení | Docker / docker-compose, portable PyInstaller `.exe` (GitHub Releases), in-place updater |
 
 Žádný build frontendu, žádný framework – repozitář naklonujete a ono to běží.
 

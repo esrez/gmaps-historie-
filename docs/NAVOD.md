@@ -285,18 +285,21 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 
 ## 8. Windows 11: tipy
 
-Aplikace nainstalovaná z `GMapsHistorie-Setup-*.exe` běží **bez černého okna**
-– po spuštění se objeví **ikona v systémové liště** (vedle hodin). Klik na ni
-otevře aplikaci v prohlížeči, pravý klik nabídne Knihu jízd a Ukončit.
-Výpisy programu najdete v `%LOCALAPPDATA%\GMapsHistorie\data\logs\app.log`.
+Windows verze je **portable** – jediný soubor `GMapsHistorie.exe`
+z [Releases](https://github.com/esrez/gmaps-historie-/releases), bez
+instalace. Běží **bez černého okna** – po spuštění se objeví **ikona
+v systémové liště** (vedle hodin). Klik na ni otevře aplikaci v prohlížeči,
+pravý klik nabídne Knihu jízd a Ukončit. Výpisy programu najdete
+v `%LOCALAPPDATA%\GMapsHistorie\data\logs\app.log`.
+Podrobnosti: [docs/WINDOWS.md](WINDOWS.md).
 
 | Co | Jak |
 |---|---|
-| Automatický start | úloha „Spustit po přihlášení do Windows" v instalátoru (běží tiše v liště) |
-| Přístup z telefonu | úloha „Povolit přístup z domácí sítě" v instalátoru + spuštění s `HOST=0.0.0.0`; pak `http://IP-počítače:8000` |
-| Umístění dat | `%LOCALAPPDATA%\GMapsHistorie\data` (databáze, zálohy, logy) – při aktualizaci zůstává |
+| Automatický start | zástupce exe s parametrem `--no-browser` do složky `shell:startup` (Win+R) – startuje tiše v liště |
+| Přístup z telefonu | spuštění s `HOST=0.0.0.0`; dotaz brány firewall při prvním startu povolte pro privátní sítě; pak `http://IP-počítače:8000` (+ nastavte `AUTH_PASSWORD`) |
+| Umístění dat | `%LOCALAPPDATA%\GMapsHistorie\data` (databáze, zálohy, logy) – při aktualizaci i přesunu exe zůstává |
 | Jiný port | spustit s proměnnou `PORT=8080` (např. v zástupci: `cmd /c "set PORT=8080 && GMapsHistorie.exe"`) |
-| Aktualizace | aplikace 1× denně nenápadně zkontroluje nová vydání (vypnutí: `UPDATE_CHECK_URL=`); odkaz je v Nástroje → O aplikaci, ruční aktualizace přes zástupce „Aktualizovat GMaps Historie" |
+| Aktualizace | aplikace 1× denně nenápadně zkontroluje nová vydání (vypnutí: `UPDATE_CHECK_URL=`); odkaz je v Nástroje → O aplikaci – stačí stáhnout nový exe a nahradit starý |
 
 **Rychlejší import velkých Takeout ZIPů:** Windows Defender skenuje každý
 zápis do databáze. Pokud import několika GB trvá dlouho, přidejte složku
