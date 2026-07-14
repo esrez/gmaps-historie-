@@ -15,7 +15,76 @@
 <body>
 <div id="app">
   <main id="map"><div id="mapBar" hidden></div><div id="mapLoading" hidden>Načítám…</div>
+  <!-- plovoucí hledání na mapě (vzor Google Maps) -->
+  <div id="mapSearch" class="floating">
+    <div class="row">
+      <input type="search" id="searchInput" list="dlPlaceNames" placeholder="Hledat místo nebo adresu…">
+      <button id="searchBtn" title="Hledat"><span data-icon="search"></span></button>
+    </div>
+    <div id="searchResults" class="floating" hidden></div>
+  </div>
+
+  <!-- sjednocené vrstvy: podklad + datové vrstvy v jednom popoveru -->
+  <div id="layersPop" class="floating" role="dialog" aria-label="Vrstvy mapy" hidden>
+    <h2>Vrstvy</h2>
+    <div id="baseMapList" class="baseMaps"></div>
+    <hr class="popSep">
+        <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
+        <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
+        <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
+        <div class="row heatOpts" style="gap:6px">
+          <select id="heatMode" title="Co má heatmapa ukazovat">
+            <option value="points">pohyb (kudy jezdím)</option>
+            <option value="visits">strávený čas (kde pobývám)</option>
+          </select>
+          <select id="heatHours" title="Jen část dne – např. kde bývám večer">
+            <option value="">celý den</option>
+            <option value="5-9">ráno 5–9</option>
+            <option value="9-17">den 9–17</option>
+            <option value="17-22">večer 17–22</option>
+            <option value="22-5">noc 22–5</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
+        <div class="row visitOpts" style="gap:6px">
+          <select id="visitMinStay" title="Skrýt krátká zastavení – mapa míst bude přehlednější">
+            <option value="0">všechny pobyty</option>
+            <option value="15">pobyty ≥ 15 min</option>
+            <option value="60">pobyty ≥ 1 h</option>
+            <option value="180">pobyty ≥ 3 h</option>
+          </select>
+          <label class="check" style="margin:0" title="Jména nejdelších pobytů přímo v mapě">
+            <input type="checkbox" id="visitNames"> popisky</label>
+        </div>
+        <label class="check"><input type="checkbox" id="layerMyPlaces" checked> Moje místa (názvy)</label>
+        <label class="check" title="Zobrazit jen body z vybraného způsobu dopravy">
+          Doprava
+          <select id="transportFilter">
+            <option value="">Vše</option>
+            <option value="CAR">Auto</option>
+            <option value="WALK">Chůze</option>
+            <option value="BIKE">Kolo</option>
+            <option value="TRANSIT">MHD</option>
+          </select>
+        </label>
+        <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
+          <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
+        <label class="check" title="Kružnice kolem domova: 50/90/99 % všech záznamů leží uvnitř">
+          <input type="checkbox" id="statRadius"> Akční rádius (kružnice)</label>
+        <label class="check" title="Čáry mezi nejčastějšími dvojicemi míst; tloušťka = četnost">
+          <input type="checkbox" id="statRoutes"> Nejčastější trasy (pavouk)</label>
+        <label title="Podle roku: každý rok jízdy má vlastní barvu – u víceleté historie hned vidíte, kudy jste kdy jezdili">
+          Barvy tras
+          <select id="trackColorMode">
+            <option value="alt">střídat odstíny</option>
+            <option value="year">podle roku</option>
+          </select>
+        </label>
+  </div>
+
   <div id="mapCtl">
+    <button id="ctlLayers" title="Vrstvy mapy" aria-expanded="false"><span data-icon="layers"></span></button>
+    <span class="ctlSep" aria-hidden="true"></span>
     <button id="ctlFit" title="Přiblížit na moje data"><span data-icon="target"></span></button>
     <button id="ctlLocate" title="Moje aktuální poloha"><span data-icon="crosshair"></span></button>
     <button id="ctlFull" title="Celá obrazovka"><span data-icon="expand"></span></button>
@@ -68,14 +137,10 @@
       </section>
 
       <section>
-        <h2>Hledání místa</h2>
-        <div class="row">
-          <input type="search" id="searchInput" list="dlPlaceNames" placeholder="Obec, adresa, název místa…">
-          <button id="searchBtn" title="Hledat"><span data-icon="search"></span></button>
-        </div>
-        <div id="searchResults"></div>
-        <p class="muted">Klikněte do mapy a zvolte „Kdy jsem tu byl?" – zjistíte všechny
-           své pobyty v daném okruhu.</p>
+        <h2>Historie místa</h2>
+        <p class="muted">Hledejte v poli nahoře na mapě, nebo klikněte do mapy
+           (pravé tlačítko = nabídka akcí) – zjistíte všechny své pobyty
+           v daném okruhu.</p>
         <div id="locPanel" hidden>
           <h3 id="locTitle"></h3>
           <div class="row">
@@ -106,58 +171,7 @@
       </section>
 
       <section>
-        <h2>Vrstvy</h2>
-        <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
-        <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
-        <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
-        <div class="row heatOpts" style="gap:6px">
-          <select id="heatMode" title="Co má heatmapa ukazovat">
-            <option value="points">pohyb (kudy jezdím)</option>
-            <option value="visits">strávený čas (kde pobývám)</option>
-          </select>
-          <select id="heatHours" title="Jen část dne – např. kde bývám večer">
-            <option value="">celý den</option>
-            <option value="5-9">ráno 5–9</option>
-            <option value="9-17">den 9–17</option>
-            <option value="17-22">večer 17–22</option>
-            <option value="22-5">noc 22–5</option>
-          </select>
-        </div>
-        <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
-        <div class="row visitOpts" style="gap:6px">
-          <select id="visitMinStay" title="Skrýt krátká zastavení – mapa míst bude přehlednější">
-            <option value="0">všechny pobyty</option>
-            <option value="15">pobyty ≥ 15 min</option>
-            <option value="60">pobyty ≥ 1 h</option>
-            <option value="180">pobyty ≥ 3 h</option>
-          </select>
-          <label class="check" style="margin:0" title="Jména nejdelších pobytů přímo v mapě">
-            <input type="checkbox" id="visitNames"> popisky</label>
-        </div>
-        <label class="check"><input type="checkbox" id="layerMyPlaces" checked> Moje místa (názvy)</label>
-        <label class="check" title="Zobrazit jen body z vybraného způsobu dopravy">
-          Doprava
-          <select id="transportFilter">
-            <option value="">Vše</option>
-            <option value="CAR">Auto</option>
-            <option value="WALK">Chůze</option>
-            <option value="BIKE">Kolo</option>
-            <option value="TRANSIT">MHD</option>
-          </select>
-        </label>
-        <label class="check" title="Při posunu či přiblížení mapy se automaticky dotáhne plný detail pro viditelný výřez">
-          <input type="checkbox" id="layerViewport" checked> Detail podle výřezu mapy</label>
-        <label class="check" title="Kružnice kolem domova: 50/90/99 % všech záznamů leží uvnitř">
-          <input type="checkbox" id="statRadius"> Akční rádius (kružnice)</label>
-        <label class="check" title="Čáry mezi nejčastějšími dvojicemi míst; tloušťka = četnost">
-          <input type="checkbox" id="statRoutes"> Nejčastější trasy (pavouk)</label>
-        <label title="Podle roku: každý rok jízdy má vlastní barvu – u víceleté historie hned vidíte, kudy jste kdy jezdili">
-          Barvy tras
-          <select id="trackColorMode">
-            <option value="alt">střídat odstíny</option>
-            <option value="year">podle roku</option>
-          </select>
-        </label>
+        <h2>Nástroje mapy</h2>
         <button id="drawPolyBtn" title="Klikáním do mapy obkreslíte areál (zákazník, sklad…) a pojmenujete ho – přesnější než kruh">
           <span data-icon="polygon"></span> Pojmenovat oblast (polygon)</button>
         <div class="row" style="gap:6px">

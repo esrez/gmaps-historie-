@@ -17,12 +17,16 @@ await page.waitForTimeout(2500);   // dlaždice + shluky
 await page.screenshot({ path: "docs/screenshots/mapa.png" });
 
 // heatmapa (režim pohyb – kudy jezdím); bez vrstvy tras, ať vynikne
+await page.click("#ctlLayers");
 await page.uncheck("#layerTracks");
 await page.check("#layerHeat");
+await page.click("#ctlLayers");
 await page.waitForSelector("canvas.leaflet-heatmap-layer", { timeout: 15000 }).catch(() => {});
 await page.waitForTimeout(2500);
 await page.screenshot({ path: "docs/screenshots/heatmapa.png" });
+await page.click("#ctlLayers");
 await page.uncheck("#layerHeat");
+await page.click("#ctlLayers");
 await page.waitForTimeout(600);
 
 // přehrávání dne – klik na den se záznamem v kalendáři (bez vrstvy tras,
@@ -34,8 +38,9 @@ await page.waitForTimeout(2500);
 await page.click("#timelineToggle").catch(() => {});
 await page.waitForTimeout(800);
 await page.screenshot({ path: "docs/screenshots/prehravani.png" });
-await page.click('#tabs [data-tab="mapa"]');
+await page.click("#ctlLayers");
 await page.check("#layerTracks");
+await page.click("#ctlLayers");
 
 // čistý start (stav přehrávání se drží v URL hashi)
 await page.goto(base + "/");
