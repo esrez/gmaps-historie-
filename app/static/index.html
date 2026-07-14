@@ -204,7 +204,11 @@
     <!-- ===================== záložka STATISTIKY ===================== -->
     <div class="tab-page" data-page="stat">
       <section>
-        <h2>Statistiky</h2>
+        <h2 class="hRow">Statistiky
+          <button id="statCustomize" class="iconBtn" type="button"
+                  title="Vybrat, které statistiky se zobrazují">
+            <span data-icon="tools"></span></button></h2>
+        <div id="statPicker" hidden></div>
         <div id="statTiles" class="tiles"></div>
         <div id="monthlyChartWrap">
           <h3 id="monthlyTitle">Kilometry po měsících</h3>
