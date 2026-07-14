@@ -559,11 +559,16 @@ test.describe("ovládání oken a návštěvy", () => {
     await expect(popup).toContainText("Smazat návštěvu");
 
     await popup.locator('[data-act="del"]').click();
-    await page.locator("#appDialog .dlgOk").click();
-    await expect(page.locator("#toast")).toContainText("Návštěva smazána");
+    // žádný potvrzovací dialog – akce proběhne hned a toast nabídne Zpět
+    await expect(page.locator("#toast")).toContainText("smazána");
     const after = (await page.request.get("/api/visits").then((r) => r.json()))
       .visits.length;
     expect(after).toBe(before - 1);
+    await page.locator("#toast .toastAction").click();
+    await expect(page.locator("#toast")).toContainText("obnovena");
+    const restored = (await page.request.get("/api/visits").then((r) => r.json()))
+      .visits.length;
+    expect(restored).toBe(before);
     // filtr min. délky pobytu je uložené nastavení
     await page.click("#panelCollapse");   // panel zpět, ať je select vidět
     await page.selectOption("#visitMinStay", "60");
@@ -622,5 +627,53 @@ test.describe("statistiky a panel", () => {
     expect(box.height).toBeLessThan(120);
     await page.click("#panelCollapse");
     await expect(page.locator("#tabs")).toBeVisible();
+  });
+});
+
+test.describe("intuitivní ovládání", () => {
+  const loaded = (page) => page.waitForFunction(() =>
+    document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+
+  test("sekce panelu jdou sbalit a stav přežije reload", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await expect(page.locator("#layerTracks")).toBeVisible();
+    await page.locator(".tab-page[data-page='mapa'] section")
+      .filter({ hasText: "Vrstvy" }).locator("h2").first().click();
+    await expect(page.locator("#layerTracks")).toBeHidden();
+    await page.reload();
+    await loaded(page);
+    await expect(page.locator("#layerTracks")).toBeHidden();
+    await page.locator(".tab-page[data-page='mapa'] section")
+      .filter({ hasText: "Vrstvy" }).locator("h2").first().click();
+    await expect(page.locator("#layerTracks")).toBeVisible();
+  });
+
+  test("pravý klik na mapě otevře nabídku akcí", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await page.click("#panelCollapse");
+    await page.mouse.click(900, 450, { button: "right" });
+    const menu = page.locator("#mapMenu");
+    await expect(menu).toBeVisible();
+    await expect(menu).toContainText("Kdy jsem tu byl?");
+    await expect(menu).toContainText("Kopírovat souřadnice");
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    // položka „Kdy jsem tu byl?" opravdu spustí dotaz
+    await page.mouse.click(900, 450, { button: "right" });
+    await menu.locator('[data-mact="stays"]').click();
+    await expect(page.locator("#locSummary")).not.toBeEmpty({ timeout: 10000 });
+  });
+
+  test("nástroje mapy fungují z ikonové lišty na mapě", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await page.click("#ctlMeasure");
+    await expect(page.locator("#measureBtn")).toContainText("Ukončit měření");
+    await page.keyboard.press("Escape");
+    await page.click("#ctlTimelapse");
+    await expect(page.locator("#timelapseBar")).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 });

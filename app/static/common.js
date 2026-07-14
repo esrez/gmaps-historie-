@@ -86,17 +86,32 @@ export function currentRange() {
 
 /* Nenápadné oznámení v rohu obrazovky (náhrada za alert). */
 let _toastTimer = null;
-export function toast(msg, type = "info") {
+export function toast(msg, type = "info", action = null) {
   let el = $("toast");
   if (!el) {
     el = document.createElement("div");
     el.id = "toast";
+    el.setAttribute("role", "status");      // čtečky oznámí obsah samy
+    el.setAttribute("aria-live", "polite");
     document.body.appendChild(el);
   }
   el.textContent = msg;
+  // volitelné tlačítko akce (např. „Zpět" po smazání – vzor Gmail)
+  if (action && action.label && action.onClick) {
+    const b = document.createElement("button");
+    b.className = "toastAction";
+    b.type = "button";
+    b.textContent = action.label;
+    b.addEventListener("click", () => {
+      el.className = "";
+      action.onClick();
+    });
+    el.appendChild(b);
+  }
   el.className = "show " + type;
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => { el.className = ""; }, 4000);
+  _toastTimer = setTimeout(() => { el.className = ""; },
+    action ? 6000 : 4000);
 }
 
 export function buildUrl(path, params) {

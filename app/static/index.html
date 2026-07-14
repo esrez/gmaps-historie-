@@ -19,12 +19,18 @@
     <button id="ctlFit" title="Přiblížit na moje data"><span data-icon="target"></span></button>
     <button id="ctlLocate" title="Moje aktuální poloha"><span data-icon="crosshair"></span></button>
     <button id="ctlFull" title="Celá obrazovka"><span data-icon="expand"></span></button>
+    <span class="ctlSep" aria-hidden="true"></span>
+    <button id="ctlMeasure" title="Měřit vzdálenost (m)"><span data-icon="ruler"></span></button>
+    <button id="ctlPng" title="Uložit mapu jako PNG"><span data-icon="image"></span></button>
+    <button id="ctlTimelapse" title="Časosběr měsíců"><span data-icon="film"></span></button>
+    <button id="ctlPolygon" title="Pojmenovat oblast (polygon)"><span data-icon="polygon"></span></button>
   </div>
 </main>
 
   <!-- plovoucí hlavní panel nad mapou -->
   <aside id="panel" class="floating">
-    <header id="panelHead">
+    <header id="panelHead" title="Tažením přesunete panel, dvojklik vrátí výchozí">
+      <span id="panelGrip" aria-hidden="true">⋮⋮</span>
       <h1><span data-icon="pin" data-size="17"></span> GMaps Historie</h1>
       <a href="/kniha" class="navlink"><span data-icon="car"></span> Kniha jízd</a>
       <button id="helpBtn" class="mini" type="button" title="Nápověda – jak získat data z Googlu"><span data-icon="help"></span></button>

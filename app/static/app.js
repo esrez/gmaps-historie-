@@ -20,12 +20,21 @@ mountIcons();
 
 // ------------------------------------------------------------- záložky
 
+// přístupnost: záložky jsou pro čtečky opravdové záložky (tab/tabpanel)
+document.querySelectorAll("#tabs .tab-btn").forEach((b) => {
+  b.setAttribute("role", "tab");
+  b.setAttribute("aria-selected", b.classList.contains("active") ? "true" : "false");
+});
+document.querySelectorAll(".tab-page").forEach((p) => p.setAttribute("role", "tabpanel"));
+
 document.querySelectorAll("#tabs .tab-btn").forEach((btn) =>
   btn.addEventListener("click", () => {
     placesUI.cancelModes();   // přepnutím se nesmí zaseknout kreslení/úprava oblasti
     if (mapTools.measureBusy()) measureCleanup();
-    document.querySelectorAll("#tabs .tab-btn").forEach((b) =>
-      b.classList.toggle("active", b === btn));
+    document.querySelectorAll("#tabs .tab-btn").forEach((b) => {
+      b.classList.toggle("active", b === btn);
+      b.setAttribute("aria-selected", b === btn ? "true" : "false");
+    });
     document.querySelectorAll(".tab-page").forEach((p) =>
       p.classList.toggle("active", p.dataset.page === btn.dataset.tab));
     if (btn.dataset.tab === "mista") loadPlacesTab();
@@ -438,6 +447,82 @@ $("ctlFull").addEventListener("click", async () => {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen();
   } catch (e) { toast("Celá obrazovka není v tomto prohlížeči dostupná.", "error"); }
+});
+
+// Nástroje mapy patří i na mapu: ikonová lišta vpravo jen předává kliknutí
+// tlačítkům v panelu (ta nesou stav i měnící se popisky).
+[["ctlMeasure", "measureBtn"], ["ctlPng", "exportPngBtn"],
+ ["ctlTimelapse", "timelapseBtn"], ["ctlPolygon", "drawPolyBtn"]]
+  .forEach(([ctl, target]) =>
+    $(ctl).addEventListener("click", () => $(target).click()));
+
+// Sbalitelné sekce panelu – klik na nadpis sekci sbalí/rozbalí; co si kdo
+// sbalí, to sbalené zůstane (progresivní odkrývání dlouhých záložek).
+(function collapsibleSections() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem("panel.collapsedSecs") || "[]"); } catch (e) { /* — */ }
+  const keyOf = (sec) => sec.querySelector("h2")?.childNodes[0]?.textContent.trim() || "";
+  document.querySelectorAll(".tab-page section").forEach((sec) => {
+    const h = sec.querySelector(":scope > h2");
+    if (!h) return;
+    h.classList.add("secToggle");
+    h.setAttribute("aria-expanded", saved.includes(keyOf(sec)) ? "false" : "true");
+    if (saved.includes(keyOf(sec))) sec.classList.add("secCollapsed");
+    h.addEventListener("click", (e) => {
+      if (e.target.closest("button, a, input, select")) return;
+      const collapsed = sec.classList.toggle("secCollapsed");
+      h.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      const now = [...document.querySelectorAll(".tab-page section.secCollapsed")]
+        .map(keyOf).filter(Boolean);
+      localStorage.setItem("panel.collapsedSecs", JSON.stringify(now));
+    });
+  });
+})();
+
+// Kontextová nabídka pravým tlačítkem na mapě – nejrychlejší cesta k akcím
+// nad konkrétním místem (konvence Google Maps / GIS aplikací).
+function closeMapMenu() {
+  document.getElementById("mapMenu")?.remove();
+}
+
+map.on("contextmenu", (e) => {
+  closeMapMenu();
+  const { lat, lng } = e.latlng;
+  const menu = document.createElement("div");
+  menu.id = "mapMenu";
+  menu.className = "floating";
+  menu.setAttribute("role", "menu");
+  menu.innerHTML =
+    `<button role="menuitem" data-mact="stays">${icon("search", 13)} Kdy jsem tu byl?</button>` +
+    `<button role="menuitem" data-mact="name">${icon("pencil", 13)} Pojmenovat místo</button>` +
+    `<button role="menuitem" data-mact="measure">${icon("ruler", 13)} Měřit vzdálenost</button>` +
+    `<button role="menuitem" data-mact="coords">${icon("pin", 13)} Kopírovat souřadnice</button>`;
+  const wrap = map.getContainer().getBoundingClientRect();
+  document.getElementById("app").appendChild(menu);
+  const x = Math.min(e.containerPoint.x + wrap.left, window.innerWidth - menu.offsetWidth - 8);
+  const y = Math.min(e.containerPoint.y + wrap.top, window.innerHeight - menu.offsetHeight - 8);
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  menu.querySelectorAll("[data-mact]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      closeMapMenu();
+      const act = b.dataset.mact;
+      if (act === "stays") whenIWasHere(lat, lng);
+      else if (act === "name") renamePlace(lat, lng, "");
+      else if (act === "measure") $("measureBtn").click();
+      else if (act === "coords") {
+        const txt = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        try {
+          await navigator.clipboard.writeText(txt);
+          toast(`Souřadnice zkopírovány: ${txt}`, "success");
+        } catch (err) { toast(txt, "info"); }
+      }
+    }));
+  menu.querySelector("button").focus();
+});
+map.on("click movestart zoomstart", closeMapMenu);
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#mapMenu")) closeMapMenu();
 });
 
 /* Offline mapa (PMTiles): pokud na serveru leží data/map.pmtiles, přidá se
@@ -1067,16 +1152,30 @@ function visitPopupActions(ev, v, label) {
       } else if (act === "rename") {
         renamePlace(v.lat, v.lon, label);
       } else if (act === "del") {
-        if (!await appConfirm(
-          `Smazat tuto návštěvu (${label})? GPS body zůstanou, smaže se jen záznam pobytu.`,
-          { okLabel: "Smazat", danger: true })) return;
+        // smaže se hned; pojistkou není otravný dialog, ale tlačítko Zpět
         map.closePopup();
         try {
           await apiFetch(`/api/visits/${v.id}`, { method: "DELETE" });
-          state.visits = state.visits.filter((x) => x !== v);
-          renderVisits();
-          toast("Návštěva smazána.", "success");
-        } catch (err) { toast("Smazání selhalo: " + err.message, "error"); }
+        } catch (err) {
+          toast("Smazání selhalo: " + err.message, "error");
+          return;
+        }
+        state.visits = state.visits.filter((x) => x !== v);
+        renderVisits();
+        toast(`Návštěva (${label}) smazána.`, "success", {
+          label: "Zpět",
+          onClick: async () => {
+            try {
+              const r = await apiFetch("/api/visits", { method: "POST", body: {
+                start_ts: v.start_ts, end_ts: v.end_ts, lat: v.lat, lon: v.lon,
+                name: v.name, address: v.address, semantic: v.semantic,
+              } });
+              state.visits.push({ ...v, id: r.id });
+              renderVisits();
+              toast("Návštěva obnovena.", "success");
+            } catch (err) { toast("Obnovení selhalo: " + err.message, "error"); }
+          },
+        });
       }
     }));
 }
@@ -1150,6 +1249,7 @@ let lastStatsArgs = null;   // pro překreslení po změně výběru dlaždic
 // Ozubené kolečko u nadpisu: zaškrtávací výběr zobrazených dlaždic.
 $("statCustomize").addEventListener("click", () => {
   const box = $("statPicker");
+  $("statCustomize").setAttribute("aria-expanded", box.hidden ? "true" : "false");
   if (!box.hidden) { box.hidden = true; return; }
   const hidden = hiddenTiles();
   box.innerHTML = STAT_TILES.map((t) =>
@@ -1451,6 +1551,15 @@ document.addEventListener("keydown", (e) => {
   const help = document.getElementById("shortcutHelp");
   if (e.key === "Escape" && help && !help.hidden) {
     help.hidden = true;
+    return;
+  }
+  if (e.key === "Escape" && document.getElementById("mapMenu")) {
+    closeMapMenu();
+    return;
+  }
+  if (e.key === "Escape" && !$("statPicker").hidden) {
+    $("statPicker").hidden = true;
+    $("statCustomize").setAttribute("aria-expanded", "false");
     return;
   }
   if (e.key === "Escape" && placesUI.drawActive()) {
