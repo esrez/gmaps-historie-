@@ -2078,13 +2078,66 @@ async function showHealth() {
       '<span class="muted">(zálohuje se automaticky 1× denně)</span>';
   } catch (e) { $("appHealth").textContent = ""; }
   try {
-    const u = await api("/api/update_check");
+    const [u, v] = await Promise.all([api("/api/update_check"), api("/api/version")]);
     if (u.available) {
       $("appHealth").innerHTML +=
         `<br>${icon("refresh", 12)} K dispozici je novější verze <b>${escapeHtml(u.latest)}</b>` +
-        (u.url ? ` – <a href="${escapeHtml(u.url)}" target="_blank" rel="noopener">stáhnout</a>` : "");
+        (u.url ? ` – <a href="${escapeHtml(u.url)}" target="_blank" rel="noopener">stáhnout</a>` : "") +
+        (v.desktop
+          ? ` <button id="updateNowBtn" class="primary">${icon("download", 12)} Stáhnout a aktualizovat</button>`
+          : "");
+      $("updateNowBtn")?.addEventListener("click", () => runSelfUpdate(u.latest));
     }
   } catch (e) { /* kontrola není dostupná */ }
+}
+
+// Jedno-kliková aktualizace desktopové aplikace: stáhne nový exe z GitHubu,
+// server ho ověří, a po potvrzení se aplikace restartuje s novou verzí.
+async function runSelfUpdate(latest) {
+  const btn = $("updateNowBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = "Stahuji novou verzi… (může trvat pár minut)";
+  try {
+    await apiFetch("/api/update/download", { method: "POST" });
+  } catch (e) {
+    toast("Stažení aktualizace selhalo: " + e.message, "error");
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    return;
+  }
+  const ok = await appConfirm(
+    `Aktualizace ${latest} je stažená a ověřená. Aplikace se nyní ukončí, ` +
+    "vymění za novou verzi a sama znovu spustí. Pokračovat?",
+    { title: "Aktualizovat aplikaci", okLabel: "Restartovat" });
+  if (!ok) {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    toast("Aktualizace je připravená – dokončí se při příštím potvrzení.");
+    return;
+  }
+  try {
+    await apiFetch("/api/update/apply", { method: "POST" });
+  } catch (e) {
+    toast("Spuštění aktualizace selhalo: " + e.message, "error");
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    return;
+  }
+  btn.textContent = "Restartuji…";
+  toast("Aplikace se restartuje – stránka se sama obnoví.", "info");
+  // počkat, až naběhne nová verze, a stránku obnovit (nová PWA cache atd.)
+  const t0 = Date.now();
+  const timer = setInterval(async () => {
+    try {
+      const r = await fetch("/api/version", { cache: "no-store" });
+      if (r.ok && (await r.json()).release === latest) {
+        clearInterval(timer);
+        location.reload();
+      }
+    } catch (e) { /* server se ještě vyměňuje */ }
+    if (Date.now() - t0 > 180000) clearInterval(timer);   // 3 min strop
+  }, 2000);
 }
 
 $("dbCheckBtn")?.addEventListener("click", async () => {

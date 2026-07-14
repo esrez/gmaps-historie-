@@ -157,6 +157,15 @@ def _already_running() -> bool:
 
 
 def main() -> None:
+    if "--version" in sys.argv:
+        # používá se k ověření staženého exe při samoaktualizaci – musí
+        # proběhnout před přesměrováním výstupu do logu
+        import contextlib
+
+        from app.core.config import APP_RELEASE
+        with contextlib.suppress(Exception):   # okenní exe nemusí mít stdout
+            print(APP_RELEASE)
+        return
     _setup_windowed_logging()
     if "--update" in sys.argv or "--check-update" in sys.argv:
         from pathlib import Path

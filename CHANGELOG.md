@@ -2,6 +2,16 @@
 
 ## Nevydáno
 
+### Jedno-kliková aktualizace (Windows)
+- v Nástroje → O aplikaci je při dostupné nové verzi tlačítko **„Stáhnout
+  a aktualizovat"**: aplikace stáhne nový exe z GitHub Releases, **ověří ho**
+  (velikost dle vydání, MZ hlavička, zkušební spuštění s `--version`)
+  a po potvrzení se sama vymění a restartuje; stránka se pak obnoví
+- stará verze zůstane vedle jako `GMapsHistorie-old.exe` (pojistka),
+  nové endpointy `POST /api/update/download` a `POST /api/update/apply`
+  fungují jen v desktopové aplikaci na Windows
+- `GMapsHistorie.exe --version` vypíše verzi (používá se k ověření)
+
 ### Ovládání oken
 - **lišta přehrávání dne jde schovat** (křížek) – místo ní zůstane malé
   kulaté tlačítko dole uprostřed; stav se pamatuje a spuštění přehrávání

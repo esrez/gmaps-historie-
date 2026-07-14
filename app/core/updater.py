@@ -102,6 +102,80 @@ def apply_update_zip(zip_path: Path, app_dir: Path) -> list[str]:
     return updated
 
 
+# ---------------- jedno-kliková aktualizace portable exe (z GitHubu) ------
+
+NEW_EXE_NAME = "GMapsHistorie-new.exe"
+OLD_EXE_NAME = "GMapsHistorie-old.exe"
+MIN_EXE_SIZE = 5_000_000   # menší soubor rozhodně není zabalená aplikace
+
+
+def find_exe_asset(release: dict) -> dict | None:
+    """Najde v metadatech GitHub Release přílohu GMapsHistorie.exe."""
+    for a in release.get("assets") or []:
+        if a.get("name") == "GMapsHistorie.exe" and a.get("browser_download_url"):
+            return {"url": a["browser_download_url"], "size": int(a.get("size") or 0)}
+    return None
+
+
+def download_exe(url: str, dest: Path, expected_size: int | None = None) -> None:
+    """Stáhne nový exe vedle aplikace a ověří velikost + hlavičku (MZ)."""
+    req = urllib.request.Request(url, headers={"User-Agent": "gmaps-historie"})
+    tmp = dest.with_suffix(".part")
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r, tmp.open("wb") as f:
+            shutil.copyfileobj(r, f)
+        size = tmp.stat().st_size
+        if expected_size and size != expected_size:
+            raise ValueError(
+                f"Stažený soubor má {size} B, vydání udává {expected_size} B")
+        if size < MIN_EXE_SIZE:
+            raise ValueError("Stažený soubor je podezřele malý")
+        with tmp.open("rb") as f:
+            if f.read(2) != b"MZ":
+                raise ValueError("Stažený soubor není spustitelný program Windows")
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, dest)
+
+
+def verify_exe_version(exe: Path, expected: str, timeout_s: int = 180) -> bool:
+    """Ověří stažený exe spuštěním s --version (první start jednosouborového
+    balíku chvíli trvá – rozbaluje se). Oddělená funkce kvůli testům."""
+    import subprocess
+    try:
+        out = subprocess.run([str(exe), "--version"], capture_output=True,
+                             text=True, timeout=timeout_s)
+        return expected in (out.stdout or "") + (out.stderr or "")
+    except Exception:
+        return False
+
+
+def spawn_swap_helper(app_dir: Path, pid: int) -> None:
+    """Vypustí pomocný skript, který po ukončení aplikace prohodí exe
+    a novou verzi spustí. Komentáře v .bat jen ASCII (kódování konzole)."""
+    import subprocess
+    bat = app_dir / "gmaps-aktualizace.bat"
+    bat.write_text(
+        "@echo off\r\n"
+        "rem GMaps Historie: dokonceni aktualizace po ukonceni aplikace\r\n"
+        f'cd /d "{app_dir}"\r\n'
+        ":cekej\r\n"
+        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul '
+        "&& (timeout /t 1 /nobreak >nul & goto cekej)\r\n"
+        f'if exist "{OLD_EXE_NAME}" del /q "{OLD_EXE_NAME}"\r\n'
+        f'move /y "GMapsHistorie.exe" "{OLD_EXE_NAME}" >nul\r\n'
+        f'move /y "{NEW_EXE_NAME}" "GMapsHistorie.exe" >nul\r\n'
+        'start "" "GMapsHistorie.exe"\r\n'
+        'del /q "%~f0"\r\n', encoding="ascii")
+    flags = 0
+    if os.name == "nt":  # DETACHED_PROCESS | CREATE_NO_WINDOW
+        flags = 0x00000008 | 0x08000000
+    subprocess.Popen(["cmd", "/c", str(bat)], cwd=str(app_dir),
+                     creationflags=flags,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def run_update(app_dir: Path | None = None, *,
                update_url: str | None = None,
                current_version: str | None = None,

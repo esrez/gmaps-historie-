@@ -43,9 +43,19 @@ sítě**. Pak funguje `http://IP-počítače:8000` a nastavte `AUTH_PASSWORD`.
 ### Aktualizace
 
 Aplikace jednou denně nenápadně zkontroluje nová vydání (vypnutí:
-`UPDATE_CHECK_URL=`) a odkaz ukáže v **Nástroje → O aplikaci**. Aktualizace
-portable verze = stáhnout nový `GMapsHistorie.exe` a nahradit jím starý
-soubor. Data zůstávají (jsou mimo exe).
+`UPDATE_CHECK_URL=`). Když je k dispozici novější verze, v **Nástroje →
+O aplikaci** se objeví odkaz ke stažení a tlačítko **„Stáhnout
+a aktualizovat"**:
+
+1. aplikace stáhne nový `GMapsHistorie.exe` z GitHub Releases vedle sebe,
+2. **ověří ho** (velikost dle vydání, hlavička spustitelného souboru
+   a zkušební spuštění s `--version`),
+3. po vašem potvrzení se ukončí, pomocný skript soubory prohodí
+   (stará verze zůstane vedle jako `GMapsHistorie-old.exe`) a nová verze
+   se sama spustí; stránka v prohlížeči se pak sama obnoví.
+
+Nic se neděje bez potvrzení a data zůstávají (jsou mimo exe). Ruční cesta
+– stáhnout exe z Releases a nahradit soubor – samozřejmě funguje dál.
 
 Pro pokročilé: aplikace umí i aktualizaci z vlastního serveru
 (`GMapsHistorie.exe --update`, adresa přes `UPDATE_URL`; balík

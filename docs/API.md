@@ -46,6 +46,8 @@ Většina endpointů přijímá `from_ts`/`to_ts` (vynechané = bez omezení).
 | `/api/health` | GET | stav aplikace: velikost DB, počty záznamů, profil, čas poslední zálohy |
 | `/api/health/check` | POST | kontrola integrity databáze (PRAGMA quick_check) |
 | `/api/update_check` | GET | je k dispozici novější vydání? (`current`, `latest`, `available`, `url`); server se ptá GitHubu max. 1× za 6 h, vypnutí `UPDATE_CHECK_URL=` |
+| `/api/update/download` | POST | stáhne nový exe z GitHub Release a ověří ho (jen desktopová aplikace Windows) |
+| `/api/update/apply` | POST | dokončí připravenou aktualizaci: výměna exe po ukončení + restart (jen desktop) |
 
 ## Exporty
 
