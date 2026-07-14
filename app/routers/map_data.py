@@ -5,6 +5,7 @@ import math
 from contextlib import closing
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from .. import db, places
 from ..common import haversine_m, ts_range
@@ -124,6 +125,29 @@ def api_delete_visit(visit_id: int):
     if cur.rowcount == 0:
         raise HTTPException(404, "Návštěva nenalezena")
     return {"deleted": visit_id}
+
+
+class VisitIn(BaseModel):
+    start_ts: int
+    end_ts: int
+    lat: float
+    lon: float
+    name: str | None = None
+    address: str | None = None
+    semantic: str | None = None
+
+
+@router.post("/api/visits")
+def api_create_visit(v: VisitIn):
+    """Založí záznam návštěvy – používá se pro „Zpět" po smazání z mapy."""
+    with closing(db.connect()) as conn:
+        cur = conn.execute(
+            "INSERT INTO visits(start_ts, end_ts, lat, lon, name, address, semantic, source)"
+            " VALUES(?,?,?,?,?,?,?,?)",
+            (v.start_ts, v.end_ts, v.lat, v.lon, v.name, v.address, v.semantic, "obnoveno"))
+        conn.commit()
+        new_id = cur.lastrowid
+    return {"id": new_id}
 
 
 # ------------------------------------------ přichycení dne k silnicím (OSRM)

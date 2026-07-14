@@ -787,3 +787,19 @@ def test_self_update_download_and_apply(client, test_db, tmp_path, monkeypatch):
     r = client.post("/api/update/apply")
     assert r.status_code == 200 and r.json()["ok"] is True
     assert called["dir"] == tmp_path and called["shutdown"] is True
+
+
+def test_visit_restore_after_delete(client, test_db, tmp_path):
+    """„Zpět" po smazání návštěvy: POST /api/visits záznam obnoví."""
+    seed(test_db, tmp_path)
+    vis = client.get("/api/visits").json()["visits"]
+    v = vis[0]
+    client.delete(f"/api/visits/{v['id']}")
+    assert len(client.get("/api/visits").json()["visits"]) == len(vis) - 1
+    r = client.post("/api/visits", json={
+        "start_ts": v["start_ts"], "end_ts": v["end_ts"],
+        "lat": v["lat"], "lon": v["lon"],
+        "name": v["name"], "address": v["address"], "semantic": v["semantic"]})
+    assert r.status_code == 200 and r.json()["id"]
+    after = client.get("/api/visits").json()["visits"]
+    assert len(after) == len(vis)

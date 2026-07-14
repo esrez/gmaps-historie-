@@ -58,7 +58,12 @@ statistik, nižší panel = víc mapy) a hlavně ho lze **odsunout tažením za
 hlavičku** (kurzor ruky), takže se dostanete k celé mapě a můžete s ní volně
 posouvat i tam, kde panel původně překážel. **Pozice i velikost panelu se
 pamatují** – po příštím otevření je vše, jak jste si to nechali; **dvojklik
-na hlavičku** panel vrátí na výchozí místo a velikost. Dole je plovoucí
+na hlavičku** panel vrátí na výchozí místo a velikost. **Sekce v záložkách
+jdou sbalit klikem na nadpis** (šipka vpravo; stav se pamatuje), takže
+vidíte jen to, co používáte. **Pravé tlačítko myši** kdekoli na mapě otevře
+nabídku: Kdy jsem tu byl?, Pojmenovat místo, Měřit vzdálenost, Kopírovat
+souřadnice. Nástroje mapy (měření, PNG, časosběr, polygon) najdete i jako
+**ikony v pravé liště mapy**. Dole je plovoucí
 lišta přehrávání dne – **křížkem ji lze schovat** (místo ní zůstane malé
 kulaté tlačítko, které ji vrátí; spuštění přehrávání ji ukáže samo) –
 vpravo dole legenda vrstev (obojí je průchozí pro myš – mapa jde posouvat

@@ -12,6 +12,21 @@
   fungují jen v desktopové aplikaci na Windows
 - `GMapsHistorie.exe --version` vypíše verzi (používá se k ověření)
 
+### Intuitivnější ovládání
+- **sbalitelné sekce panelu** – klik na nadpis sekci sbalí/rozbalí a stav
+  se pamatuje; dlouhé záložky (Mapa, Nástroje) tak ukazují jen to, co
+  opravdu používáte
+- **nástroje přímo na mapě**: Měření, Uložit PNG, Časosběr a Pojmenovat
+  oblast mají ikony v pravé liště mapy (tlačítka v panelu zůstávají)
+- **kontextová nabídka pravým tlačítkem** na mapě: Kdy jsem tu byl?,
+  Pojmenovat místo, Měřit vzdálenost, Kopírovat souřadnice
+- **mazání návštěvy bez potvrzovacího okna** – proběhne hned a toast
+  6 s nabízí **Zpět** (obnovení záznamu, `POST /api/visits`)
+- **viditelný úchop** ⋮⋮ v hlavičce panelu (přetažení jde objevit)
+- **přístupnost**: záložky mají role tab/tabpanel + aria-selected,
+  rozbalovací prvky aria-expanded, Esc zavírá nabídky a výběry,
+  toast oznamuje obsah čtečkám (aria-live)
+
 ### Statistiky
 - **11 dlaždic** (nově Ø km na cestu, Ø km/h na cestách, Ø návštěv na den)
 - **výběr zobrazených statistik**: ozubené kolečko u nadpisu otevře
