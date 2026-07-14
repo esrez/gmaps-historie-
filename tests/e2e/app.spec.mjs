@@ -490,3 +490,85 @@ test.describe("kniha jízd", () => {
     await ctx.close();
   });
 });
+
+test.describe("ovládání oken a návštěvy", () => {
+  const loaded = (page) => page.waitForFunction(() =>
+    document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+
+  test("lišta přehrávání jde skrýt, stav přežije reload a přehrání ji vrátí", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    await expect(page.locator("#playbackBar")).toBeVisible();
+    await page.click("#playbarHide");
+    await expect(page.locator("#playbackBar")).toBeHidden();
+    await expect(page.locator("#playbarShow")).toBeVisible();
+    await page.reload();
+    await loaded(page);
+    await expect(page.locator("#playbackBar")).toBeHidden();
+    // přehrání dne z kalendáře lištu automaticky ukáže
+    await page.click('#tabs [data-tab="stat"]');
+    await page.locator("#calendar svg").waitFor();
+    await page.locator('#calendar rect[data-rec="km"]').first().click();
+    await expect(page.locator("#playbackBar")).toBeVisible();
+    await expect(page.locator("#playbarShow")).toBeHidden();
+  });
+
+  test("panel si pamatuje pozici; dvojklik na hlavičku vše vrátí", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    const head = await page.locator("#panelHead").boundingBox();
+    // táhnout za levou část hlavičky (mimo tlačítka vpravo)
+    await page.mouse.move(head.x + 40, head.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(head.x + 40 + 180, head.y + 10 + 70, { steps: 6 });
+    await page.mouse.up();
+    const panelX = async () => (await page.locator("#panel").boundingBox()).x;
+    const moved = await panelX();
+    expect(moved).toBeGreaterThan(100);
+    await page.reload();
+    await loaded(page);
+    expect(Math.abs((await panelX()) - moved)).toBeLessThan(4);
+    // dvojklik = návrat na výchozí pozici (left 12px)
+    await page.locator("#panelHead").dblclick({ position: { x: 40, y: 10 } });
+    expect(await panelX()).toBeLessThan(30);
+  });
+
+  test("návštěvy: popisky v mapě a akce v bublině včetně smazání", async ({ page }) => {
+    await page.goto("/");
+    await loaded(page);
+    // nechat jen vrstvu návštěv, ať klik trefí jejich značku
+    await page.uncheck("#layerTracks");
+    await page.uncheck("#layerMyPlaces");
+    await page.check("#visitNames");
+    await page.click("#panelCollapse");   // panel nesmí překrývat značky
+    // návštěvy jsou ve shluku – klik na shluk mapu přiblíží a značky rozbalí
+    const cluster = page.locator(".marker-cluster").first();
+    if (await cluster.count()) await cluster.click();
+    const tip = page.locator(".leaflet-tooltip.visitName").first();
+    await expect(tip).toBeVisible({ timeout: 10000 });
+
+    const before = (await page.request.get("/api/visits").then((r) => r.json()))
+      .visits.length;
+    // značky se kreslí na canvas (žádné DOM elementy) – kliknout těsně
+    // pod popisek, kde leží střed značky
+    const tb = await tip.boundingBox();
+    await page.mouse.click(tb.x + tb.width / 2, tb.y + tb.height + 10);
+    const popup = page.locator(".leaflet-popup");
+    await expect(popup).toContainText("Přehrát den");
+    await expect(popup).toContainText("Kdy jsem tu byl?");
+    await expect(popup).toContainText("Smazat návštěvu");
+
+    await popup.locator('[data-act="del"]').click();
+    await page.locator("#appDialog .dlgOk").click();
+    await expect(page.locator("#toast")).toContainText("Návštěva smazána");
+    const after = (await page.request.get("/api/visits").then((r) => r.json()))
+      .visits.length;
+    expect(after).toBe(before - 1);
+    // filtr min. délky pobytu je uložené nastavení
+    await page.click("#panelCollapse");   // panel zpět, ať je select vidět
+    await page.selectOption("#visitMinStay", "60");
+    await page.reload();
+    await loaded(page);
+    expect(await page.locator("#visitMinStay").inputValue()).toBe("60");
+  });
+});

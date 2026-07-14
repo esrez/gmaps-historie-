@@ -1,5 +1,25 @@
 # Změny
 
+## Nevydáno
+
+### Ovládání oken
+- **lišta přehrávání dne jde schovat** (křížek) – místo ní zůstane malé
+  kulaté tlačítko dole uprostřed; stav se pamatuje a spuštění přehrávání
+  lištu samo zase ukáže
+- **hlavní panel si pamatuje pozici i velikost**: tažením za hlavičku ho
+  přesunete (pozice se uloží), tažením za pravý dolní roh měníte šířku
+  i výšku; **dvojklik na hlavičku** vše vrátí na výchozí
+- oprava: obnovení stránky už samo nespouští přehrávání dne (parametr
+  `play` je v adrese jen při skutečně načteném přehrávání)
+
+### Navštívená místa
+- **akce přímo v bublině návštěvy**: Přehrát den, Kdy jsem tu byl?,
+  Pojmenovat a **Smazat návštěvu** (s potvrzením; GPS body zůstávají) –
+  nový endpoint `DELETE /api/visits/{id}`
+- **filtr délky pobytu** (≥ 15 min / 1 h / 3 h) skryje krátká zastavení
+- volitelné **popisky jmen** nejdelších pobytů přímo v mapě
+- obě volby se pamatují jako ostatní nastavení mapy
+
 ## 2.2.0 (2026-07)
 
 ### Testy a vývojářské zázemí

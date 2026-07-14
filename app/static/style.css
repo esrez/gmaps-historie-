@@ -240,6 +240,46 @@ body {
   width: min(720px, calc(100vw - 24px));
   padding: 10px 14px 12px;
 }
+/* obnovení skryté lišty přehrávání – malé kulaté tlačítko dole uprostřed */
+#playbarShow {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+#playbarShow:hover { transform: translateX(-50%) scale(1.08); }
+
+/* akce v bublině návštěvy */
+.visitActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--grid);
+}
+.visitActions a { text-decoration: none; white-space: nowrap; }
+.visitActions a.danger { color: var(--accent-red); }
+
+/* trvalý popisek jména místa přímo v mapě */
+.leaflet-tooltip.visitName {
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* volby vrstvy navštívených míst (odsazené pod checkbox) */
+.visitOpts { margin: 2px 0 6px 24px; align-items: center; }
+
 .pb-main { display: flex; flex-direction: column; gap: 6px; }
 .pb-scrubber-wrap {
   display: flex;

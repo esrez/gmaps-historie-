@@ -101,7 +101,7 @@ def api_visits(from_ts: int | None = Query(None), to_ts: int | None = Query(None
     lo, hi = ts_range(from_ts, to_ts)
     with closing(db.connect()) as conn:
         rows = conn.execute(
-            "SELECT start_ts, end_ts, lat, lon, name, address, semantic FROM visits "
+            "SELECT id, start_ts, end_ts, lat, lon, name, address, semantic FROM visits "
             "WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts LIMIT ?",
             (lo, hi, limit)).fetchall()
         custom = places.load_places(conn)
@@ -112,6 +112,18 @@ def api_visits(from_ts: int | None = Query(None), to_ts: int | None = Query(None
                                         r["name"], r["semantic"])
         out.append(d)
     return {"visits": out}
+
+
+@router.delete("/api/visits/{visit_id}")
+def api_delete_visit(visit_id: int):
+    """Smaže jednu chybnou návštěvu (např. špatně rozpoznané místo).
+    GPS body zůstávají – maže se jen záznam pobytu."""
+    with closing(db.connect()) as conn:
+        cur = conn.execute("DELETE FROM visits WHERE id=?", (visit_id,))
+        conn.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Návštěva nenalezena")
+    return {"deleted": visit_id}
 
 
 # ------------------------------------------ přichycení dne k silnicím (OSRM)

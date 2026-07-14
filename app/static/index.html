@@ -118,6 +118,16 @@
           </select>
         </div>
         <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
+        <div class="row visitOpts" style="gap:6px">
+          <select id="visitMinStay" title="Skrýt krátká zastavení – mapa míst bude přehlednější">
+            <option value="0">všechny pobyty</option>
+            <option value="15">pobyty ≥ 15 min</option>
+            <option value="60">pobyty ≥ 1 h</option>
+            <option value="180">pobyty ≥ 3 h</option>
+          </select>
+          <label class="check" style="margin:0" title="Jména nejdelších pobytů přímo v mapě">
+            <input type="checkbox" id="visitNames"> popisky</label>
+        </div>
         <label class="check"><input type="checkbox" id="layerMyPlaces" checked> Moje místa (názvy)</label>
         <label class="check" title="Zobrazit jen body z vybraného způsobu dopravy">
           Doprava
@@ -394,6 +404,8 @@
         <button id="timelineToggle" class="pb-btn pb-list-btn" type="button" title="Seznam událostí dne">
           <span data-icon="calendar"></span> Seznam
         </button>
+        <button id="playbarHide" class="pb-btn" type="button"
+                title="Skrýt lištu přehrávání (znovu ji zobrazí tlačítko vpravo dole)">✕</button>
       </div>
     </div>
     <div id="timelinePop" class="floating" hidden>
@@ -401,6 +413,10 @@
       <ol id="dayTimeline"></ol>
     </div>
   </div>
+
+  <!-- obnovení skryté lišty přehrávání -->
+  <button id="playbarShow" class="floating" type="button" hidden
+          title="Zobrazit lištu přehrávání dne"><span data-icon="play"></span></button>
 
   <!-- legenda vrstev -->
   <div id="mapLegend" class="floating">

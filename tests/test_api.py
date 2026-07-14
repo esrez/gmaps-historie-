@@ -723,3 +723,16 @@ def test_profiles_create_switch(client, test_db, tmp_path, monkeypatch):
     # přepnutí na neexistující profil → 404
     assert client.post("/api/profiles/switch",
                        json={"name": "cizi"}).status_code == 404
+
+
+def test_visit_delete(client, test_db, tmp_path):
+    """Mazání jedné návštěvy z mapy: záznam zmizí, GPS body zůstávají."""
+    seed(test_db, tmp_path)
+    vis = client.get("/api/visits").json()["visits"]
+    assert vis and "id" in vis[0]
+    points_before = client.get("/api/range").json()["points"]
+    r = client.delete(f"/api/visits/{vis[0]['id']}")
+    assert r.status_code == 200 and r.json()["deleted"] == vis[0]["id"]
+    assert len(client.get("/api/visits").json()["visits"]) == len(vis) - 1
+    assert client.get("/api/range").json()["points"] == points_before
+    assert client.delete(f"/api/visits/{vis[0]['id']}").status_code == 404

@@ -39,10 +39,37 @@ $("panelCollapse").addEventListener("click", () => {
 });
 
 // Panel lze odsunout tažením za hlavičku – uvolní se tak mapa pod ním.
+// Poslední pozice se pamatuje (localStorage) a obnoví při dalším otevření;
+// dvojklik na hlavičku vrátí panel na výchozí místo.
 // (Na mobilu je panel spodní list, tam se přesun nepoužívá.)
 (function makePanelDraggable() {
   const panel = $("panel"), head = $("panelHead");
   const isMobile = () => window.matchMedia("(max-width: 800px)").matches;
+
+  const clampPos = (x, y) => [
+    Math.max(4, Math.min(window.innerWidth - Math.min(panel.offsetWidth, 240) - 4, x)),
+    Math.max(4, Math.min(window.innerHeight - 48, y)),
+  ];
+  const applyPos = (x, y) => {
+    [x, y] = clampPos(x, y);
+    panel.style.right = "auto";
+    panel.style.left = x + "px";
+    panel.style.top = y + "px";
+  };
+  const savePos = () => {
+    const r = panel.getBoundingClientRect();
+    localStorage.setItem("panel.pos",
+      JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
+  };
+
+  // obnova naposledy uložené pozice (jen desktop; pozice se ořízne do okna)
+  if (!isMobile()) {
+    try {
+      const p = JSON.parse(localStorage.getItem("panel.pos") || "null");
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) applyPos(p.x, p.y);
+    } catch (e) { /* poškozené uložení – nechat výchozí */ }
+  }
+
   let sx, sy, ox, oy, dragging = false;
   head.addEventListener("pointerdown", (e) => {
     if (isMobile() || e.target.closest("button, a, input, select")) return;
@@ -65,13 +92,29 @@ $("panelCollapse").addEventListener("click", () => {
     if (!dragging) return;
     dragging = false;
     head.classList.remove("dragging");
+    savePos();
     try { head.releasePointerCapture(e.pointerId); } catch (_) { /* — */ }
   };
   head.addEventListener("pointerup", end);
   head.addEventListener("pointercancel", end);
-  // při přechodu na mobil (spodní list) zrušit ruční pozici, ať platí layout
+  // dvojklik na hlavičku = návrat na výchozí pozici i velikost
+  head.addEventListener("dblclick", (e) => {
+    if (e.target.closest("button, a, input, select")) return;
+    panel.style.left = panel.style.top = panel.style.right = "";
+    panel.style.width = panel.style.height = "";
+    localStorage.removeItem("panel.pos");
+    localStorage.removeItem("panel.width");
+    localStorage.removeItem("panel.height");
+    toast("Panel vrácen na výchozí pozici a velikost.");
+  });
+  // při přechodu na mobil (spodní list) zrušit ruční pozici, ať platí layout;
+  // na desktopu po zmenšení okna panel jen přitáhnout dovnitř
   window.addEventListener("resize", () => {
-    if (isMobile()) { panel.style.left = panel.style.top = panel.style.right = ""; }
+    if (isMobile()) {
+      panel.style.left = panel.style.top = panel.style.right = "";
+    } else if (panel.style.left) {
+      applyPos(parseFloat(panel.style.left), parseFloat(panel.style.top));
+    }
   });
 })();
 
@@ -149,9 +192,22 @@ async function drawMatchedRoad() {
   }
 }
 
+// Lišta přehrávání jde schovat (křížek) – místo ní zůstane malé kulaté
+// tlačítko dole uprostřed. Stav se pamatuje; spuštění přehrávání lištu
+// samo zase ukáže, aby ovládání nebylo neviditelné.
+function setPlaybarHidden(hidden) {
+  $("playbackBar").hidden = hidden;
+  $("playbarShow").hidden = !hidden;
+  localStorage.setItem("playbar.hidden", hidden ? "1" : "");
+}
+$("playbarHide").addEventListener("click", () => setPlaybarHidden(true));
+$("playbarShow").addEventListener("click", () => setPlaybarHidden(false));
+if (localStorage.getItem("playbar.hidden") === "1") setPlaybarHidden(true);
+
 async function playDay(autoplay = true) {
   const dateVal = $("playDate").value;
   if (!dateVal) { toast("Vyberte den k přehrání.", "error"); return; }
+  if ($("playbackBar").hidden) setPlaybarHidden(false);
   if (play.dateVal === dateVal && play.points.length >= 2) {
     if (play.timer) pausePlayback();
     else if (autoplay) resumePlayback();
@@ -242,7 +298,7 @@ const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
   "geoOnline", "trackColorMode", "roadSnap", "statRadius", "statRoutes",
-  "heatMode", "heatHours",
+  "heatMode", "heatHours", "visitMinStay", "visitNames",
 ];
 
 function loadMapSettings() {
@@ -461,33 +517,46 @@ document.querySelectorAll(".presets button").forEach((b) =>
   b.addEventListener("click", () => setPreset(b.dataset.days)));
 $("loadBtn").addEventListener("click", loadAll);
 
-// --------------------------------------------- šířka panelu (tažením)
+// ------------------------------------- velikost panelu (tažením za roh)
 
-/* Pravou hranu panelu jde táhnout – širší panel = komplexnější přehled
-   statistik (dlaždice i grafy se šířce přizpůsobí). Šířka se pamatuje. */
+/* Pravý dolní roh panelu jde táhnout – mění šířku i výšku (širší panel =
+   komplexnější přehled statistik, nižší panel = víc mapy). Velikost se
+   pamatuje; dvojklik na hlavičku vše vrátí na výchozí. */
 (function panelResizable() {
   const panel = $("panel");
-  const saved = Number(localStorage.getItem("panel.width"));
   const maxW = () => Math.min(920, window.innerWidth - 24);
-  if (saved >= 320) panel.style.width = Math.min(saved, maxW()) + "px";
+  const maxH = () => window.innerHeight - 24;
+  const savedW = Number(localStorage.getItem("panel.width"));
+  if (savedW >= 320) panel.style.width = Math.min(savedW, maxW()) + "px";
+  const savedH = Number(localStorage.getItem("panel.height"));
+  if (savedH >= 240) panel.style.height = Math.min(savedH, maxH()) + "px";
   const h = document.createElement("div");
   h.id = "panelResize";
-  h.title = "Tažením změníte šířku panelu";
+  h.title = "Tažením změníte šířku i výšku panelu";
   panel.appendChild(h);
   h.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    const startX = e.clientX;
-    const startW = panel.getBoundingClientRect().width;
+    const startX = e.clientX, startY = e.clientY;
+    const r = panel.getBoundingClientRect();
+    const startW = r.width, startH = r.height;
     h.setPointerCapture(e.pointerId);
     const move = (ev) => {
       const w = Math.max(320, Math.min(maxW(), startW + ev.clientX - startX));
       panel.style.width = w + "px";
+      const dy = ev.clientY - startY;
+      if (Math.abs(dy) > 8) {   // výšku měnit až při svislém tahu (ne omylem)
+        const hh = Math.max(240, Math.min(maxH(), startH + dy));
+        panel.style.height = hh + "px";
+      }
     };
     const up = () => {
       h.removeEventListener("pointermove", move);
       h.removeEventListener("pointerup", up);
-      localStorage.setItem("panel.width",
-        String(Math.round(panel.getBoundingClientRect().width)));
+      const rr = panel.getBoundingClientRect();
+      localStorage.setItem("panel.width", String(Math.round(rr.width)));
+      if (panel.style.height) {
+        localStorage.setItem("panel.height", String(Math.round(rr.height)));
+      }
     };
     h.addEventListener("pointermove", move);
     h.addEventListener("pointerup", up);
@@ -617,7 +686,9 @@ function writeHash() {
   const parts = [];
   if ($("dateFrom").value) parts.push("od=" + $("dateFrom").value);
   if ($("dateTo").value) parts.push("do=" + $("dateTo").value);
-  if ($("playDate").value) parts.push("play=" + $("playDate").value);
+  // play v adrese jen když je den opravdu načtený k přehrávání – jinak by
+  // každé obnovení stránky samo spouštělo přehrávání (a odkrývalo lištu)
+  if (play.dateVal) parts.push("play=" + play.dateVal);
   parts.push(`ll=${c.lat.toFixed(5)},${c.lng.toFixed(5)}`, `z=${map.getZoom()}`);
   history.replaceState(null, "", "#" + parts.join("&"));
 }
@@ -940,30 +1011,74 @@ function visitMarker(v) {
   });
 }
 
+// popisků přímo v mapě zobrazit jen tolik, aby se navzájem nepřekrývaly
+const VISIT_LABELS_MAX = 30;
+
 function renderVisits() {
   visitLayer.clearLayers();
   if (!$("layerVisits").checked) return;
-  for (const v of state.visits) {
+  const minStay = Number($("visitMinStay")?.value || 0) * 60;
+  const shown = state.visits.filter((v) => v.end_ts - v.start_ts >= minStay);
+  // popisky: nejdelší pobyty s "lidským" jménem (ne souřadnicový fallback)
+  const labelled = new Set();
+  if ($("visitNames")?.checked) {
+    shown.filter((v) => v.label || v.name)
+      .sort((a, b) => (b.end_ts - b.start_ts) - (a.end_ts - a.start_ts))
+      .slice(0, VISIT_LABELS_MAX)
+      .forEach((v) => labelled.add(v));
+  }
+  for (const v of shown) {
     const from = new Date(v.start_ts * 1000), to = new Date(v.end_ts * 1000);
     const hours = ((v.end_ts - v.start_ts) / 3600).toFixed(1);
     const label = v.label || v.name || v.semantic || "Místo";
-    const m = visitMarker(v).bindTooltip(
-      `${escapeHtml(label)} · ${hours} h`, { direction: "top" }
-    ).bindPopup(
+    const m = visitMarker(v).bindPopup(
       `<b>${escapeHtml(label)}</b><br>` +
       (v.address ? escapeHtml(v.address) + "<br>" : "") +
-      `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>${hours} h<br>` +
-      `<a href="#" class="renameLink">${icon("pencil", 11)} Pojmenovat místo</a>`
+      `${from.toLocaleString("cs")} – ${to.toLocaleTimeString("cs")}<br>${hours} h` +
+      '<div class="visitActions">' +
+      `<a href="#" data-act="play">${icon("play", 11)} Přehrát den</a>` +
+      `<a href="#" data-act="stays">${icon("search", 11)} Kdy jsem tu byl?</a>` +
+      `<a href="#" data-act="rename">${icon("pencil", 11)} Pojmenovat</a>` +
+      `<a href="#" data-act="del" class="danger">${icon("trash", 11)} Smazat návštěvu</a>` +
+      "</div>"
     ).addTo(visitLayer);
-    m.on("popupopen", (ev) => {
-      ev.popup.getElement().querySelector(".renameLink")
-        ?.addEventListener("click", (e) => {
-          e.preventDefault();
-          map.closePopup();
-          renamePlace(v.lat, v.lon, label);
-        });
-    });
+    if (labelled.has(v)) {
+      m.bindTooltip(escapeHtml(label),
+        { permanent: true, direction: "top", className: "visitName", offset: [0, -6] });
+    } else {
+      m.bindTooltip(`${escapeHtml(label)} · ${hours} h`, { direction: "top" });
+    }
+    m.on("popupopen", (ev) => visitPopupActions(ev, v, label));
   }
+}
+
+// Akce v bublině návštěvy – úprava a mazání přímo z mapy.
+function visitPopupActions(ev, v, label) {
+  ev.popup.getElement().querySelectorAll("[data-act]").forEach((a) =>
+    a.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const act = a.dataset.act;
+      if (act !== "del") map.closePopup();
+      if (act === "play") {
+        $("playDate").value = toDateStr(new Date(v.start_ts * 1000));
+        playDay();
+      } else if (act === "stays") {
+        whenIWasHere(v.lat, v.lon, label);
+      } else if (act === "rename") {
+        renamePlace(v.lat, v.lon, label);
+      } else if (act === "del") {
+        if (!await appConfirm(
+          `Smazat tuto návštěvu (${label})? GPS body zůstanou, smaže se jen záznam pobytu.`,
+          { okLabel: "Smazat", danger: true })) return;
+        map.closePopup();
+        try {
+          await apiFetch(`/api/visits/${v.id}`, { method: "DELETE" });
+          state.visits = state.visits.filter((x) => x !== v);
+          renderVisits();
+          toast("Návštěva smazána.", "success");
+        } catch (err) { toast("Smazání selhalo: " + err.message, "error"); }
+      }
+    }));
 }
 
 ["layerTracks", "layerPoints", "layerHeat", "layerVisits"].forEach((id) =>
@@ -973,6 +1088,8 @@ function renderVisits() {
     renderHeat();
     renderVisits();
   }));
+$("visitMinStay")?.addEventListener("change", renderVisits);
+$("visitNames")?.addEventListener("change", renderVisits);
 
 $("layerViewport").addEventListener("change", () => {
   if (state.loadedOnce) loadMapData();   // přepnutí režimu → překreslit hned

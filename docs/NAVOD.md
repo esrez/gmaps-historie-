@@ -52,12 +52,16 @@ objeví tečka a tlačítko „Zkontrolovat a opravit" vás zavede k návrhům o
 
 Mapa zabírá celou obrazovku; ovládání je v plovoucím panelu vlevo se
 záložkami **Mapa · Místa · Statistiky · Analýza · Nástroje**. Panel lze
-šipkou vpravo nahoře **sbalit** (▾/▸), **roztáhnout tažením za pravou
-hranu** (šířka se pamatuje – širší panel = komplexnější přehled statistik)
-a hlavně ho lze **odsunout tažením za
+šipkou vpravo nahoře **sbalit** (▾/▸), **měnit jeho velikost tažením za
+pravý dolní roh** (šířka i výška – širší panel = komplexnější přehled
+statistik, nižší panel = víc mapy) a hlavně ho lze **odsunout tažením za
 hlavičku** (kurzor ruky), takže se dostanete k celé mapě a můžete s ní volně
-posouvat i tam, kde panel původně překážel. Dole je plovoucí lišta přehrávání
-dne, vpravo dole legenda vrstev (obojí je průchozí pro myš – mapa jde posouvat
+posouvat i tam, kde panel původně překážel. **Pozice i velikost panelu se
+pamatují** – po příštím otevření je vše, jak jste si to nechali; **dvojklik
+na hlavičku** panel vrátí na výchozí místo a velikost. Dole je plovoucí
+lišta přehrávání dne – **křížkem ji lze schovat** (místo ní zůstane malé
+kulaté tlačítko, které ji vrátí; spuštění přehrávání ji ukáže samo) –
+vpravo dole legenda vrstev (obojí je průchozí pro myš – mapa jde posouvat
 i pod nimi). Když zvolený výběr nemá žádná data, mapa je **chytrá**: zjistí, co
 v databázi vůbec je, a poví vám kolik bodů a **rozsah dat** máte – stačí tedy
 kliknout „Zobrazit všechna data" a mapa skočí přesně na ně (a zruší i případné
@@ -66,6 +70,13 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Období** – od/do nebo předvolby (7/30/90 dní, Rok, Letos, Loni, Vše).
 - **Vrstvy** – Trasy (klik = přehrát den), Jednotlivé body (čas po najetí),
   Heatmapa, Navštívená místa (velikost = strávený čas; při oddálení se shlukují).
+- **Navštívená místa: filtr a popisky** – volič „pobyty ≥ 15 min / 1 h / 3 h"
+  skryje krátká zastavení (mapa míst je přehlednější), zaškrtnutí **popisky**
+  vypíše jména nejdelších pobytů přímo do mapy.
+- **Úpravy návštěv z mapy** – kliknutí na značku návštěvy otevře bublinu
+  s akcemi: **Přehrát den**, **Kdy jsem tu byl?**, **Pojmenovat** místo
+  a **Smazat návštěvu** (např. špatně rozpoznané místo; GPS body zůstávají,
+  maže se jen záznam pobytu – s potvrzením).
 - **Heatmapa s režimy** – „pohyb" ukáže, kudy jezdíte (hustota GPS bodů,
   volitelně jen ráno/den/večer/noc – např. kde býváte večer), „strávený čas"
   ukáže, kde pobýváte (váha = délka pobytu). Heatmapa tak slouží i jako
