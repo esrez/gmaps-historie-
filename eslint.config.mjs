@@ -43,7 +43,7 @@ export default [
   },
   {
     // e2e testy a skripty běží v Node; kód v page.evaluate() ale v prohlížeči
-    files: ["tests/e2e/**/*.mjs", "scripts/**/*.mjs", "*.mjs"],
+    files: ["tests/e2e/**/*.mjs", "tests/test_map_viz.mjs", "scripts/**/*.mjs", "*.mjs"],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "module",

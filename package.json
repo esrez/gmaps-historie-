@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "e2e": "playwright test",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:unit": "node --test tests/test_map_viz.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

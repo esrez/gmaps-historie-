@@ -62,8 +62,13 @@ test.describe("mapa", () => {
     await page.fill("#searchInput", "work");
     await page.click("#searchBtn");
     await page.locator('#searchResults a[data-kind="mine"]').first().click();
+    await expect(page.locator("#locPanel")).toBeVisible();
     await expect(page.locator("#locSummary")).toContainText("ve zvoleném období");
-    expect(await page.locator("#locStays li").count()).toBeGreaterThan(0);
+    await expect(page.locator("#locStats")).toContainText("Pobytů");
+    expect(await page.locator("#locStays .stayRow").count()).toBeGreaterThan(0);
+    // klik na pobyt spustí přehrávání dne
+    await page.locator("#locStays .stayRow").first().click();
+    await expect(page.locator("#playBtn")).toHaveAttribute("data-state", "playing");
   });
 
   test("kontrola kvality dat proběhne", async ({ page }) => {
@@ -100,6 +105,8 @@ test.describe("mapa", () => {
     await page.check("#layerHeat");
     await page.uncheck("#layerTracks");
     await page.selectOption("#transportFilter", "CAR");
+    await page.selectOption("#trackColorMode", "speed");
+    await page.selectOption("#heatPalette", "fire");
     await closeLayers(page);
     await page.click('#playSpeedBtns .pb-speed-btn[data-speed="3600"]');
     await page.waitForTimeout(200);
@@ -108,6 +115,8 @@ test.describe("mapa", () => {
     await expect(page.locator("#layerHeat")).toBeChecked();
     await expect(page.locator("#layerTracks")).not.toBeChecked();
     await expect(page.locator("#transportFilter")).toHaveValue("CAR");
+    await expect(page.locator("#trackColorMode")).toHaveValue("speed");
+    await expect(page.locator("#heatPalette")).toHaveValue("fire");
     await expect(page.locator('#playSpeedBtns .pb-speed-btn.active')).toHaveAttribute("data-speed", "3600");
   });
 
@@ -404,10 +413,38 @@ test.describe("mapa", () => {
       document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
     await openLayers(page);
     await page.selectOption("#trackColorMode", "year");
-    await expect(page.locator("#trackYearLegend")).toContainText("2025");
-    await page.selectOption("#trackColorMode", "alt");   // zpět – legenda zmizí
+    await expect(page.locator("#trackVizLegend")).toContainText("2025");
+    await page.selectOption("#trackColorMode", "alt");   // zpět – legenda se schová
     await closeLayers(page);
-    await expect(page.locator("#trackYearLegend")).toHaveCount(0);
+    await expect(page.locator("#trackVizLegend")).toBeHidden();
+  });
+
+  test("barvení podle rychlosti a denní doby ukáže legendu", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await openLayers(page);
+    await page.selectOption("#trackColorMode", "speed");
+    await expect(page.locator("#trackVizLegend")).toContainText("pěšky");
+    await expect(page.locator("#trackVizLegend")).toContainText("dálnice");
+    await page.selectOption("#trackColorMode", "hour");
+    await expect(page.locator("#trackVizLegend")).toContainText("ráno");
+    await expect(page.locator("#trackVizLegend")).toContainText("večer");
+    await closeLayers(page);
+  });
+
+  test("heatmapa: paleta a dosah se projeví v legendě", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      document.querySelector("#dbInfo")?.textContent.includes("Zobrazeno"));
+    await openLayers(page);
+    await page.check("#layerHeat");
+    await expect(page.locator("#heatVizLegend")).toContainText("heatmapa");
+    await page.selectOption("#heatPalette", "fire");
+    await expect(page.locator("#heatVizLegend .lg-heatBar")).toBeVisible();
+    await page.uncheck("#layerHeat");
+    await expect(page.locator("#heatVizLegend")).toBeHidden();
+    await closeLayers(page);
   });
 
   test("prázdné období nabídne dostupný rozsah a Zobrazit vše vrátí data", async ({ page }) => {
@@ -711,7 +748,7 @@ test.describe("hledání a vrstvy na mapě", () => {
     const pop = page.locator("#layersPop");
     await expect(pop).toBeVisible();
     // podkladové mapy jsou přepínače, výběr se pamatuje
-    await expect(pop.locator('input[name="baseMap"]')).toHaveCount(4);
+    await expect(pop.locator('input[name="baseMap"]')).toHaveCount(6);
     await pop.locator('input[name="baseMap"]').nth(3).check();   // Satelit
     // datová vrstva funguje odsud stejně jako dřív z panelu
     await page.uncheck("#layerTracks");

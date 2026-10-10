@@ -27,8 +27,10 @@
   <!-- sjednocené vrstvy: podklad + datové vrstvy v jednom popoveru -->
   <div id="layersPop" class="floating" role="dialog" aria-label="Vrstvy mapy" hidden>
     <h2>Vrstvy</h2>
+    <h3 class="popH">Podklad</h3>
     <div id="baseMapList" class="baseMaps"></div>
     <hr class="popSep">
+    <h3 class="popH">Data</h3>
         <label class="check"><input type="checkbox" id="layerTracks" checked> Trasy</label>
         <label class="check"><input type="checkbox" id="layerPoints"> Jednotlivé body</label>
         <label class="check"><input type="checkbox" id="layerHeat"> Heatmapa</label>
@@ -44,6 +46,17 @@
             <option value="17-22">večer 17–22</option>
             <option value="22-5">noc 22–5</option>
           </select>
+        </div>
+        <div class="row heatOpts" style="gap:6px">
+          <select id="heatPalette" title="Barevná škála heatmapy">
+            <option value="classic">klasická</option>
+            <option value="fire">oheň</option>
+            <option value="cool">chladná</option>
+            <option value="teal">tyrkys</option>
+          </select>
+          <label class="vizSlider" title="Dosah skvrn heatmapy">Dosah
+            <input type="range" id="heatRadius" min="8" max="28" step="2" value="12">
+          </label>
         </div>
         <label class="check"><input type="checkbox" id="layerVisits" checked> Navštívená místa</label>
         <div class="row visitOpts" style="gap:6px">
@@ -73,13 +86,25 @@
           <input type="checkbox" id="statRadius"> Akční rádius (kružnice)</label>
         <label class="check" title="Čáry mezi nejčastějšími dvojicemi míst; tloušťka = četnost">
           <input type="checkbox" id="statRoutes"> Nejčastější trasy (pavouk)</label>
-        <label title="Podle roku: každý rok jízdy má vlastní barvu – u víceleté historie hned vidíte, kudy jste kdy jezdili">
-          Barvy tras
+    <hr class="popSep">
+    <h3 class="popH">Vzhled tras</h3>
+        <label title="Podle roku: každý rok má vlastní barvu. Podle rychlosti a denní doby obarví celé cesty.">
+          Barvy
           <select id="trackColorMode">
             <option value="alt">střídat odstíny</option>
             <option value="year">podle roku</option>
+            <option value="speed">podle rychlosti</option>
+            <option value="hour">podle denní doby</option>
           </select>
         </label>
+        <div class="vizSliders">
+          <label class="vizSlider" title="Tloušťka čar tras">Tloušťka
+            <input type="range" id="trackWeight" min="1.5" max="5" step="0.5" value="2.5">
+          </label>
+          <label class="vizSlider" title="Průhlednost čar tras">Krytí
+            <input type="range" id="trackOpacity" min="0.4" max="1" step="0.1" value="0.9">
+          </label>
+        </div>
   </div>
 
   <div id="mapCtl">
@@ -136,14 +161,24 @@
         </div>
       </section>
 
-      <section>
+      <section id="placeHistorySec">
         <h2>Historie místa</h2>
-        <p class="muted">Hledejte v poli nahoře na mapě, nebo klikněte do mapy
-           (pravé tlačítko = nabídka akcí) – zjistíte všechny své pobyty
-           v daném okruhu.</p>
+        <p class="muted locHint" id="locHint">Hledejte nahoře na mapě, klikněte do mapy
+           nebo použijte pravé tlačítko – uvidíte všechny své pobyty v okolí
+           jako časovou osu.</p>
         <div id="locPanel" hidden>
-          <h3 id="locTitle"></h3>
-          <div class="row">
+          <header class="locHead">
+            <div class="locHeadText">
+              <h3 id="locTitle"></h3>
+              <p id="locCoords" class="muted"></p>
+            </div>
+            <div class="locActions">
+              <button id="locRenameBtn" type="button" title="Pojmenovat místo"><span data-icon="pencil"></span></button>
+              <button id="locExportBtn" type="button" title="Export pobytů do Excelu"><span data-icon="download"></span></button>
+              <button id="locCloseBtn" type="button" title="Zavřít"><span data-icon="x"></span></button>
+            </div>
+          </header>
+          <div class="row locFilters">
             <label>Okruh
               <select id="locRadius">
                 <option value="100">100 m</option>
@@ -161,12 +196,11 @@
                 <option value="10">10 min</option>
               </select>
             </label>
-            <button id="locRenameBtn" title="Pojmenovat místo (zákazník, adresa…)"><span data-icon="pencil"></span></button>
-            <button id="locExportBtn" title="Export pobytů do Excelu"><span data-icon="download"></span></button>
-            <button id="locCloseBtn" title="Zavřít"><span data-icon="x"></span></button>
           </div>
-          <div id="locSummary" class="muted"></div>
-          <ul id="locStays"></ul>
+          <div id="locStats" class="locStats" aria-live="polite"></div>
+          <div id="locRhythm" class="locRhythm" hidden></div>
+          <div id="locSummary" class="muted locSummaryLine"></div>
+          <div id="locStays" class="locTimeline" aria-label="Časová osa pobytů"></div>
         </div>
       </section>
 
