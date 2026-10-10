@@ -121,11 +121,14 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   se stáhne jako obrázek PNG (dole razítko se zvoleným obdobím a atribucí) –
   hodí se do e-mailu nebo dokumentu.
 - **Hledání místa** – vaše místa i libovolná adresa (OpenStreetMap).
-- **„Kdy jsem tu byl?"** – klik do mapy → seznam všech pobytů v okruhu
-  100 m–1 km s daty, časy a délkou; export do Excelu; klik na pobyt přehraje den.
-  Pobyty kratší než zvolený **min. pobyt** (výchozí 2 min) se nepočítají –
-  pouhý průjezd místem se tak neoznačí jako návštěva; totéž platí pro
-  statistiky návštěv a top místa.
+- **„Kdy jsem tu byl?"** – klik do mapy (nebo hledání / pravé tlačítko) otevře
+  **časovou osu pobytů** v okruhu 100 m–1 km: souhrn (počet, hodiny, první
+  a poslední návštěva), sloupcový **rytmus po měsících** a pobyty seskupené
+  po měsících s pruhem délky; klik na pobyt přehraje den, export do Excelu.
+  Panel se sám rozbalí a přeskočí na Historii místa. Pobyty kratší než
+  zvolený **min. pobyt** (výchozí 2 min) se nepočítají – pouhý průjezd
+  místem se tak neoznačí jako návštěva; totéž platí pro statistiky návštěv
+  a top místa.
 - **Statistiky / Analýza** (záložky) – km celkem a po měsících, rozpad podle
   dopravy, top místa; **Zajímavosti** (akční rádius, nejdál od domova, noci
   mimo domov, typický začátek a konec všedního dne), **Rytmus týdne**

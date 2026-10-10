@@ -913,25 +913,240 @@ input[type="search"] {
 .resultList a { color: var(--series-1); cursor: pointer; text-decoration: none; }
 .resultList a:hover { text-decoration: underline; }
 
-#locPanel {
-  margin-top: 10px;
-  border: 1px solid var(--grid);
-  border-radius: 8px;
-  padding: 8px 10px;
+/* popup po kliknutí do mapy – rychlá cesta k historii místa */
+.placePopupWrap .leaflet-popup-content { margin: 10px 12px; }
+.placePopup { min-width: 160px; }
+.placePopupTitle {
+  display: flex; align-items: center; gap: 5px;
+  font-weight: 650; font-size: 13px; color: var(--text-primary); margin-bottom: 2px;
 }
-#locStays {
-  margin: 6px 0 0;
-  padding-left: 4px;
-  list-style: none;
-  font-size: 12px;
-  max-height: 220px;
+.placePopupCoords { font-size: 11px; margin-bottom: 8px; }
+.placePopupBtn {
+  width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 8px; padding: 7px 10px;
+}
+
+/* ---------- Historie místa (časová osa pobytů) ---------- */
+#locPanel {
+  margin-top: 8px;
+  border: 1px solid var(--grid);
+  border-radius: 12px;
+  padding: 12px 12px 10px;
+  background:
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--series-1) 10%, transparent), transparent 55%),
+    color-mix(in srgb, var(--page) 55%, var(--surface-1));
+  animation: locIn 0.28s ease-out;
+}
+@keyframes locIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.locHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.locHeadText { min-width: 0; flex: 1; }
+#locTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text-primary);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+#locCoords { margin: 3px 0 0; font-size: 11px; word-break: break-all; }
+.locActions { display: flex; gap: 4px; flex-shrink: 0; }
+.locActions button {
+  padding: 5px 7px;
+  border-radius: 8px;
+  line-height: 0;
+}
+.locFilters { margin-bottom: 4px; }
+.locStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 6px;
+  margin: 8px 0 6px;
+}
+.locStat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-1) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--grid) 80%, transparent);
+  text-align: center;
+  min-width: 0;
+}
+.locStatVal {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.locStatKey {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.locRhythm { margin: 4px 0 8px; }
+.locRhythmHead {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.locRhythmBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 42px;
+  padding: 2px 0;
+}
+.locBar {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: flex-end;
+  cursor: pointer;
+}
+.locBar i {
+  display: block;
+  width: 100%;
+  min-height: 3px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, var(--series-1), color-mix(in srgb, var(--series-1) 55%, var(--series-2)));
+  transition: height 0.25s ease, opacity 0.15s;
+  opacity: 0.85;
+}
+.locBar:hover i { opacity: 1; filter: brightness(1.08); }
+.locSummaryLine { margin: 2px 0 6px; font-size: 12px; }
+.locTimeline {
+  margin: 0;
+  max-height: min(42vh, 320px);
   overflow-y: auto;
+  scrollbar-width: thin;
+  display: grid;
+  gap: 10px;
   font-variant-numeric: tabular-nums;
 }
-#locStays li { margin: 3px 0; color: var(--text-secondary); }
-#locStays a { color: var(--series-1); cursor: pointer; text-decoration: none; }
-#locStays a:hover { text-decoration: underline; }
-#locStays b { color: var(--text-primary); }
+.stayGroup {
+  display: grid;
+  gap: 3px;
+  transition: background 0.4s ease;
+  border-radius: 8px;
+}
+.stayGroupPulse { background: color-mix(in srgb, var(--series-1) 12%, transparent); }
+.stayGroupHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+  padding: 2px 2px 4px;
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  backdrop-filter: blur(4px);
+  z-index: 1;
+}
+.stayRow {
+  display: grid;
+  grid-template-columns: minmax(88px, 1.1fr) auto minmax(40px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.stayRow:hover {
+  background: color-mix(in srgb, var(--series-1) 8%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--series-1) 25%, var(--grid));
+}
+.stayDate { color: var(--text-primary); font-weight: 600; white-space: nowrap; }
+.stayTime { white-space: nowrap; }
+.stayDurBar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--grid);
+  overflow: hidden;
+  min-width: 28px;
+}
+.stayDurBar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--series-2);
+}
+.stayDur b { color: var(--text-primary); white-space: nowrap; }
+.stayName {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 90px;
+}
+.stayPlay {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--series-1);
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.locEmpty {
+  text-align: center;
+  padding: 18px 10px 14px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.locEmptyIcon {
+  color: var(--series-1);
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+.locEmpty p { margin: 4px 0; }
+@media (max-width: 520px) {
+  .stayRow {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "date play"
+      "time dur"
+      "bar bar"
+      "name name";
+  }
+  .stayDate { grid-area: date; }
+  .stayTime { grid-area: time; }
+  .stayDurBar { grid-area: bar; }
+  .stayDur { grid-area: dur; justify-self: end; }
+  .stayName { grid-area: name; max-width: none; }
+  .stayPlay { grid-area: play; justify-self: end; }
+}
 
 button.mini {
   font-size: 11px;

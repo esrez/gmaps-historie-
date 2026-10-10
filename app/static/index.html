@@ -161,14 +161,24 @@
         </div>
       </section>
 
-      <section>
+      <section id="placeHistorySec">
         <h2>Historie místa</h2>
-        <p class="muted">Hledejte v poli nahoře na mapě, nebo klikněte do mapy
-           (pravé tlačítko = nabídka akcí) – zjistíte všechny své pobyty
-           v daném okruhu.</p>
+        <p class="muted locHint" id="locHint">Hledejte nahoře na mapě, klikněte do mapy
+           nebo použijte pravé tlačítko – uvidíte všechny své pobyty v okolí
+           jako časovou osu.</p>
         <div id="locPanel" hidden>
-          <h3 id="locTitle"></h3>
-          <div class="row">
+          <header class="locHead">
+            <div class="locHeadText">
+              <h3 id="locTitle"></h3>
+              <p id="locCoords" class="muted"></p>
+            </div>
+            <div class="locActions">
+              <button id="locRenameBtn" type="button" title="Pojmenovat místo"><span data-icon="pencil"></span></button>
+              <button id="locExportBtn" type="button" title="Export pobytů do Excelu"><span data-icon="download"></span></button>
+              <button id="locCloseBtn" type="button" title="Zavřít"><span data-icon="x"></span></button>
+            </div>
+          </header>
+          <div class="row locFilters">
             <label>Okruh
               <select id="locRadius">
                 <option value="100">100 m</option>
@@ -186,12 +196,11 @@
                 <option value="10">10 min</option>
               </select>
             </label>
-            <button id="locRenameBtn" title="Pojmenovat místo (zákazník, adresa…)"><span data-icon="pencil"></span></button>
-            <button id="locExportBtn" title="Export pobytů do Excelu"><span data-icon="download"></span></button>
-            <button id="locCloseBtn" title="Zavřít"><span data-icon="x"></span></button>
           </div>
-          <div id="locSummary" class="muted"></div>
-          <ul id="locStays"></ul>
+          <div id="locStats" class="locStats" aria-live="polite"></div>
+          <div id="locRhythm" class="locRhythm" hidden></div>
+          <div id="locSummary" class="muted locSummaryLine"></div>
+          <div id="locStays" class="locTimeline" aria-label="Časová osa pobytů"></div>
         </div>
       </section>
 

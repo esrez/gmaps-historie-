@@ -2,6 +2,14 @@
 
 ## Nevydáno
 
+### Historie místa – kdy jsem tu byl
+- **časová osa pobytů** místo prostého seznamu: souhrn (počet, hodiny,
+  Ø pobyt, první / naposledy), sloupcový rytmus po měsících a pobyty
+  seskupené po měsících s pruhem délky
+- klik na měsíc v rytmu vyskočí na skupinu; klik na pobyt přehraje den
+- po dotazu se panel sám otevře na záložce Mapa a přeskočí na Historii místa
+- přehlednější popup po kliknutí do mapy („Kdy jsem tu byl?")
+
 ### Vizuální možnosti mapy
 - **barvení tras podle rychlosti** (pěšky → dálnice, stejná škála jako
   přehrávání dne) a **podle denní doby** (noc / ráno / den / večer) –

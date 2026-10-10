@@ -62,8 +62,13 @@ test.describe("mapa", () => {
     await page.fill("#searchInput", "work");
     await page.click("#searchBtn");
     await page.locator('#searchResults a[data-kind="mine"]').first().click();
+    await expect(page.locator("#locPanel")).toBeVisible();
     await expect(page.locator("#locSummary")).toContainText("ve zvoleném období");
-    expect(await page.locator("#locStays li").count()).toBeGreaterThan(0);
+    await expect(page.locator("#locStats")).toContainText("Pobytů");
+    expect(await page.locator("#locStays .stayRow").count()).toBeGreaterThan(0);
+    // klik na pobyt spustí přehrávání dne
+    await page.locator("#locStays .stayRow").first().click();
+    await expect(page.locator("#playBtn")).toHaveAttribute("data-state", "playing");
   });
 
   test("kontrola kvality dat proběhne", async ({ page }) => {

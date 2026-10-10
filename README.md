@@ -65,8 +65,8 @@ se stahuje z internetu, v ukázce proto chybí.*
 - **Barvení tras** podle roku, rychlosti nebo denní doby, tloušťka a krytí
   čar, porovnání dvou období přes sebe, akční rádius a „pavouk" nejčastějších
   tras přímo na mapě
-- **„Kdy jsem tu byl?"** – klik kamkoli do mapy vypíše všechny vaše pobyty
-  v okolí; hledání navštívených míst i libovolné adresy
+- **„Kdy jsem tu byl?"** – klik kamkoli do mapy ukáže časovou osu pobytů
+  v okolí (souhrn, rytmus měsíců, přehrání dne); hledání míst i adres
 - **Vlastní místa** – pojmenujte si zákazníky a areály (kruh či obkreslený
   polygon, interaktivní úprava tvaru), s adresami a našeptávačem
 - **Měření vzdálenosti** a **export výřezu mapy do PNG**
