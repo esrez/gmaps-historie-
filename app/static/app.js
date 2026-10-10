@@ -14,6 +14,11 @@ import { initPlacesUI } from "./places-ui.js";
 import { initImportUi, startImport } from "./import-ui.js";
 import { initTimelapse } from "./timelapse.js";
 import { initYearCard } from "./year-card.js";
+import {
+  speedColor, segmentSpeedKmh,
+  readTrackStyle, readHeatStyle, renderTrackLegend, renderHeatLegend,
+  trackColorFn, trackLegendYears,
+} from "./map-viz.js";
 
 initThemeToggle($("themeBtn"));
 mountIcons();
@@ -291,6 +296,12 @@ const baseLayers = {
   "Satelit (Esri)": L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19, attribution: "Tiles &copy; Esri", crossOrigin: true }),
+  "Terén (Esri)": L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, attribution: "Tiles &copy; Esri", crossOrigin: true }),
+  "Outdoor (Carto)": L.tileLayer(
+    "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    { maxZoom: 20, attribution: CARTO_ATTR, crossOrigin: true }),
 };
 // zvolený podklad se pamatuje; jinak výchozí podle světlého/tmavého vzhledu
 const savedBase = localStorage.getItem("map.baseLayer");
@@ -321,6 +332,8 @@ function addBaseOption(name) {
   $("baseMapList").appendChild(l);
 }
 Object.keys(baseLayers).forEach(addBaseOption);
+L.DomEvent.disableClickPropagation($("layersPop"));
+L.DomEvent.disableScrollPropagation($("layersPop"));
 
 function closeLayersPop() {
   $("layersPop").hidden = true;
@@ -344,7 +357,8 @@ const MAP_SETTINGS = [
   "layerTracks", "layerPoints", "layerHeat", "layerVisits", "layerMyPlaces",
   "layerViewport", "transportFilter", "locRadius", "locMinStay", "placeSort",
   "geoOnline", "trackColorMode", "roadSnap", "statRadius", "statRoutes",
-  "heatMode", "heatHours", "visitMinStay", "visitNames",
+  "heatMode", "heatHours", "heatPalette", "heatRadius",
+  "trackWeight", "trackOpacity", "visitMinStay", "visitNames",
 ];
 
 function loadMapSettings() {
@@ -370,6 +384,11 @@ loadMapSettings();   // obnovit dřív, než se poprvé vykreslí data
 // zapnutí online adres → překreslit místa, ať se adresy začnou dotahovat
 $("geoOnline")?.addEventListener("change", () => renderMyPlaces());
 $("trackColorMode")?.addEventListener("change", () => renderTracks());
+["trackWeight", "trackOpacity"].forEach((id) =>
+  $(id)?.addEventListener("input", debounce(() => renderTracks(), 40)));
+["heatPalette", "heatRadius"].forEach((id) =>
+  $(id)?.addEventListener(id === "heatRadius" ? "input" : "change",
+    debounce(() => renderHeat(), 40)));
 
 // --------------------------------------- časosběr měsíců (timelapse.js)
 
@@ -885,41 +904,23 @@ function splitSegments(points, breaks) {
   return segs;
 }
 
-/* Pevné barvy roků: rok má vždy stejnou barvu bez ohledu na zvolené období
-   (barva sleduje entitu). Identitu vždy doplňuje legenda + tooltipy. */
-const YEAR_COLORS = ["#2a78d6", "#1baf7a", "#e0810f", "#8a5cd6", "#d64583", "#0f9bb0"];
-const yearColor = (y) => YEAR_COLORS[((y % YEAR_COLORS.length) + YEAR_COLORS.length) % YEAR_COLORS.length];
-const segYear = (seg) => new Date(seg[0][0] * 1000).getFullYear();
-
-function renderYearLegend(years) {
-  let box = document.getElementById("trackYearLegend");
-  if (!years || !years.length) { box?.remove(); return; }
-  if (!box) {
-    box = document.createElement("div");
-    box.id = "trackYearLegend";
-    $("mapLegend").prepend(box);
-  }
-  box.innerHTML = years.map((y) =>
-    `<span class="lg-year"><span class="lg-line" style="background:${yearColor(y)}"></span>${y}</span>`).join(" ");
-}
-
 // nad tolik úseků v pohledu se místo interaktivních vrstev kreslí
 // rychlé multi-čáry (roky dat najednou by jinak mapu zadusily)
 const FAST_TRACKS_ABOVE = 400;
 
 function renderTracks() {
   trackLayer.clearLayers();
-  if (!$("layerTracks").checked) { renderYearLegend(null); return; }
+  const mode = $("trackColorMode")?.value || "alt";
+  if (!$("layerTracks").checked) { renderTrackLegend(mode, null); return; }
   // „casing": světlý/tmavý podklad pod čarou – trasa je čitelná na každém
   // podkladu (satelit, tmavá mapa) a čáry působí prokresleně
   const casing = isDarkTheme() ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)";
   const segments = splitSegments(state.points, state.breaks);
-  const byYear = $("trackColorMode")?.value === "year";
-  // dvě střídající se modré – sousední samostatné cesty jdou rozlišit
   const shadePair = [css("--series-1"), isDarkTheme() ? "#6da7ec" : "#5598e7"];
-  const segColor = (seg, i) => (byYear ? yearColor(segYear(seg)) : shadePair[i % 2]);
-  renderYearLegend(byYear
-    ? [...new Set(segments.map(segYear))].sort() : null);
+  const segColor = trackColorFn(mode, shadePair);
+  const { weight, opacity } = readTrackStyle();
+  const casingW = Math.max(weight + 2.5, weight * 2.2);
+  renderTrackLegend(mode, trackLegendYears(mode, segments));
 
   // Rychlá cesta pro roky dat najednou (tisíce cest v pohledu zdaleka):
   // místo tisíců interaktivních vrstev pár multi-čar bez událostí.
@@ -927,7 +928,7 @@ function renderTracks() {
   // automaticky se zapne plné interaktivní kreslení s tooltipy a šipkami.
   if (segments.length > FAST_TRACKS_ABOVE) {
     const lls = segments.map((seg) => seg.map((p) => [p[1], p[2]]));
-    L.polyline(lls, { color: casing, weight: 5, opacity: 1, lineJoin: "round",
+    L.polyline(lls, { color: casing, weight: casingW, opacity: 1, lineJoin: "round",
                       lineCap: "round", interactive: false }).addTo(trackLayer);
     // seskupit úseky podle výsledné barvy → jedna multi-čára na barvu
     const groups = new Map();
@@ -937,15 +938,16 @@ function renderTracks() {
       groups.get(c).push(lls[i]);
     });
     for (const [color, group] of groups) {
-      L.polyline(group, { color, weight: 2.2, opacity: 0.9, lineJoin: "round",
-                          lineCap: "round", interactive: false }).addTo(trackLayer);
+      L.polyline(group, { color, weight: Math.max(1.5, weight - 0.3), opacity,
+                          lineJoin: "round", lineCap: "round",
+                          interactive: false }).addTo(trackLayer);
     }
     return;
   }
 
   for (const seg of segments) {
     L.polyline(seg.map((p) => [p[1], p[2]]), {
-      color: casing, weight: 6, opacity: 1, interactive: false,
+      color: casing, weight: casingW, opacity: 1, interactive: false,
       lineJoin: "round", lineCap: "round",
     }).addTo(trackLayer);
   }
@@ -956,8 +958,8 @@ function renderTracks() {
     const shade = segColor(seg, si);
     const line = L.polyline(seg.map((p) => [p[1], p[2]]), {
       color: shade,
-      weight: 2.5,
-      opacity: 0.9,
+      weight,
+      opacity,
       lineJoin: "round",
       lineCap: "round",
     }).bindTooltip(
@@ -968,8 +970,8 @@ function renderTracks() {
       $("playDate").value = toDateStr(from);
       playDay();
     });
-    line.on("mouseover", () => line.setStyle({ weight: 4.5 }));
-    line.on("mouseout", () => line.setStyle({ weight: 2.5 }));
+    line.on("mouseover", () => line.setStyle({ weight: weight + 2 }));
+    line.on("mouseout", () => line.setStyle({ weight }));
     line.addTo(trackLayer);
 
     // směrová šipka uprostřed cesty – je vidět, kterým směrem jsem jel
@@ -1122,10 +1124,16 @@ function renderPoints() {
 
 function renderHeat() {
   if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-  if (!$("layerHeat").checked || !state.heatCells.length) return;
+  const on = $("layerHeat").checked && state.heatCells.length > 0;
+  const style = readHeatStyle();
+  renderHeatLegend(on, style.palette);
+  if (!on) return;
   const maxC = Math.max(...state.heatCells.map((c) => c[2]));
   const data = state.heatCells.map((c) => [c[0], c[1], Math.log(1 + c[2]) / Math.log(1 + maxC)]);
-  heatLayer = L.heatLayer(data, { radius: 12, blur: 18, maxZoom: 17, max: 1.0 }).addTo(map);
+  heatLayer = L.heatLayer(data, {
+    radius: style.radius, blur: style.blur, maxZoom: style.maxZoom,
+    max: style.max, gradient: style.gradient,
+  }).addTo(map);
 }
 
 function visitMarker(v) {
@@ -1796,24 +1804,6 @@ $("exportGeojson")?.addEventListener("click", () => {
 $("transportFilter")?.addEventListener("change", () => {
   if (state.loadedOnce) loadMapData();
 });
-
-// stopa dne je obarvená rychlostí – sekvenční modrá řada (světlá = pomalu)
-const SPEED_STEPS = [
-  [6, "#9ec5f4"], [25, "#6da7ec"], [60, "#3987e5"],
-  [100, "#256abf"], [Infinity, "#0d366b"],
-];
-
-function segmentSpeedKmh(a, b) {
-  const dt = b[0] - a[0];
-  if (dt <= 0 || dt > 900) return 0;
-  return (distKm(a, b) / dt) * 3600;
-}
-
-function speedColor(kmh) {
-  for (const [limit, color] of SPEED_STEPS)
-    if (kmh < limit) return color;
-  return SPEED_STEPS[SPEED_STEPS.length - 1][1];
-}
 
 function addTrailSegment(a, b) {
   L.polyline([[a[1], a[2]], [b[1], b[2]]], {

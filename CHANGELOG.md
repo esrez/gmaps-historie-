@@ -1,5 +1,19 @@
 # Změny
 
+## Nevydáno
+
+### Vizuální možnosti mapy
+- **barvení tras podle rychlosti** (pěšky → dálnice, stejná škála jako
+  přehrávání dne) a **podle denní doby** (noc / ráno / den / večer) –
+  k existujícímu střídání odstínů a barvám podle roku; u každého režimu
+  je v legendě vysvětlení
+- **tloušťka a krytí** čar posuvníky ve Vrstvách (výběr se pamatuje)
+- **heatmapa**: 4 palety (klasická, oheň, chladná, tyrkys), posuvník
+  dosahu a pruh v legendě „málo → hodně"
+- **další podklady**: Terén (Esri) a Outdoor (Carto Voyager)
+- popover Vrstvy je rozdělený na Podklad / Data / Vzhled tras; posun
+  a kolečko myši v popoveru už nehýbe mapou
+
 ## 2.3.0 (2026-07)
 
 ### Ovládání mapy jako v moderních mapách

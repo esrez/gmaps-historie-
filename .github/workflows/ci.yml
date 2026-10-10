@@ -31,6 +31,9 @@ jobs:
       - name: Lint frontend (ESLint)
         run: npm run lint
 
+      - name: Unit testy vizualizace mapy
+        run: npm run test:unit
+
       - name: Run tests
         run: pytest -q
         env:

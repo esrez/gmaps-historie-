@@ -51,18 +51,20 @@ se stahuje z internetu, v ukázce proto chybí.*
 ### Mapa
 
 - **Trasy, body i navštívená místa** s filtrem období (Letos / Loni / Vše…),
-  4 mapové podklady (OSM, světlý/tmavý Carto, satelit) a tmavým režimem
+  6 mapových podkladů (OSM, světlý/tmavý/outdoor Carto, satelit a terén Esri)
+  a tmavým režimem
 - **Detail podle výřezu** – při přiblížení se automaticky dotáhne plný detail
   viditelné oblasti; **WebGL** zvládne plynule i statisíce bodů a **několik
   let historie najednou** (miliony bodů) se vykreslí během pár sekund
 - **Heatmapa ve dvou režimech** – kudy jezdím × kde trávím čas, volitelně
-  jen ráno / den / večer / noc
+  jen ráno / den / večer / noc; **4 palety** a posuvník dosahu
 - **Přehrávání dne** – animace pohybu se stopou obarvenou rychlostí, časovou
   osou dne („odjezd → místo → přesun") a listováním po dnech; volitelné
   **přichycení stopy k silnicím** (OSRM, opt-in)
 - **Časosběr měsíců** – celá historie jako animace měsíc po měsíci
-- **Barvení tras podle roku**, porovnání dvou období přes sebe, akční rádius
-  a „pavouk" nejčastějších tras přímo na mapě
+- **Barvení tras** podle roku, rychlosti nebo denní doby, tloušťka a krytí
+  čar, porovnání dvou období přes sebe, akční rádius a „pavouk" nejčastějších
+  tras přímo na mapě
 - **„Kdy jsem tu byl?"** – klik kamkoli do mapy vypíše všechny vaše pobyty
   v okolí; hledání navštívených míst i libovolné adresy
 - **Vlastní místa** – pojmenujte si zákazníky a areály (kruh či obkreslený

@@ -77,10 +77,10 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   najdete vaše místa i libovolnou adresu; výsledky se rozbalí pod polem.
 - **Vrstvy** – tlačítko s ikonou vrstev **v pravé liště mapy** otevře
   popover, kde na jednom místě přepnete **podkladovou mapu** (OSM, světlá,
-  tmavá, satelit) i všechny **datové vrstvy**: Trasy (klik = přehrát den),
+  tmavá, satelit, terén, outdoor) i všechny **datové vrstvy**: Trasy (klik = přehrát den),
   Jednotlivé body (čas po najetí), Heatmapa, Navštívená místa (velikost =
   strávený čas; při oddálení se shlukují), Moje místa, filtr dopravy,
-  akční rádius, nejčastější trasy, barvy tras.
+  akční rádius, nejčastější trasy, vzhled tras.
 - **Navštívená místa: filtr a popisky** – volič „pobyty ≥ 15 min / 1 h / 3 h"
   skryje krátká zastavení (mapa míst je přehlednější), zaškrtnutí **popisky**
   vypíše jména nejdelších pobytů přímo do mapy.
@@ -90,7 +90,9 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
   maže se jen záznam pobytu – s potvrzením).
 - **Heatmapa s režimy** – „pohyb" ukáže, kudy jezdíte (hustota GPS bodů,
   volitelně jen ráno/den/večer/noc – např. kde býváte večer), „strávený čas"
-  ukáže, kde pobýváte (váha = délka pobytu). Heatmapa tak slouží i jako
+  ukáže, kde pobýváte (váha = délka pobytu). **Paleta** (klasická / oheň /
+  chladná / tyrkys) a posuvník **dosahu** mění vzhled skvrn; u zapnuté
+  heatmapy je v legendě pruh „málo → hodně". Heatmapa tak slouží i jako
   další pohled na statistiky.
 - **Detail podle výřezu** – při zoomu se automaticky dotáhne plný detail
   viditelné oblasti. Vypnutím se vrátí jeden vzorek pro celé období.
@@ -102,9 +104,12 @@ omezení výřezem). Když je databáze prázdná, kartička vás pošle rovnou 
 - **Statistiky na mapě** – „Akční rádius" nakreslí kolem domova kružnice,
   uvnitř kterých leží 50/90/99 % všech záznamů; „Nejčastější trasy (pavouk)"
   spojí nejčastější dvojice míst čarami s tloušťkou podle četnosti.
-- **Barvy tras** – „střídat odstíny" rozliší sousední jízdy, „**podle roku**"
-  dá každému roku vlastní barvu (legenda vpravo dole) – u víceleté historie
-  na první pohled vidíte, kudy jste kdy jezdili.
+- **Barvy a vzhled tras** – „střídat odstíny" rozliší sousední jízdy,
+  „**podle roku**" dá každému roku vlastní barvu, „**podle rychlosti**"
+  obarví cesty od chůze po dálnici (stejná škála jako stopa přehrávání)
+  a „**podle denní doby**" odliší noc / ráno / den / večer. Posuvníky
+  **tloušťka** a **krytí** mění čáry; výběr se pamatuje. U režimů s
+  vlastní škálou je vpravo dole legenda.
 - **Časosběr měsíců** – přehraje historii měsíc po měsíci: starší trasy
   blednou, právě přehrávaný měsíc je zvýrazněný oranžově. Lišta nahoře má
   play/pauzu (mezerník), posuvník měsíců a rychlost ½–4×; Esc zavře.
@@ -272,7 +277,8 @@ offline mapy se dlaždice stahují z OpenStreetMap (vyžaduje internet).
 - **Vzhled**: tlačítko vedle nadpisu přepíná auto → tmavý → světlý.
 - **Zapamatování nastavení**: aplikace si pamatuje zapnuté **vrstvy**
   (trasy, body, heatmapa, navštívená místa, moje místa, detail podle výřezu),
-  zvolený **mapový podklad** (OSM / světlý / tmavý / satelit / offline),
+  zvolený **mapový podklad** (OSM / světlý / tmavý / satelit / terén /
+  outdoor / offline), **barvy a tloušťku tras**, paletu a dosah heatmapy,
   **filtr dopravy**, okruh a min. pobyt u „Kdy jsem tu byl?", řazení míst,
   **rychlost přehrávání** i vybraný **vzhled**. Při dalším otevření tak vše
   zůstane tak, jak jste si to nastavil. Kniha jízd si stejně pamatuje SPZ,
